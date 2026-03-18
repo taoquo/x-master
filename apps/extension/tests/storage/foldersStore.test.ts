@@ -13,6 +13,7 @@ import {
   getAllFolders,
   getDescendantFolderIds,
   INBOX_FOLDER_ID,
+  moveBookmarksToFolder,
   moveBookmarkToFolder
 } from "../../src/lib/storage/foldersStore.ts"
 
@@ -89,6 +90,41 @@ test("moveBookmarkToFolder updates bookmark assignment", async () => {
   const bookmarkFolders = await getAllBookmarkFolders()
   assert.equal(bookmarkFolders.length, 1)
   assert.equal(bookmarkFolders[0].folderId, folder.id)
+})
+
+test("moveBookmarksToFolder updates multiple bookmark assignments", async () => {
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-1",
+      tweetUrl: "https://x.com/alice/status/tweet-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "hello",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T00:01:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-2",
+      tweetUrl: "https://x.com/bob/status/tweet-2",
+      authorName: "Bob",
+      authorHandle: "bob",
+      text: "world",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T00:02:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  await assignBookmarksToInboxIfMissing(["tweet-1", "tweet-2"])
+  const folder = await createFolder({ name: "Projects" })
+  await moveBookmarksToFolder({ bookmarkIds: ["tweet-1", "tweet-2"], folderId: folder.id })
+
+  const bookmarkFolders = await getAllBookmarkFolders()
+  assert.equal(bookmarkFolders.length, 2)
+  assert.equal(bookmarkFolders.every((bookmarkFolder) => bookmarkFolder.folderId === folder.id), true)
 })
 
 test("getDescendantFolderIds includes selected folder and descendants", async () => {

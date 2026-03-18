@@ -6,6 +6,7 @@ import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
 import { createSyncRun, getLatestSyncRun } from "../../src/lib/storage/syncRunsStore.ts"
 import {
   attachTagToBookmark,
+  attachTagToBookmarks,
   createTag,
   detachTagFromBookmark,
   getAllBookmarkTags,
@@ -79,6 +80,40 @@ test("detachTagFromBookmark removes the relation", async () => {
   const bookmarkTags = await getAllBookmarkTags()
 
   assert.equal(bookmarkTags.length, 0)
+})
+
+test("attachTagToBookmarks stores one relation per bookmark", async () => {
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-1",
+      tweetUrl: "https://x.com/alice/status/tweet-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "taggable",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T00:01:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-2",
+      tweetUrl: "https://x.com/bob/status/tweet-2",
+      authorName: "Bob",
+      authorHandle: "bob",
+      text: "taggable too",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T00:02:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const tag = await createTag({ name: "follow-up" })
+  await attachTagToBookmarks({ bookmarkIds: ["tweet-1", "tweet-2"], tagId: tag.id })
+
+  const bookmarkTags = await getAllBookmarkTags()
+  assert.equal(bookmarkTags.length, 2)
+  assert.equal(bookmarkTags.every((bookmarkTag) => bookmarkTag.tagId === tag.id), true)
 })
 
 test("createSyncRun stores sync runs in IndexedDB and getLatestSyncRun returns the newest one", async () => {

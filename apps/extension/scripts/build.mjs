@@ -28,14 +28,14 @@ async function writeStaticFiles() {
         manifest_version: 3,
         name,
         version,
-        permissions: ["cookies", "storage", "sidePanel"],
+        permissions: ["cookies", "storage"],
         host_permissions: ["https://x.com/*"],
         action: {
-          default_title: name,
-          default_popup: "popup.html"
+          default_title: name
         },
-        side_panel: {
-          default_path: "sidepanel.html"
+        options_ui: {
+          page: "options.html",
+          open_in_tab: true
         },
         background: {
           service_worker: "background.js",
@@ -48,24 +48,7 @@ async function writeStaticFiles() {
   )
 
   await writeFile(
-    path.join(outDir, "popup.html"),
-    `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${name}</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script src="./popup.js"></script>
-  </body>
-</html>
-`
-  )
-
-  await writeFile(
-    path.join(outDir, "sidepanel.html"),
+    path.join(outDir, "options.html"),
     `<!doctype html>
 <html lang="en">
   <head>
@@ -75,7 +58,7 @@ async function writeStaticFiles() {
   </head>
   <body>
     <div id="root"></div>
-    <script src="./sidepanel.js"></script>
+    <script src="./options.js"></script>
   </body>
 </html>
 `
@@ -103,10 +86,9 @@ async function buildExtension() {
   await rm(outDir, { recursive: true, force: true })
   await mkdir(outDir, { recursive: true })
 
-  const popupOptions = createBuildOptions(path.join(appDir, "src", "popup.tsx"), path.join(outDir, "popup.js"), "iife")
-  const sidePanelOptions = createBuildOptions(
-    path.join(appDir, "src", "sidepanel.tsx"),
-    path.join(outDir, "sidepanel.js"),
+  const optionsPageOptions = createBuildOptions(
+    path.join(appDir, "src", "options.tsx"),
+    path.join(outDir, "options.js"),
     "iife"
   )
   const backgroundOptions = createBuildOptions(
@@ -116,7 +98,7 @@ async function buildExtension() {
   )
 
   if (watchMode) {
-    const contexts = await Promise.all([context(popupOptions), context(sidePanelOptions), context(backgroundOptions)])
+    const contexts = await Promise.all([context(optionsPageOptions), context(backgroundOptions)])
     await Promise.all(contexts.map((buildContext) => buildContext.watch()))
     await writeStaticFiles()
     console.log(`Watching extension sources and writing output to ${outDir}`)
@@ -124,7 +106,7 @@ async function buildExtension() {
     return
   }
 
-  await Promise.all([build(popupOptions), build(sidePanelOptions), build(backgroundOptions)])
+  await Promise.all([build(optionsPageOptions), build(backgroundOptions)])
   await writeStaticFiles()
   console.log(`Built extension to ${outDir}`)
 }

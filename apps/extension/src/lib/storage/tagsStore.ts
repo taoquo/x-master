@@ -70,6 +70,38 @@ export async function attachTagToBookmark({
   return bookmarkTag as BookmarkTagRecord
 }
 
+export async function attachTagToBookmarks({
+  bookmarkIds,
+  tagId
+}: {
+  bookmarkIds: string[]
+  tagId: string
+}) {
+  if (!bookmarkIds.length) {
+    return
+  }
+
+  const db = await getBookmarksDb()
+  const transaction = db.transaction(BOOKMARK_TAGS_STORE, "readwrite")
+  const store = transaction.objectStore(BOOKMARK_TAGS_STORE)
+
+  for (const bookmarkId of bookmarkIds) {
+    const id = createBookmarkTagId(bookmarkId, tagId)
+    const existing = await requestToPromise(store.get(id))
+
+    store.put(
+      existing ?? {
+        id,
+        bookmarkId,
+        tagId,
+        createdAt: new Date().toISOString()
+      }
+    )
+  }
+
+  await transactionDone(transaction)
+}
+
 export async function detachTagFromBookmark({
   bookmarkId,
   tagId

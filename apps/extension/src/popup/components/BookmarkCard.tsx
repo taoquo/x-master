@@ -5,14 +5,30 @@ interface BookmarkCardProps {
   bookmark: BookmarkRecord
   isSelected: boolean
   onSelect: (bookmarkId: string) => void
+  selectionEnabled?: boolean
+  isChecked?: boolean
+  onToggleChecked?: (bookmarkId: string) => void
 }
 
-export function BookmarkCard({ bookmark, isSelected, onSelect }: BookmarkCardProps) {
+export function BookmarkCard({
+  bookmark,
+  isSelected,
+  onSelect,
+  selectionEnabled = false,
+  isChecked = false,
+  onToggleChecked
+}: BookmarkCardProps) {
   const previewMedia = bookmark.media?.[0]
   const previewText = bookmark.text.length > 160 ? `${bookmark.text.slice(0, 160)}...` : bookmark.text
 
   return (
     <article>
+      {selectionEnabled ? (
+        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="checkbox" checked={isChecked} onChange={() => onToggleChecked?.(bookmark.tweetId)} />
+          <span>Select</span>
+        </label>
+      ) : null}
       <h3>{bookmark.authorName}</h3>
       <p>@{bookmark.authorHandle}</p>
       <p>{previewText}</p>

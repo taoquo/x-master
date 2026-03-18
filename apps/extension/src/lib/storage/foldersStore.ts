@@ -117,6 +117,33 @@ export async function moveBookmarkToFolder({
   return bookmarkFolder
 }
 
+export async function moveBookmarksToFolder({
+  bookmarkIds,
+  folderId
+}: {
+  bookmarkIds: string[]
+  folderId: string
+}) {
+  if (!bookmarkIds.length) {
+    return
+  }
+
+  const db = await getBookmarksDb()
+  const transaction = db.transaction(BOOKMARK_FOLDERS_STORE, "readwrite")
+  const store = transaction.objectStore(BOOKMARK_FOLDERS_STORE)
+  const updatedAt = new Date().toISOString()
+
+  for (const bookmarkId of bookmarkIds) {
+    store.put({
+      bookmarkId,
+      folderId,
+      updatedAt
+    } satisfies BookmarkFolderRecord)
+  }
+
+  await transactionDone(transaction)
+}
+
 export async function assignBookmarksToInboxIfMissing(bookmarkIds: string[]) {
   if (!bookmarkIds.length) {
     return

@@ -9,6 +9,9 @@ interface BookmarkListProps {
   sortLabel: string
   folderLabel: string
   onSelectBookmark: (bookmarkId: string) => void
+  selectionEnabled?: boolean
+  selectedBookmarkIds?: string[]
+  onToggleBookmarkSelection?: (bookmarkId: string) => void
 }
 
 export function BookmarkList({
@@ -17,7 +20,10 @@ export function BookmarkList({
   resultCount,
   sortLabel,
   folderLabel,
-  onSelectBookmark
+  onSelectBookmark,
+  selectionEnabled = false,
+  selectedBookmarkIds = [],
+  onToggleBookmarkSelection
 }: BookmarkListProps) {
   return (
     <section style={{ display: "grid", minHeight: 0 }}>
@@ -47,6 +53,9 @@ export function BookmarkList({
           bookmark={bookmark}
           isSelected={bookmark.tweetId === selectedBookmarkId}
           onSelect={onSelectBookmark}
+          selectionEnabled={selectionEnabled}
+          isChecked={selectedBookmarkIds.includes(bookmark.tweetId)}
+          onToggleChecked={onToggleBookmarkSelection}
         />
       ))}
       </div>
