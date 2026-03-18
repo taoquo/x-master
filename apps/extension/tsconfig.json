@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "chrome",
+      "node"
+    ],
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    ".plasmo/index.d.ts",
+    "src/**/*",
+    "tests/**/*",
+    "plasmo.config.ts"
+  ]
+}

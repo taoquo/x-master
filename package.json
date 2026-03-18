@@ -1,0 +1,13 @@
+{
+  "name": "x-bookmark-manager",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm --workspace @xbm/extension run build",
+    "test": "npm --workspace @xbm/extension test",
+    "lint": "npm --workspace @xbm/extension run lint",
+    "typecheck": "npm --workspace @xbm/extension run typecheck"
+  }
+}
