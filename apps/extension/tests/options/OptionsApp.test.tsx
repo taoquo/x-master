@@ -82,10 +82,10 @@ test("OptionsApp defaults to Dashboard and renders navigation", async () => {
 
   assert.match(container.textContent ?? "", /Dashboard/)
   assert.match(container.textContent ?? "", /Inbox/)
-  assert.match(container.textContent ?? "", /Folders/)
   assert.match(container.textContent ?? "", /Tags/)
   assert.match(container.textContent ?? "", /Save heatmap/)
   assert.match(container.textContent ?? "", /Quick actions/)
+  assert.doesNotMatch(container.textContent ?? "", /Open Folders/)
 })
 
 test("OptionsApp switches to Inbox page from navigation", async () => {
@@ -105,11 +105,11 @@ test("OptionsApp switches to Inbox page from navigation", async () => {
     await Promise.resolve()
   })
 
-  assert.match(container.textContent ?? "", /Triage new bookmarks, move them into folders/)
-  assert.match(container.textContent ?? "", /Organize/)
+  assert.match(container.textContent ?? "", /Organize new bookmarks in a dense table/)
+  assert.match(container.textContent ?? "", /Inbox workbench/)
 })
 
-test("OptionsApp switches to Folders and Tags pages from navigation", async () => {
+test("OptionsApp keeps Tags as the only secondary organization page", async () => {
   installChromeMock()
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -118,18 +118,9 @@ test("OptionsApp switches to Folders and Tags pages from navigation", async () =
     await Promise.resolve()
   })
 
-  const foldersButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Folders")
   const tagsButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Tags")
-  assert.ok(foldersButton)
   assert.ok(tagsButton)
-
-  await act(async () => {
-    foldersButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
-    await Promise.resolve()
-  })
-
-  assert.match(container.textContent ?? "", /Build and browse your folder tree/)
-  assert.match(container.textContent ?? "", /Folder tree/)
+  assert.equal(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Folders"), false)
 
   await act(async () => {
     tagsButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))

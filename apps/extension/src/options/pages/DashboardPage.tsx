@@ -3,7 +3,7 @@ import { INBOX_FOLDER_ID } from "../../lib/storage/foldersStore.ts"
 import { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
 
 interface DashboardPageProps {
-  onNavigate: (section: "dashboard" | "inbox" | "folders" | "tags") => void
+  onNavigate: (section: "dashboard" | "inbox" | "tags") => void
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {
@@ -31,7 +31,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     <div style={{ display: "grid", gap: 20 }}>
       <header style={{ display: "grid", gap: 6 }}>
         <h2 style={{ margin: 0, fontSize: 28 }}>Dashboard</h2>
-        <p style={{ margin: 0, color: "#52606d" }}>Monitor sync health, inbox flow, and recent activity before diving into management views.</p>
+        <p style={{ margin: 0, color: "#52606d" }}>Monitor sync health, inbox flow, and recent activity before jumping into the Inbox workbench.</p>
       </header>
 
       <section
@@ -87,13 +87,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           }}>
           <div>
             <h3 style={{ margin: 0 }}>Quick actions</h3>
-            <p style={{ margin: "6px 0 0", color: "#52606d" }}>Jump into the parts of the workspace you use most.</p>
+            <p style={{ margin: "6px 0 0", color: "#52606d" }}>Use Inbox for folder organization and Tags for cross-cutting review.</p>
           </div>
           <button type="button" onClick={() => onNavigate("inbox")}>
             Open Inbox
-          </button>
-          <button type="button" onClick={() => onNavigate("folders")}>
-            Open Folders
           </button>
           <button type="button" onClick={() => onNavigate("tags")}>
             Open Tags

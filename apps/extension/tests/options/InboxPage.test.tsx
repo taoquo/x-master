@@ -1,9 +1,21 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import "fake-indexeddb/auto"
 import React from "react"
 import { JSDOM } from "jsdom"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
+import { getAllBookmarks, upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
+import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
+import {
+  assignBookmarksToInboxIfMissing,
+  createFolder,
+  ensureInboxFolder,
+  getAllBookmarkFolders,
+  getAllFolders,
+  moveBookmarkToFolder
+} from "../../src/lib/storage/foldersStore.ts"
+import { createTag, getAllBookmarkTags, getAllTags } from "../../src/lib/storage/tagsStore.ts"
 import { InboxPage } from "../../src/options/pages/InboxPage.tsx"
 
 function render(ui: React.ReactElement) {
@@ -30,6 +42,87 @@ function render(ui: React.ReactElement) {
   return { container, dom }
 }
 
+async function settle() {
+  await act(async () => {
+    await Promise.resolve()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await Promise.resolve()
+  })
+}
+
+async function waitForAssertion(assertion: () => void, attempts = 8) {
+  let lastError: unknown
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      assertion()
+      return
+    } catch (error) {
+      lastError = error
+      await settle()
+    }
+  }
+
+  throw lastError
+}
+
+async function seedWorkspaceData() {
+  await resetBookmarksDb()
+
+  await ensureInboxFolder()
+  const projectsFolder = await createFolder({ name: "Projects" })
+  const aiFolder = await createFolder({ name: "AI", parentId: projectsFolder.id })
+
+  await upsertBookmarks([
+    {
+      tweetId: "1",
+      tweetUrl: "https://x.com/alice/status/1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "alpha note for inbox",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-17T00:01:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "2",
+      tweetUrl: "https://x.com/bob/status/2",
+      authorName: "Bob",
+      authorHandle: "bob",
+      text: "beta note for inbox",
+      createdAtOnX: "2026-03-15T01:00:00.000Z",
+      savedAt: "2026-03-16T00:01:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "3",
+      tweetUrl: "https://x.com/cara/status/3",
+      authorName: "Cara",
+      authorHandle: "cara",
+      text: "project child bookmark for folder navigation coverage",
+      createdAtOnX: "2026-03-15T02:00:00.000Z",
+      savedAt: "2026-03-15T00:01:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  await assignBookmarksToInboxIfMissing(["1", "2", "3"])
+  await moveBookmarkToFolder({ bookmarkId: "3", folderId: aiFolder.id })
+
+  await createTag({ name: "saved" })
+  await createTag({ name: "follow-up" })
+
+  const tags = await getAllTags()
+  const followUpTag = tags.find((tag) => tag.name === "follow-up")
+  assert.ok(followUpTag)
+
+  return {
+    projectsFolderId: projectsFolder.id,
+    aiFolderId: aiFolder.id,
+    followUpTagId: followUpTag.id
+  }
+}
+
 function installChromeMock() {
   const messages: Array<{ type: string }> = []
 
@@ -39,39 +132,20 @@ function installChromeMock() {
         messages.push(message)
 
         if (message.type === "popup/load") {
+          const [bookmarks, folders, bookmarkFolders, tags, bookmarkTags] = await Promise.all([
+            getAllBookmarks(),
+            getAllFolders(),
+            getAllBookmarkFolders(),
+            getAllTags(),
+            getAllBookmarkTags()
+          ])
+
           return {
-            bookmarks: [
-              {
-                tweetId: "1",
-                tweetUrl: "https://x.com/alice/status/1",
-                authorName: "Alice",
-                authorHandle: "alice",
-                text: "hello one",
-                createdAtOnX: "2026-03-15T00:00:00.000Z",
-                savedAt: "2026-03-17T00:01:00.000Z",
-                rawPayload: {}
-              },
-              {
-                tweetId: "2",
-                tweetUrl: "https://x.com/bob/status/2",
-                authorName: "Bob",
-                authorHandle: "bob",
-                text: "hello two",
-                createdAtOnX: "2026-03-15T00:00:00.000Z",
-                savedAt: "2026-03-16T00:01:00.000Z",
-                rawPayload: {}
-              }
-            ],
-            folders: [
-              { id: "folder-inbox", name: "Inbox", createdAt: "2026-03-16T00:00:00.000Z" },
-              { id: "folder-1", name: "Projects", createdAt: "2026-03-16T00:00:00.000Z" }
-            ],
-            bookmarkFolders: [
-              { bookmarkId: "1", folderId: "folder-inbox", updatedAt: "2026-03-16T00:00:00.000Z" },
-              { bookmarkId: "2", folderId: "folder-inbox", updatedAt: "2026-03-16T00:00:00.000Z" }
-            ],
-            tags: [{ id: "tag-1", name: "saved", createdAt: "2026-03-16T00:00:00.000Z" }],
-            bookmarkTags: [],
+            bookmarks,
+            folders,
+            bookmarkFolders,
+            tags,
+            bookmarkTags,
             latestSyncRun: null,
             summary: {
               status: "idle",
@@ -93,6 +167,7 @@ function installChromeMock() {
         }
 
         if (message.type === "storage/reset") {
+          await resetBookmarksDb()
           return { success: true }
         }
 
@@ -104,57 +179,181 @@ function installChromeMock() {
   return { messages }
 }
 
-test("InboxPage renders batch organize and queue controls", async () => {
-  installChromeMock()
+function getButton(container: HTMLDivElement, label: string) {
+  const button = Array.from(container.querySelectorAll("button")).find((candidate) => candidate.textContent === label)
+  assert.ok(button)
+  return button
+}
 
-  const { container } = render(React.createElement(InboxPage))
+function getInputByLabel(container: HTMLDivElement, label: string) {
+  const labels = Array.from(container.querySelectorAll("label"))
+  const match = labels.find((candidate) => candidate.textContent?.includes(label))
+  assert.ok(match)
+  const input = match.querySelector("input, select")
+  assert.ok(input)
+  return input as HTMLInputElement | HTMLSelectElement
+}
 
-  await act(async () => {
-    await Promise.resolve()
-  })
+function setInputValue(element: HTMLInputElement | HTMLSelectElement, value: string, dom: JSDOM) {
+  const prototype = element instanceof dom.window.HTMLSelectElement ? dom.window.HTMLSelectElement.prototype : dom.window.HTMLInputElement.prototype
+  const descriptor = Object.getOwnPropertyDescriptor(prototype, "value")
 
-  assert.match(container.textContent ?? "", /Processing queue/)
-  assert.match(container.textContent ?? "", /Batch organize/)
-  assert.match(container.textContent ?? "", /Select all visible/)
-  assert.match(container.textContent ?? "", /Move selected/)
-  assert.match(container.textContent ?? "", /Apply tag/)
-})
+  assert.ok(descriptor?.set)
+  descriptor.set.call(element, value)
+  element.dispatchEvent(new dom.window.Event("input", { bubbles: true }))
+  element.dispatchEvent(new dom.window.Event("change", { bubbles: true }))
+}
 
-test("InboxPage supports queue navigation and batch selection", async () => {
+test("InboxPage renders the workbench layout and switches detail drawer with row selection", async () => {
+  await seedWorkspaceData()
   installChromeMock()
 
   const { container, dom } = render(React.createElement(InboxPage))
 
-  await act(async () => {
-    await Promise.resolve()
+  await waitForAssertion(() => {
+    assert.match(container.textContent ?? "", /Alice/)
+    assert.match(container.textContent ?? "", /Folder tree/)
   })
 
-  const nextButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Next")
-  const selectAllButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Select all visible")
-  const clearSelectionButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Clear selection")
+  assert.match(container.textContent ?? "", /Inbox workbench/)
+  assert.match(container.textContent ?? "", /Folders/)
+  assert.match(container.textContent ?? "", /Folder tree/)
+  assert.match(container.textContent ?? "", /User/)
+  assert.match(container.textContent ?? "", /Folder/)
+  assert.match(container.textContent ?? "", /Summary/)
+  assert.match(container.textContent ?? "", /Move selected/)
+  assert.match(container.textContent ?? "", /Apply tag/)
+  assert.match(container.textContent ?? "", /Details|Alice/)
 
-  assert.ok(nextButton)
-  assert.ok(selectAllButton)
-  assert.ok(clearSelectionButton)
-
-  await act(async () => {
-    nextButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
-    await Promise.resolve()
-  })
-
-  assert.match(container.textContent ?? "", /Bob/)
+  const bobCell = Array.from(container.querySelectorAll("td")).find((cell) => cell.textContent?.includes("Bob"))
+  assert.ok(bobCell)
 
   await act(async () => {
-    selectAllButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
-    await Promise.resolve()
+    bobCell.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
 
-  assert.match(container.textContent ?? "", /2 selected/)
+  await waitForAssertion(() => {
+    assert.match(container.textContent ?? "", /Bob/)
+    assert.match(container.textContent ?? "", /beta note for inbox/)
+  })
+})
+
+test("InboxPage updates folder-scoped results and prunes hidden batch selections", async () => {
+  const seeded = await seedWorkspaceData()
+  installChromeMock()
+
+  const { container, dom } = render(React.createElement(InboxPage))
+
+  await waitForAssertion(() => {
+    assert.match(container.textContent ?? "", /Alice/)
+  })
+
+  const moveSelectedButton = getButton(container, "Move selected") as HTMLButtonElement
+  assert.equal(moveSelectedButton.disabled, true)
+
+  const selectAllVisibleButton = getButton(container, "Select all visible")
+  await act(async () => {
+    selectAllVisibleButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+
+  await waitForAssertion(() => {
+    assert.match(container.textContent ?? "", /2 selected/)
+    assert.equal(moveSelectedButton.disabled, false)
+  })
+
+  const moreFiltersButton = getButton(container, "More filters")
+  await act(async () => {
+    moreFiltersButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+
+  await waitForAssertion(() => {
+    assert.match(container.textContent ?? "", /Author filters/)
+  })
+
+  const aliceAuthorFilter = Array.from(container.querySelectorAll("label")).find((label) => label.textContent?.includes("Alice (@alice)"))
+  assert.ok(aliceAuthorFilter)
+  const aliceAuthorCheckbox = aliceAuthorFilter.querySelector("input")
+  assert.ok(aliceAuthorCheckbox)
 
   await act(async () => {
-    clearSelectionButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
-    await Promise.resolve()
+    aliceAuthorCheckbox.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
 
-  assert.match(container.textContent ?? "", /0 selected/)
+  await waitForAssertion(() => {
+    assert.match(container.textContent ?? "", /1 selected/)
+    assert.match(container.textContent ?? "", /alpha note for inbox/)
+    assert.doesNotMatch(container.textContent ?? "", /beta note for inbox/)
+  })
+
+  const clearFiltersButton = getButton(container, "Clear filters")
+  await act(async () => {
+    clearFiltersButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+
+  const projectsButton = getButton(container, "Projects")
+  await act(async () => {
+    projectsButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+
+  await waitForAssertion(() => {
+    assert.match(container.textContent ?? "", /Projects/)
+    assert.match(container.textContent ?? "", /project child bookmark/)
+    assert.doesNotMatch(container.textContent ?? "", /alpha note for inbox/)
+  })
+  assert.equal(seeded.projectsFolderId.length > 0, true)
+})
+
+test("InboxPage supports item-level move and tagging from the detail drawer", async () => {
+  const seeded = await seedWorkspaceData()
+  installChromeMock()
+
+  const { container, dom } = render(React.createElement(InboxPage))
+
+  await waitForAssertion(() => {
+    assert.match(container.textContent ?? "", /Alice/)
+  })
+
+  const projectsButton = getButton(container, "Projects")
+  await act(async () => {
+    projectsButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+
+  await waitForAssertion(() => {
+    assert.match(container.textContent ?? "", /Cara/)
+  })
+
+  const caraCell = Array.from(container.querySelectorAll("td")).find((cell) => cell.textContent?.includes("Cara"))
+  assert.ok(caraCell)
+
+  await act(async () => {
+    caraCell.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+
+  const moveToFolderSelect = getInputByLabel(container, "Move to folder") as HTMLSelectElement
+  await act(async () => {
+    setInputValue(moveToFolderSelect, seeded.projectsFolderId, dom)
+  })
+
+  const moveBookmarkButton = getButton(container, "Move bookmark")
+  await act(async () => {
+    moveBookmarkButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+
+  await waitForAssertion(() => {
+    assert.match(container.textContent ?? "", /Current folder: Projects/)
+  })
+
+  const existingTagSelect = getInputByLabel(container, "Existing tag") as HTMLSelectElement
+  await act(async () => {
+    setInputValue(existingTagSelect, seeded.followUpTagId, dom)
+  })
+
+  const addTagButton = getButton(container, "Add tag")
+  await act(async () => {
+    addTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+
+  await waitForAssertion(() => {
+    assert.match(container.textContent ?? "", /follow-up/)
+  })
 })

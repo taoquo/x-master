@@ -1,15 +1,13 @@
 import React, { useMemo, useState } from "react"
 import { DashboardPage } from "./pages/DashboardPage.tsx"
-import { FoldersPage } from "./pages/FoldersPage.tsx"
 import { InboxPage } from "./pages/InboxPage.tsx"
 import { TagsPage } from "./pages/TagsPage.tsx"
 
-type OptionsSection = "dashboard" | "inbox" | "folders" | "tags"
+type OptionsSection = "dashboard" | "inbox" | "tags"
 
 const NAV_ITEMS: Array<{ id: OptionsSection; label: string }> = [
   { id: "dashboard", label: "Dashboard" },
   { id: "inbox", label: "Inbox" },
-  { id: "folders", label: "Folders" },
   { id: "tags", label: "Tags" }
 ]
 
@@ -20,8 +18,6 @@ export function OptionsApp() {
     switch (section) {
       case "inbox":
         return <InboxPage />
-      case "folders":
-        return <FoldersPage />
       case "tags":
         return <TagsPage />
       case "dashboard":
