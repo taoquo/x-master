@@ -1,5 +1,8 @@
 import React from "react"
+import { Button, Group, Stack, Text, Title } from "@mantine/core"
 import type { BookmarkRecord, SyncRunRecord, TagRecord } from "../../lib/types.ts"
+import { StatusBadge, SurfaceCard } from "../../ui/components.tsx"
+import { ExtensionUiProvider } from "../../ui/provider.tsx"
 
 interface SettingsPanelProps {
   bookmarks: BookmarkRecord[]
@@ -21,30 +24,29 @@ export function SettingsPanel({
   compact = false
 }: SettingsPanelProps) {
   return (
-    <section
-      style={{
-        display: "grid",
-        gap: 8,
-        padding: compact ? 12 : 16,
-        border: "1px solid #dde7f0",
-        borderRadius: 12,
-        background: "#f8fbff"
-      }}>
-      <h2 style={{ margin: 0, fontSize: compact ? 16 : 20 }}>Workspace</h2>
-      <p>Bookmarks stored: {bookmarks.length}</p>
-      <p>Tags stored: {tags.length}</p>
-      <p>Latest sync status: {latestSyncRun?.status ?? "idle"}</p>
-      {latestSyncRun?.startedAt ? <p>Latest sync started: {latestSyncRun.startedAt}</p> : null}
-      {latestSyncRun?.finishedAt ? <p>Latest sync finished: {latestSyncRun.finishedAt}</p> : null}
-      {latestSyncRun?.errorSummary ? <p>Latest sync error: {latestSyncRun.errorSummary}</p> : null}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button type="button" onClick={() => void onExport()}>
+    <ExtensionUiProvider>
+      <SurfaceCard>
+      <Stack gap={compact ? "xs" : "sm"}>
+        <Group justify="space-between">
+          <Title order={compact ? 4 : 3}>Workspace</Title>
+          <StatusBadge status={latestSyncRun?.status ?? "idle"} />
+        </Group>
+        <Text>Bookmarks stored: {bookmarks.length}</Text>
+        <Text>Tags stored: {tags.length}</Text>
+        <Text>Latest sync status: {latestSyncRun?.status ?? "idle"}</Text>
+        {latestSyncRun?.startedAt ? <Text>Latest sync started: {latestSyncRun.startedAt}</Text> : null}
+        {latestSyncRun?.finishedAt ? <Text>Latest sync finished: {latestSyncRun.finishedAt}</Text> : null}
+        {latestSyncRun?.errorSummary ? <Text c="red">Latest sync error: {latestSyncRun.errorSummary}</Text> : null}
+        <Group gap="sm">
+          <Button type="button" onClick={() => void onExport()}>
           Export bookmarks
-        </button>
-        <button type="button" onClick={() => void onReset()} disabled={isResetting}>
-          {isResetting ? "Resetting..." : "Reset local data"}
-        </button>
-      </div>
-    </section>
+          </Button>
+          <Button type="button" variant="light" color="red" onClick={() => void onReset()} disabled={isResetting}>
+            {isResetting ? "Resetting..." : "Reset local data"}
+          </Button>
+        </Group>
+      </Stack>
+      </SurfaceCard>
+    </ExtensionUiProvider>
   )
 }

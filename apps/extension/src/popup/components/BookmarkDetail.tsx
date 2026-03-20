@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react"
+import { Anchor, Badge, Button, Card, Group, Image, NativeSelect, Stack, Text, TextInput, Title } from "@mantine/core"
 import type { FolderRecord, BookmarkRecord, TagRecord } from "../../lib/types.ts"
+import { EmptyState } from "../../ui/components.tsx"
+import { ExtensionUiProvider } from "../../ui/provider.tsx"
 
 interface BookmarkDetailProps {
   bookmark: BookmarkRecord | null
@@ -45,24 +48,15 @@ export function BookmarkDetail({
 
   if (!bookmark) {
     return (
-      <section style={{ display: "grid", gap: 12 }}>
-        <div>
-          <h2 style={{ margin: "0 0 8px" }}>Details</h2>
-          <p style={{ margin: 0, color: "#5f6b7a" }}>
-            Select a bookmark from the list to inspect metadata, media, and tags.
-          </p>
-        </div>
-        <div
-          style={{
-            border: "1px dashed #c9d4e0",
-            borderRadius: 12,
-            padding: 16,
-            background: "#f7fafc",
-            color: "#52606d"
-          }}>
-          No bookmark selected.
-        </div>
-      </section>
+      <ExtensionUiProvider>
+        <Stack gap="md">
+          <div>
+            <Title order={2}>Details</Title>
+            <Text c="dimmed">Select a bookmark from the list to inspect metadata, media, and tags.</Text>
+          </div>
+          <EmptyState title="No bookmark selected." description="Select a bookmark from the list to inspect metadata, media, and tags." />
+        </Stack>
+      </ExtensionUiProvider>
     )
   }
 
@@ -104,121 +98,99 @@ export function BookmarkDetail({
   }
 
   return (
-    <section style={{ display: "grid", gap: 16 }}>
-      <header style={{ display: "grid", gap: 6 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
-          <div>
-            <h2 style={{ margin: 0 }}>{bookmark.authorName}</h2>
-            <p style={{ margin: "4px 0 0", color: "#52606d" }}>@{bookmark.authorHandle}</p>
-          </div>
-          <a href={bookmark.tweetUrl} target="_blank" rel="noreferrer">
-            Open on X
-          </a>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 8,
-            fontSize: 13,
-            color: "#52606d"
-          }}>
-          <span>Saved: {bookmark.savedAt}</span>
-          <span>Created: {bookmark.createdAtOnX}</span>
-          <span>Likes: {bookmark.metrics?.likes ?? 0}</span>
-          <span>Retweets: {bookmark.metrics?.retweets ?? 0}</span>
-          <span>Replies: {bookmark.metrics?.replies ?? 0}</span>
-          <span>{bookmark.text.trim().length > 280 ? "Longform bookmark" : "Standard bookmark"}</span>
-        </div>
-      </header>
-      <section style={{ display: "grid", gap: 8 }}>
-        <h3 style={{ margin: 0 }}>Text</h3>
-        <p style={{ margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{bookmark.text}</p>
-      </section>
+    <ExtensionUiProvider>
+      <Stack gap="md">
+        <Stack gap="xs">
+          <Group justify="space-between" align="start">
+            <div>
+              <Title order={2}>{bookmark.authorName}</Title>
+              <Text c="dimmed">@{bookmark.authorHandle}</Text>
+            </div>
+            <Anchor href={bookmark.tweetUrl} target="_blank" rel="noreferrer">
+              Open on X
+            </Anchor>
+          </Group>
+          <Group gap="xs">
+            <Badge variant="light">Saved: {bookmark.savedAt}</Badge>
+            <Badge variant="light">Created: {bookmark.createdAtOnX}</Badge>
+            <Badge variant="light">Likes: {bookmark.metrics?.likes ?? 0}</Badge>
+            <Badge variant="light">Retweets: {bookmark.metrics?.retweets ?? 0}</Badge>
+            <Badge variant="light">Replies: {bookmark.metrics?.replies ?? 0}</Badge>
+            <Badge color={bookmark.text.trim().length > 280 ? "sand" : "gray"} variant="light">
+              {bookmark.text.trim().length > 280 ? "Longform bookmark" : "Standard bookmark"}
+            </Badge>
+          </Group>
+        </Stack>
+        <Card padding="lg">
+          <Stack gap="xs">
+            <Title order={3}>Text</Title>
+            <Text style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{bookmark.text}</Text>
+          </Stack>
+        </Card>
       {hasMedia ? (
-        <section style={{ display: "grid", gap: 10 }}>
-          <h3 style={{ margin: 0 }}>Media</h3>
+        <Card padding="lg">
+          <Stack gap="sm">
+            <Title order={3}>Media</Title>
           {bookmark.media?.map((item, index) => (
             <figure
               key={`${item.url}-${index}`}
-              style={{
-                margin: 0,
-                border: "1px solid #dde7f0",
-                borderRadius: 12,
-                overflow: "hidden",
-                background: "#fff"
-              }}>
-              <img
+              style={{ margin: 0 }}>
+              <Image
                 src={item.url}
                 alt={item.altText ?? `Bookmark media ${index + 1}`}
-                width="320"
-                style={{ display: "block", width: "100%", maxWidth: 360, objectFit: "cover" }}
+                radius="md"
               />
-              <figcaption style={{ padding: "8px 12px", fontSize: 13, color: "#52606d" }}>{item.type}</figcaption>
+              <Text component="figcaption" size="sm" c="dimmed" mt="xs">
+                {item.type}
+              </Text>
             </figure>
           ))}
-        </section>
+          </Stack>
+        </Card>
       ) : null}
-      <section style={{ display: "grid", gap: 12 }}>
-        <h3 style={{ margin: 0 }}>Folder</h3>
-        <div
-          style={{
-            display: "grid",
-            gap: 8,
-            border: "1px solid #dde7f0",
-            borderRadius: 10,
-            padding: 12
-          }}>
-          <p style={{ margin: 0 }}>Current folder: {currentFolder?.name ?? "Inbox"}</p>
+      <Card padding="lg">
+        <Stack gap="sm">
+          <Title order={3}>Folder</Title>
+          <Text>Current folder: {currentFolder?.name ?? "Inbox"}</Text>
           <label>
             Move to folder
-            <select value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.target.value)} disabled={isSaving}>
+            <NativeSelect value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.currentTarget.value)} disabled={isSaving}>
               {availableFolders.map((folder) => (
                 <option key={folder.id} value={folder.id}>
                   {folder.name}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
-          <button type="button" onClick={() => void handleMoveToFolder()} disabled={isSaving || !selectedFolderId}>
+          <Button type="button" onClick={() => void handleMoveToFolder()} disabled={isSaving || !selectedFolderId}>
             Move bookmark
-          </button>
-          <label>
-            New child folder
-            <input value={newFolderName} onChange={(event) => setNewFolderName(event.target.value)} />
-          </label>
-          <button type="button" onClick={() => void handleCreateFolder()} disabled={isSaving || !newFolderName.trim()}>
+          </Button>
+          <TextInput label="New child folder" value={newFolderName} onChange={(event) => setNewFolderName(event.currentTarget.value)} />
+          <Button type="button" variant="light" onClick={() => void handleCreateFolder()} disabled={isSaving || !newFolderName.trim()}>
             Create child folder
-          </button>
-        </div>
-      </section>
-      <section style={{ display: "grid", gap: 12 }}>
-        <h3 style={{ margin: 0 }}>Tags</h3>
-        {!tags.length ? <p style={{ margin: 0 }}>No tags yet.</p> : null}
+          </Button>
+        </Stack>
+      </Card>
+      <Card padding="lg">
+        <Stack gap="sm">
+          <Title order={3}>Tags</Title>
+          {!tags.length ? <Text>No tags yet.</Text> : null}
         {tags.map((tag) => (
-          <div
+          <Group
             key={tag.id}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 12,
-              border: "1px solid #dde7f0",
-              borderRadius: 10,
-              padding: "8px 10px"
-            }}>
-            <span>{tag.name}</span>
-            <button type="button" onClick={() => void onDetachTag(tag.id)} disabled={isSaving}>
+            justify="space-between"
+            align="center">
+            <Text>{tag.name}</Text>
+            <Button type="button" variant="subtle" onClick={() => void onDetachTag(tag.id)} disabled={isSaving}>
               Remove
-            </button>
-          </div>
+            </Button>
+          </Group>
         ))}
-        <div style={{ display: "grid", gap: 8 }}>
           <label>
             Existing tag
-            <select
+            <NativeSelect
               value={selectedAvailableTagId}
-              onChange={(event) => setSelectedAvailableTagId(event.target.value)}
+              onChange={(event) => setSelectedAvailableTagId(event.currentTarget.value)}
               disabled={isSaving || !selectableTags.length}>
               <option value="">Select a tag</option>
               {selectableTags.map((tag) => (
@@ -226,22 +198,18 @@ export function BookmarkDetail({
                   {tag.name}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
-          <button type="button" onClick={() => void handleAttachTag()} disabled={isSaving || !selectedAvailableTagId}>
+          <Button type="button" onClick={() => void handleAttachTag()} disabled={isSaving || !selectedAvailableTagId}>
             Add tag
-          </button>
-        </div>
-        <div style={{ display: "grid", gap: 8 }}>
-          <label>
-            New tag
-            <input value={newTagName} onChange={(event) => setNewTagName(event.target.value)} />
-          </label>
-          <button type="button" onClick={() => void handleCreateTag()} disabled={isSaving || !newTagName.trim()}>
+          </Button>
+          <TextInput label="New tag" value={newTagName} onChange={(event) => setNewTagName(event.currentTarget.value)} />
+          <Button type="button" variant="light" onClick={() => void handleCreateTag()} disabled={isSaving || !newTagName.trim()}>
             Create tag
-          </button>
-        </div>
-      </section>
-    </section>
+          </Button>
+        </Stack>
+      </Card>
+      </Stack>
+    </ExtensionUiProvider>
   )
 }

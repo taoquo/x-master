@@ -19,15 +19,23 @@ function render(ui: React.ReactElement) {
     createObjectURL: () => "blob:test",
     revokeObjectURL: () => {}
   } as unknown as typeof URL
+  ;(globalThis as typeof globalThis & {
+    requestAnimationFrame: (callback: FrameRequestCallback) => number
+    cancelAnimationFrame: (handle: number) => void
+  }).requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0) as unknown as number
+  ;(globalThis as typeof globalThis & {
+    requestAnimationFrame: (callback: FrameRequestCallback) => number
+    cancelAnimationFrame: (handle: number) => void
+  }).cancelAnimationFrame = (handle) => clearTimeout(handle)
 
-  const container = dom.window.document.getElementById("root") as HTMLDivElement
-  const root = createRoot(container)
+  const rootElement = dom.window.document.getElementById("root") as HTMLDivElement
+  const root = createRoot(rootElement)
 
   act(() => {
     root.render(ui)
   })
 
-  return { container, dom }
+  return { container: dom.window.document.body as unknown as HTMLDivElement, dom }
 }
 
 function installChromeMock() {
@@ -36,26 +44,50 @@ function installChromeMock() {
       sendMessage: async (message: { type: string }) => {
         if (message.type === "popup/load") {
           return {
-            bookmarks: [],
-            folders: [{ id: "folder-inbox", name: "Inbox", createdAt: "2026-03-16T00:00:00.000Z" }],
-            bookmarkFolders: [],
-            tags: [],
-            bookmarkTags: [],
-            latestSyncRun: null,
-            summary: {
-              status: "idle",
-              fetchedCount: 0,
-              insertedCount: 0,
+            bookmarks: [
+              {
+                tweetId: "1",
+                tweetUrl: "https://x.com/alice/status/1",
+                authorName: "Alice",
+                authorHandle: "alice",
+                text: "Bookmark one",
+                createdAtOnX: "2026-03-16T00:00:00.000Z",
+                savedAt: "2026-03-16T01:00:00.000Z",
+                rawPayload: {}
+              }
+            ],
+            folders: [
+              { id: "folder-inbox", name: "Inbox", createdAt: "2026-03-16T00:00:00.000Z" },
+              { id: "folder-research", name: "Research", createdAt: "2026-03-17T00:00:00.000Z" }
+            ],
+            bookmarkFolders: [{ bookmarkId: "1", folderId: "folder-inbox", updatedAt: "2026-03-16T01:00:00.000Z" }],
+            tags: [{ id: "tag-1", name: "saved", createdAt: "2026-03-16T00:00:00.000Z" }],
+            bookmarkTags: [{ id: "1:tag-1", bookmarkId: "1", tagId: "tag-1", createdAt: "2026-03-16T01:00:00.000Z" }],
+            latestSyncRun: {
+              id: "sync-1",
+              status: "success",
+              startedAt: "2026-03-16T00:00:00.000Z",
+              finishedAt: "2026-03-16T00:01:00.000Z",
+              fetchedCount: 1,
+              insertedCount: 1,
               updatedCount: 0,
               failedCount: 0
+            },
+            summary: {
+              status: "success",
+              fetchedCount: 1,
+              insertedCount: 1,
+              updatedCount: 0,
+              failedCount: 0,
+              lastSyncedAt: "2026-03-16T00:01:00.000Z"
             }
           }
         }
 
         if (message.type === "sync/run") {
           return {
-            fetchedCount: 0,
-            insertedCount: 0,
+            fetchedCount: 1,
+            insertedCount: 1,
             updatedCount: 0,
             failedCount: 0
           }
@@ -71,7 +103,11 @@ function installChromeMock() {
   }
 }
 
-test("OptionsApp defaults to Dashboard and renders navigation", async () => {
+function findButton(container: HTMLDivElement, label: string) {
+  return Array.from(container.querySelectorAll("button")).find((button) => button.textContent === label)
+}
+
+test("OptionsApp defaults to Dashboard and renders the four-module navigation", async () => {
   installChromeMock()
 
   const { container } = render(React.createElement(OptionsApp))
@@ -82,13 +118,18 @@ test("OptionsApp defaults to Dashboard and renders navigation", async () => {
 
   assert.match(container.textContent ?? "", /Dashboard/)
   assert.match(container.textContent ?? "", /Inbox/)
-  assert.match(container.textContent ?? "", /Tags/)
-  assert.match(container.textContent ?? "", /Save heatmap/)
-  assert.match(container.textContent ?? "", /Quick actions/)
-  assert.doesNotMatch(container.textContent ?? "", /Open Folders/)
+  assert.match(container.textContent ?? "", /Library/)
+  assert.match(container.textContent ?? "", /Settings/)
+  assert.equal(Array.from(container.querySelectorAll("nav button")).some((button) => button.textContent === "Tags"), false)
+  assert.match(container.textContent ?? "", /Workspace snapshot/)
+  assert.match(container.textContent ?? "", /Sync health/)
+  assert.match(container.textContent ?? "", /Publish activity/)
+  assert.doesNotMatch(container.textContent ?? "", /Triage pressure/)
+  assert.doesNotMatch(container.textContent ?? "", /Recent momentum/)
+  assert.doesNotMatch(container.textContent ?? "", /Sources to classify/)
 })
 
-test("OptionsApp switches to Inbox page from navigation", async () => {
+test("OptionsApp switches to Inbox and keeps the workbench layout", async () => {
   installChromeMock()
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -97,7 +138,7 @@ test("OptionsApp switches to Inbox page from navigation", async () => {
     await Promise.resolve()
   })
 
-  const inboxButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Inbox")
+  const inboxButton = findButton(container, "Inbox")
   assert.ok(inboxButton)
 
   await act(async () => {
@@ -106,10 +147,10 @@ test("OptionsApp switches to Inbox page from navigation", async () => {
   })
 
   assert.match(container.textContent ?? "", /Organize new bookmarks in a dense table/)
-  assert.match(container.textContent ?? "", /Inbox workbench/)
+  assert.match(container.textContent ?? "", /Search/)
 })
 
-test("OptionsApp keeps Tags as the only secondary organization page", async () => {
+test("OptionsApp opens Library with subviews instead of a standalone Tags module", async () => {
   installChromeMock()
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -118,15 +159,61 @@ test("OptionsApp keeps Tags as the only secondary organization page", async () =
     await Promise.resolve()
   })
 
-  const tagsButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Tags")
-  assert.ok(tagsButton)
-  assert.equal(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Folders"), false)
+  const libraryButton = findButton(container, "Library")
+  assert.ok(libraryButton)
 
   await act(async () => {
-    tagsButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    libraryButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
     await Promise.resolve()
   })
 
-  assert.match(container.textContent ?? "", /Browse bookmarks through cross-cutting tags/)
-  assert.match(container.textContent ?? "", /Tag library/)
+  assert.match(container.textContent ?? "", /Library views/)
+  assert.match(container.textContent ?? "", /All/)
+  assert.match(container.textContent ?? "", /Tags/)
+  assert.match(container.textContent ?? "", /Folders/)
+  assert.match(container.textContent ?? "", /Coverage/)
+  assert.equal(Array.from(container.querySelectorAll("nav button")).some((button) => button.textContent === "Tags"), false)
+})
+
+test("OptionsApp opens Settings as a dedicated module", async () => {
+  installChromeMock()
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+
+  await act(async () => {
+    await Promise.resolve()
+  })
+
+  const settingsButton = findButton(container, "Settings")
+  assert.ok(settingsButton)
+
+  await act(async () => {
+    settingsButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    await Promise.resolve()
+  })
+
+  assert.match(container.textContent ?? "", /Manage sync visibility/)
+  assert.match(container.textContent ?? "", /Organization config/)
+  assert.match(container.textContent ?? "", /Workspace/)
+})
+
+test("Dashboard heatmap opens Inbox with a focused published date", async () => {
+  installChromeMock()
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+
+  await act(async () => {
+    await Promise.resolve()
+  })
+
+  const heatmapButton = container.querySelector('button[data-date="2026-03-16"]')
+  assert.ok(heatmapButton)
+
+  await act(async () => {
+    heatmapButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    await Promise.resolve()
+  })
+
+  assert.match(container.textContent ?? "", /Search/)
+  assert.match(container.textContent ?? "", /Focused published date:/)
 })

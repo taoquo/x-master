@@ -1,102 +1,122 @@
-import React from "react"
-import { INBOX_FOLDER_ID } from "../../lib/storage/foldersStore.ts"
-import { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
+import React, { useMemo } from "react"
+import { Button, Grid, Group, SimpleGrid, Stack, Text } from "@mantine/core"
+import { DashboardHeatmap } from "../components/DashboardHeatmap.tsx"
+import { useWorkspaceCommands } from "../hooks/useWorkspaceCommands.ts"
+import { useWorkspaceQueries } from "../hooks/useWorkspaceQueries.ts"
+import { buildDashboardModel } from "../lib/dashboard.ts"
+import type { InboxRouteState } from "../lib/navigation.ts"
+import { MetricCard, SectionHeader, StatusBadge, SurfaceCard } from "../../ui/components.tsx"
 
 interface DashboardPageProps {
-  onNavigate: (section: "dashboard" | "inbox" | "tags") => void
+  onOpenInbox: (routeState?: InboxRouteState) => void
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <section
-      style={{
-        display: "grid",
-        gap: 6,
-        padding: 16,
-        border: "1px solid #d7e3ee",
-        borderRadius: 14,
-        background: "#ffffff"
-      }}>
-      <p style={{ margin: 0, color: "#52606d", fontSize: 13 }}>{label}</p>
-      <strong style={{ fontSize: 28 }}>{value}</strong>
-    </section>
+function formatTimestamp(value?: string) {
+  if (!value) {
+    return "not yet"
+  }
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(parsed)
+}
+
+function formatPercent(value: number) {
+  return `${value}%`
+}
+
+export function DashboardPage({ onOpenInbox }: DashboardPageProps) {
+  const queries = useWorkspaceQueries()
+  const commands = useWorkspaceCommands({
+    bookmarks: queries.bookmarks,
+    refreshData: queries.refreshData
+  })
+
+  const model = useMemo(
+    () =>
+      buildDashboardModel({
+        bookmarks: queries.bookmarks,
+        bookmarkFolders: queries.bookmarkFolders,
+        tags: queries.tags,
+        bookmarkTags: queries.bookmarkTags,
+        folders: queries.folders,
+        summary: queries.summary,
+        latestSyncRun: queries.latestSyncRun
+      }),
+    [queries.bookmarkFolders, queries.bookmarkTags, queries.bookmarks, queries.folders, queries.latestSyncRun, queries.summary, queries.tags]
   )
-}
-
-export function DashboardPage({ onNavigate }: DashboardPageProps) {
-  const workspace = useWorkspaceData()
-  const inboxCount = workspace.bookmarkFolders.filter((bookmarkFolder) => bookmarkFolder.folderId === INBOX_FOLDER_ID).length
 
   return (
-    <div style={{ display: "grid", gap: 20 }}>
-      <header style={{ display: "grid", gap: 6 }}>
-        <h2 style={{ margin: 0, fontSize: 28 }}>Dashboard</h2>
-        <p style={{ margin: 0, color: "#52606d" }}>Monitor sync health, inbox flow, and recent activity before jumping into the Inbox workbench.</p>
-      </header>
+    <Stack gap="lg">
+      <SectionHeader
+        title="Dashboard"
+        description="A compact overview of workspace size, sync state, and publish-date activity."
+      />
 
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-          gap: 16
-        }}>
-        <StatCard label="Sync status" value={workspace.summary.status} />
-        <StatCard label="Bookmarks" value={String(workspace.bookmarks.length)} />
-        <StatCard label="Inbox" value={String(inboxCount)} />
-        <StatCard label="Folders / Tags" value={`${workspace.folders.length} / ${workspace.tags.length}`} />
-      </section>
+      <Grid gutter="lg">
+        <Grid.Col span={{ base: 12, xl: 7 }}>
+          <SurfaceCard title="Workspace snapshot" description="Keep the dashboard focused on totals and activity, then use the left navigation for deeper work.">
+            <Text fw={700} size="xl">
+              {model.metrics.totalBookmarks} bookmarks in the workspace
+            </Text>
+            <Text c="dimmed">
+              {model.metrics.inboxCount} still in Inbox, {model.metrics.organizedCount} filed, {model.metrics.untaggedCount} still untagged.
+            </Text>
+            {queries.isLoading ? <Text size="sm" c="dimmed">Refreshing workspace snapshot...</Text> : null}
+            {queries.loadError ? <Text c="red">Latest load error: {queries.loadError}</Text> : null}
+          </SurfaceCard>
+        </Grid.Col>
 
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(320px, 1.2fr) minmax(260px, 0.8fr)",
-          gap: 16
-        }}>
-        <section
-          style={{
-            display: "grid",
-            gap: 12,
-            padding: 18,
-            border: "1px solid #d7e3ee",
-            borderRadius: 16,
-            background: "#ffffff"
-          }}>
-          <div>
-            <h3 style={{ margin: 0 }}>Save heatmap</h3>
-            <p style={{ margin: "6px 0 0", color: "#52606d" }}>Bookmark saves over the recent window.</p>
-          </div>
-          <div
-            style={{
-              minHeight: 220,
-              borderRadius: 12,
-              border: "1px dashed #c9d4e0",
-              background:
-                "linear-gradient(90deg, rgba(72,101,129,0.08) 1px, transparent 1px) 0 0 / 32px 100%, linear-gradient(rgba(72,101,129,0.08) 1px, transparent 1px) 0 0 / 100% 32px"
-            }}
-          />
-        </section>
+        <Grid.Col span={{ base: 12, xl: 5 }}>
+          <SurfaceCard title="Sync health" description="Keep manual sync visible here and leave operational detail in Settings.">
+            <Group justify="space-between" align="start">
+              <Stack gap={4}>
+                <Group gap="xs">
+                  <StatusBadge status={commands.isSyncing ? "running" : model.sync.status} />
+                  <Text c="dimmed">Last synced: {formatTimestamp(model.sync.lastSyncedAt)}</Text>
+                </Group>
+                <Text size="sm">Latest run: {model.sync.latestRunStatus}</Text>
+                {model.sync.latestRunFinishedAt ? <Text size="sm">Finished: {formatTimestamp(model.sync.latestRunFinishedAt)}</Text> : null}
+              </Stack>
+              <Button type="button" color="dark" onClick={() => void commands.handleSync()} disabled={commands.isSyncing}>
+                {commands.isSyncing ? "Syncing..." : "Sync now"}
+              </Button>
+            </Group>
 
-        <section
-          style={{
-            display: "grid",
-            gap: 12,
-            padding: 18,
-            border: "1px solid #d7e3ee",
-            borderRadius: 16,
-            background: "#ffffff"
-          }}>
-          <div>
-            <h3 style={{ margin: 0 }}>Quick actions</h3>
-            <p style={{ margin: "6px 0 0", color: "#52606d" }}>Use Inbox for folder organization and Tags for cross-cutting review.</p>
-          </div>
-          <button type="button" onClick={() => onNavigate("inbox")}>
-            Open Inbox
-          </button>
-          <button type="button" onClick={() => onNavigate("tags")}>
-            Open Tags
-          </button>
-        </section>
-      </section>
-    </div>
+            <Group gap="md" wrap="wrap">
+              <Text size="sm">Fetched {model.sync.fetchedCount}</Text>
+              <Text size="sm">Inserted {model.sync.insertedCount}</Text>
+              <Text size="sm">Updated {model.sync.updatedCount}</Text>
+              <Text size="sm">Failed {model.sync.failedCount}</Text>
+            </Group>
+
+            {model.sync.errorSummary ? <Text c="red">Latest error: {model.sync.errorSummary}</Text> : null}
+          </SurfaceCard>
+        </Grid.Col>
+      </Grid>
+
+      <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="lg">
+        <MetricCard label="Total bookmarks" value={String(model.metrics.totalBookmarks)} hint="All bookmarks currently available in the local workspace." />
+        <MetricCard label="Pending in Inbox" value={String(model.metrics.inboxCount)} hint="Bookmarks still waiting for final filing." />
+        <MetricCard label="Tagged coverage" value={formatPercent(model.pressure.taggedShare)} hint={`${model.metrics.taggedCount} bookmarks already carry at least one tag.`} />
+        <MetricCard label="Folders / Tags" value={`${model.metrics.foldersCount} / ${model.metrics.tagsCount}`} hint="Current organization system coverage." />
+      </SimpleGrid>
+
+      <SurfaceCard title="Publish activity" description="Calendar heatmap of bookmark publish dates over the last 12 weeks. Click an active day to open Inbox with that publish date focused.">
+        <DashboardHeatmap
+          weeks={model.heatmap.weeks}
+          totalPublishedInWindow={model.heatmap.totalPublishedInWindow}
+          busiestDayCount={model.heatmap.busiestDayCount}
+          busiestDayDate={model.heatmap.busiestDayDate}
+          onSelectDate={(date) => onOpenInbox({ publishedDate: date })}
+        />
+      </SurfaceCard>
+    </Stack>
   )
 }

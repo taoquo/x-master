@@ -1,4 +1,5 @@
 import React from "react"
+import { Card, Checkbox, Table, Text } from "@mantine/core"
 import type { BookmarkRecord } from "../../lib/types.ts"
 
 interface InboxTableProps {
@@ -14,6 +15,20 @@ function getSummaryText(text: string) {
   return text.replace(/\s+/g, " ").trim()
 }
 
+function formatCompactDate(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC"
+  }).format(date)
+}
+
 export function InboxTable({
   bookmarks,
   selectedBookmarkId,
@@ -23,82 +38,95 @@ export function InboxTable({
   onToggleBookmarkSelection
 }: InboxTableProps) {
   return (
-    <section
+    <Card
+      padding={0}
       style={{
+        display: "flex",
+        flexDirection: "column",
         minHeight: 0,
-        display: "grid",
-        border: "1px solid #d7e3ee",
-        borderRadius: 16,
-        background: "#ffffff",
-        overflow: "hidden"
+        overflow: "hidden",
+        background: "rgba(255,255,255,0.94)"
       }}>
-      <div style={{ minHeight: 0, overflow: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-          <thead>
-            <tr style={{ background: "#f8fbfd", borderBottom: "1px solid #d7e3ee" }}>
-              <th style={{ width: 64, padding: "12px 10px", textAlign: "left" }}>Select</th>
-              <th style={{ width: 220, padding: "12px 10px", textAlign: "left" }}>User</th>
-              <th style={{ width: 160, padding: "12px 10px", textAlign: "left" }}>Folder</th>
-              <th style={{ padding: "12px 10px", textAlign: "left" }}>Summary</th>
-            </tr>
-          </thead>
-          <tbody>
+      <div style={{ flex: 1, overflow: "auto" }}>
+        <Table striped={false} highlightOnHover withTableBorder={false} withColumnBorders={false} style={{ tableLayout: "fixed" }}>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th style={{ width: 68 }}>Select</Table.Th>
+              <Table.Th style={{ width: 240 }}>User</Table.Th>
+              <Table.Th style={{ width: 180 }}>Folder</Table.Th>
+              <Table.Th>Summary</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
             {!bookmarks.length ? (
-              <tr>
-                <td colSpan={4} style={{ padding: 24, color: "#52606d" }}>
-                  No bookmarks match the current filters.
-                </td>
-              </tr>
+              <Table.Tr>
+                <Table.Td colSpan={4}>
+                  <Text c="dimmed" p="md">
+                    No bookmarks match the current filters.
+                  </Text>
+                </Table.Td>
+              </Table.Tr>
             ) : null}
+
             {bookmarks.map((bookmark) => {
               const isActive = bookmark.tweetId === selectedBookmarkId
               const isChecked = selectedBookmarkIds.includes(bookmark.tweetId)
               const summaryText = getSummaryText(bookmark.text)
+              const mediaCount = bookmark.media?.length ?? 0
 
               return (
-                <tr
+                <Table.Tr
                   key={bookmark.tweetId}
                   onClick={() => onSelectBookmark(bookmark.tweetId)}
                   style={{
-                    background: isActive ? "#eef6ff" : "#ffffff",
-                    borderBottom: "1px solid #e6edf5",
+                    background: isActive ? "#eef8ff" : undefined,
+                    boxShadow: isActive ? "inset 3px 0 0 #2e9fe9" : undefined,
                     cursor: "pointer"
                   }}>
-                  <td style={{ padding: "12px 10px", verticalAlign: "top" }}>
-                    <input
-                      type="checkbox"
+                  <Table.Td style={{ verticalAlign: "top" }}>
+                    <Checkbox
                       checked={isChecked}
                       aria-label={`Select ${bookmark.authorName}`}
                       onClick={(event) => event.stopPropagation()}
                       onChange={() => onToggleBookmarkSelection(bookmark.tweetId)}
                     />
-                  </td>
-                  <td style={{ padding: "12px 10px", verticalAlign: "top" }}>
-                    <div style={{ display: "grid", gap: 4 }}>
-                      <strong>{bookmark.authorName}</strong>
-                      <span style={{ color: "#52606d" }}>@{bookmark.authorHandle}</span>
-                    </div>
-                  </td>
-                  <td style={{ padding: "12px 10px", verticalAlign: "top", color: "#334e68" }}>
-                    {folderNameByBookmarkId.get(bookmark.tweetId) ?? "Inbox"}
-                  </td>
-                  <td style={{ padding: "12px 10px", verticalAlign: "top" }}>
+                  </Table.Td>
+
+                  <Table.Td style={{ verticalAlign: "top" }}>
+                    <Text fw={600}>{bookmark.authorName}</Text>
+                    <Text size="sm" c="dimmed">
+                      @{bookmark.authorHandle}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      Saved {formatCompactDate(bookmark.savedAt)}
+                    </Text>
+                  </Table.Td>
+
+                  <Table.Td style={{ verticalAlign: "top" }}>
+                    <Text fw={600}>{folderNameByBookmarkId.get(bookmark.tweetId) ?? "Inbox"}</Text>
+                    <Text size="xs" c="dimmed">
+                      {mediaCount ? `${mediaCount} media` : `${bookmark.metrics?.likes ?? 0} likes`}
+                    </Text>
+                  </Table.Td>
+
+                  <Table.Td style={{ verticalAlign: "top" }}>
                     <div
                       title={summaryText}
                       style={{
+                        display: "-webkit-box",
                         overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap"
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical"
                       }}>
                       {summaryText || "Untitled bookmark"}
                     </div>
-                  </td>
-                </tr>
+                  </Table.Td>
+                </Table.Tr>
               )
             })}
-          </tbody>
-        </table>
+          </Table.Tbody>
+        </Table>
       </div>
-    </section>
+    </Card>
   )
 }

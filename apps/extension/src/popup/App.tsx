@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react"
+import { Badge, Button, Card, Group, Stack, Text, Title } from "@mantine/core"
 import type { PopupData } from "../lib/types.ts"
 import { createEmptySyncSummary } from "../lib/types.ts"
 import { loadPopupData, runSync } from "../lib/runtime/popupClient.ts"
+import { ExtensionUiProvider } from "../ui/provider.tsx"
+import { StatusBadge } from "../ui/components.tsx"
 
 function openWorkspace() {
   if (typeof chrome === "undefined" || !chrome.sidePanel?.open) {
@@ -46,71 +49,61 @@ export default function App() {
   }
 
   return (
-    <main
-      style={{
-        width: 360,
-        maxWidth: "100%",
-        display: "grid",
-        gap: 14,
-        padding: 16,
-        boxSizing: "border-box",
-        background: "linear-gradient(180deg, #f7fbff 0%, #eef4f8 100%)",
-        color: "#102a43"
-      }}>
-      <section
+    <ExtensionUiProvider>
+      <Stack
+        gap="md"
+        p="md"
+        w={360}
+        maw="100%"
         style={{
-          display: "grid",
-          gap: 8,
-          padding: 16,
-          border: "1px solid #d7e3ee",
-          borderRadius: 16,
-          background: "#ffffff"
+          background: "linear-gradient(180deg, #f6f8fb 0%, #ebeff4 100%)"
         }}>
-        <h1 style={{ margin: 0, fontSize: 20 }}>X Bookmark Manager</h1>
-        <p style={{ margin: 0, color: "#52606d" }}>Quick sync and jump into the full workspace.</p>
-      </section>
+        <Card padding="lg">
+          <Stack gap="xs">
+            <Group justify="space-between" align="start">
+              <div>
+                <Title order={3}>X Bookmark Manager</Title>
+                <Text c="dimmed">Quick sync and jump into the full workspace.</Text>
+              </div>
+              <Badge color="sand" variant="light">
+                local-first
+              </Badge>
+            </Group>
+          </Stack>
+        </Card>
 
-      <section
-        style={{
-          display: "grid",
-          gap: 8,
-          padding: 16,
-          border: "1px solid #d7e3ee",
-          borderRadius: 16,
-          background: "#ffffff"
-        }}>
-        <h2 style={{ margin: 0, fontSize: 16 }}>Sync</h2>
-        <p style={{ margin: 0 }}>Status: {data.summary.status}</p>
-        <p style={{ margin: 0 }}>Fetched: {data.summary.fetchedCount}</p>
-        <p style={{ margin: 0 }}>Inserted: {data.summary.insertedCount}</p>
-        <p style={{ margin: 0 }}>Updated: {data.summary.updatedCount}</p>
-        <p style={{ margin: 0 }}>Failed: {data.summary.failedCount}</p>
-        {data.summary.lastSyncedAt ? <p style={{ margin: 0 }}>Last synced: {data.summary.lastSyncedAt}</p> : null}
-        {data.summary.errorSummary ? <p style={{ margin: 0 }}>Error: {data.summary.errorSummary}</p> : null}
-        <button type="button" onClick={() => void handleSync()} disabled={isSyncing}>
-          {isSyncing ? "Syncing..." : "Sync now"}
-        </button>
-      </section>
+        <Card padding="lg">
+          <Stack gap="sm">
+            <Group justify="space-between">
+              <Title order={4}>Sync</Title>
+              <StatusBadge status={data.summary.status} />
+            </Group>
+            <Text>Fetched: {data.summary.fetchedCount}</Text>
+            <Text>Inserted: {data.summary.insertedCount}</Text>
+            <Text>Updated: {data.summary.updatedCount}</Text>
+            <Text>Failed: {data.summary.failedCount}</Text>
+            {data.summary.lastSyncedAt ? <Text>Last synced: {data.summary.lastSyncedAt}</Text> : null}
+            {data.summary.errorSummary ? <Text c="red">Error: {data.summary.errorSummary}</Text> : null}
+            <Button type="button" onClick={() => void handleSync()} disabled={isSyncing}>
+              {isSyncing ? "Syncing..." : "Sync now"}
+            </Button>
+          </Stack>
+        </Card>
 
-      <section
-        style={{
-          display: "grid",
-          gap: 8,
-          padding: 16,
-          border: "1px solid #d7e3ee",
-          borderRadius: 16,
-          background: "#ffffff"
-        }}>
-        <h2 style={{ margin: 0, fontSize: 16 }}>Overview</h2>
-        <p style={{ margin: 0 }}>Bookmarks: {data.bookmarks.length}</p>
-        <p style={{ margin: 0 }}>Tags: {data.tags.length}</p>
-        <p style={{ margin: 0 }}>Latest sync status: {data.latestSyncRun?.status ?? "idle"}</p>
-        {data.latestSyncRun?.finishedAt ? <p style={{ margin: 0 }}>Latest sync finished: {data.latestSyncRun.finishedAt}</p> : null}
-      </section>
+        <Card padding="lg">
+          <Stack gap="sm">
+            <Title order={4}>Overview</Title>
+            <Text>Bookmarks: {data.bookmarks.length}</Text>
+            <Text>Tags: {data.tags.length}</Text>
+            <Text>Latest sync status: {data.latestSyncRun?.status ?? "idle"}</Text>
+            {data.latestSyncRun?.finishedAt ? <Text>Latest sync finished: {data.latestSyncRun.finishedAt}</Text> : null}
+          </Stack>
+        </Card>
 
-      <button type="button" onClick={openWorkspace}>
-        Open workspace
-      </button>
-    </main>
+        <Button type="button" size="md" color="dark" onClick={openWorkspace}>
+          Open workspace
+        </Button>
+      </Stack>
+    </ExtensionUiProvider>
   )
 }

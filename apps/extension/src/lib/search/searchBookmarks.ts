@@ -11,6 +11,7 @@ export interface BookmarkFilterOptions {
   folders: FolderRecord[]
   bookmarkFolders: BookmarkFolderRecord[]
   selectedFolderId?: string
+  selectedPublishedDate?: string
   bookmarkTags: BookmarkTagRecord[]
   selectedAuthorHandles: string[]
   authorMatchMode: MultiValueMatchMode
@@ -30,6 +31,24 @@ function normalizeValue(value: string) {
 function toTimestamp(value?: string) {
   const timestamp = value ? Date.parse(value) : Number.NaN
   return Number.isNaN(timestamp) ? 0 : timestamp
+}
+
+function toDateKey(value?: string) {
+  if (!value) {
+    return ""
+  }
+
+  const directMatch = value.match(/^\d{4}-\d{2}-\d{2}/)
+  if (directMatch) {
+    return directMatch[0]
+  }
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return ""
+  }
+
+  return parsed.toISOString().slice(0, 10)
 }
 
 export function filterBookmarks(bookmarks: BookmarkRecord[], query: string) {
@@ -122,6 +141,16 @@ export function filterBookmarksBySavedTime(
   return bookmarks.filter((bookmark) => toTimestamp(bookmark.savedAt) >= threshold)
 }
 
+export function filterBookmarksByPublishedDate(bookmarks: BookmarkRecord[], selectedPublishedDate?: string) {
+  const dateKey = toDateKey(selectedPublishedDate)
+
+  if (!dateKey) {
+    return bookmarks
+  }
+
+  return bookmarks.filter((bookmark) => toDateKey(bookmark.createdAtOnX) === dateKey)
+}
+
 export function filterBookmarksByFolder(
   bookmarks: BookmarkRecord[],
   folders: FolderRecord[],
@@ -187,19 +216,22 @@ export function sortBookmarks(bookmarks: BookmarkRecord[], sortOrder: BookmarkSo
 export function applyBookmarkFilters(bookmarks: BookmarkRecord[], options: BookmarkFilterOptions) {
   return sortBookmarks(
     filterBookmarksByFlags(
-      filterBookmarksBySavedTime(
-        filterBookmarksByTags(
-          filterBookmarksByAuthors(
-            filterBookmarksByFolder(filterBookmarks(bookmarks, options.query), options.folders, options.bookmarkFolders, options.selectedFolderId),
-            options.selectedAuthorHandles,
-            options.authorMatchMode
+      filterBookmarksByPublishedDate(
+        filterBookmarksBySavedTime(
+          filterBookmarksByTags(
+            filterBookmarksByAuthors(
+              filterBookmarksByFolder(filterBookmarks(bookmarks, options.query), options.folders, options.bookmarkFolders, options.selectedFolderId),
+              options.selectedAuthorHandles,
+              options.authorMatchMode
+            ),
+            options.bookmarkTags,
+            options.selectedTagIds,
+            options.tagMatchMode
           ),
-          options.bookmarkTags,
-          options.selectedTagIds,
-          options.tagMatchMode
+          options.timeRange,
+          options.currentTime
         ),
-        options.timeRange,
-        options.currentTime
+        options.selectedPublishedDate
       ),
       {
         onlyWithMedia: options.onlyWithMedia,

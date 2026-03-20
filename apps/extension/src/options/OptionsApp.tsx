@@ -1,86 +1,66 @@
-import React, { useMemo, useState } from "react"
+import React, { useCallback, useMemo, useState } from "react"
+import type { InboxRouteState, LibraryView, OptionsSection } from "./lib/navigation.ts"
 import { DashboardPage } from "./pages/DashboardPage.tsx"
 import { InboxPage } from "./pages/InboxPage.tsx"
-import { TagsPage } from "./pages/TagsPage.tsx"
-
-type OptionsSection = "dashboard" | "inbox" | "tags"
+import { LibraryPage } from "./pages/LibraryPage.tsx"
+import { SettingsPage } from "./pages/SettingsPage.tsx"
+import { ExtensionUiProvider } from "../ui/provider.tsx"
+import { WorkspaceShell } from "../ui/components.tsx"
 
 const NAV_ITEMS: Array<{ id: OptionsSection; label: string }> = [
   { id: "dashboard", label: "Dashboard" },
   { id: "inbox", label: "Inbox" },
-  { id: "tags", label: "Tags" }
+  { id: "library", label: "Library" },
+  { id: "settings", label: "Settings" }
 ]
 
 export function OptionsApp() {
   const [section, setSection] = useState<OptionsSection>("dashboard")
+  const [libraryView, setLibraryView] = useState<LibraryView>("all")
+  const [inboxRouteState, setInboxRouteState] = useState<InboxRouteState | undefined>(undefined)
+
+  const openLibraryView = useCallback((view: LibraryView) => {
+    setLibraryView(view)
+    setSection("library")
+  }, [])
+
+  const openInbox = useCallback((routeState?: InboxRouteState) => {
+    setInboxRouteState(routeState)
+    setSection("inbox")
+  }, [])
+
+  const handleSelectSection = useCallback((nextSection: OptionsSection) => {
+    if (nextSection !== "inbox") {
+      setInboxRouteState(undefined)
+    } else if (section !== "inbox") {
+      setInboxRouteState(undefined)
+    }
+
+    setSection(nextSection)
+  }, [section])
 
   const content = useMemo(() => {
     switch (section) {
       case "inbox":
-        return <InboxPage />
-      case "tags":
-        return <TagsPage />
+        return <InboxPage initialRouteState={inboxRouteState} />
+      case "library":
+        return <LibraryPage view={libraryView} onViewChange={setLibraryView} />
+      case "settings":
+        return <SettingsPage />
       case "dashboard":
       default:
-        return <DashboardPage onNavigate={setSection} />
+        return <DashboardPage onOpenInbox={openInbox} />
     }
-  }, [section])
+  }, [inboxRouteState, libraryView, openInbox, openLibraryView, section])
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        gridTemplateColumns: "260px minmax(0, 1fr)",
-        background: "#eef4f8",
-        color: "#102a43"
-      }}>
-      <aside
-        style={{
-          display: "grid",
-          alignContent: "start",
-          gap: 12,
-          padding: 24,
-          borderRight: "1px solid #d7e3ee",
-          background: "#ffffff"
-        }}>
-        <header style={{ display: "grid", gap: 6 }}>
-          <h1 style={{ margin: 0, fontSize: 22 }}>X Bookmark Manager</h1>
-          <p style={{ margin: 0, color: "#52606d" }}>A workspace for syncing, triaging, and organizing bookmarks.</p>
-        </header>
-
-        <nav style={{ display: "grid", gap: 8 }}>
-          {NAV_ITEMS.map((item) => {
-            const isActive = item.id === section
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setSection(item.id)}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: isActive ? "1px solid #486581" : "1px solid #d9e2ec",
-                  background: isActive ? "#e3f2fd" : "#ffffff",
-                  textAlign: "left",
-                  fontWeight: isActive ? 600 : 500
-                }}>
-                {item.label}
-              </button>
-            )
-          })}
-        </nav>
-      </aside>
-
-      <section
-        style={{
-          minWidth: 0,
-          minHeight: "100vh",
-          padding: 24,
-          boxSizing: "border-box"
-        }}>
+    <ExtensionUiProvider>
+      <WorkspaceShell
+        section={section}
+        navItems={NAV_ITEMS}
+        onSelectSection={handleSelectSection}>
         {content}
-      </section>
-    </main>
+      </WorkspaceShell>
+    </ExtensionUiProvider>
   )
 }

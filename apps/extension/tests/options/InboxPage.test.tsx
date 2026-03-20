@@ -31,15 +31,23 @@ function render(ui: React.ReactElement) {
     createObjectURL: () => "blob:test",
     revokeObjectURL: () => {}
   } as unknown as typeof URL
+  ;(globalThis as typeof globalThis & {
+    requestAnimationFrame: (callback: FrameRequestCallback) => number
+    cancelAnimationFrame: (handle: number) => void
+  }).requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0) as unknown as number
+  ;(globalThis as typeof globalThis & {
+    requestAnimationFrame: (callback: FrameRequestCallback) => number
+    cancelAnimationFrame: (handle: number) => void
+  }).cancelAnimationFrame = (handle) => clearTimeout(handle)
 
-  const container = dom.window.document.getElementById("root") as HTMLDivElement
-  const root = createRoot(container)
+  const rootElement = dom.window.document.getElementById("root") as HTMLDivElement
+  const root = createRoot(rootElement)
 
   act(() => {
     root.render(ui)
   })
 
-  return { container, dom }
+  return { container: dom.window.document.body as unknown as HTMLDivElement, dom }
 }
 
 async function settle() {
@@ -90,7 +98,7 @@ async function seedWorkspaceData() {
       authorName: "Bob",
       authorHandle: "bob",
       text: "beta note for inbox",
-      createdAtOnX: "2026-03-15T01:00:00.000Z",
+      createdAtOnX: "2026-03-16T01:00:00.000Z",
       savedAt: "2026-03-16T00:01:00.000Z",
       rawPayload: {}
     },
@@ -100,7 +108,7 @@ async function seedWorkspaceData() {
       authorName: "Cara",
       authorHandle: "cara",
       text: "project child bookmark for folder navigation coverage",
-      createdAtOnX: "2026-03-15T02:00:00.000Z",
+      createdAtOnX: "2026-03-17T02:00:00.000Z",
       savedAt: "2026-03-15T00:01:00.000Z",
       rawPayload: {}
     }
@@ -212,18 +220,14 @@ test("InboxPage renders the workbench layout and switches detail drawer with row
 
   await waitForAssertion(() => {
     assert.match(container.textContent ?? "", /Alice/)
-    assert.match(container.textContent ?? "", /Folder tree/)
   })
 
-  assert.match(container.textContent ?? "", /Inbox workbench/)
-  assert.match(container.textContent ?? "", /Folders/)
-  assert.match(container.textContent ?? "", /Folder tree/)
+  assert.match(container.textContent ?? "", /Search/)
   assert.match(container.textContent ?? "", /User/)
   assert.match(container.textContent ?? "", /Folder/)
   assert.match(container.textContent ?? "", /Summary/)
-  assert.match(container.textContent ?? "", /Move selected/)
-  assert.match(container.textContent ?? "", /Apply tag/)
-  assert.match(container.textContent ?? "", /Details|Alice/)
+  assert.match(container.textContent ?? "", /Select all visible/)
+  assert.doesNotMatch(container.textContent ?? "", /Bookmark details/)
 
   const bobCell = Array.from(container.querySelectorAll("td")).find((cell) => cell.textContent?.includes("Bob"))
   assert.ok(bobCell)
@@ -233,13 +237,14 @@ test("InboxPage renders the workbench layout and switches detail drawer with row
   })
 
   await waitForAssertion(() => {
+    assert.match(container.textContent ?? "", /Bookmark details/)
     assert.match(container.textContent ?? "", /Bob/)
     assert.match(container.textContent ?? "", /beta note for inbox/)
   })
 })
 
-test("InboxPage updates folder-scoped results and prunes hidden batch selections", async () => {
-  const seeded = await seedWorkspaceData()
+test("InboxPage prunes hidden batch selections when filters change", async () => {
+  await seedWorkspaceData()
   installChromeMock()
 
   const { container, dom } = render(React.createElement(InboxPage))
@@ -248,8 +253,7 @@ test("InboxPage updates folder-scoped results and prunes hidden batch selections
     assert.match(container.textContent ?? "", /Alice/)
   })
 
-  const moveSelectedButton = getButton(container, "Move selected") as HTMLButtonElement
-  assert.equal(moveSelectedButton.disabled, true)
+  assert.equal(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Move selected"), false)
 
   const selectAllVisibleButton = getButton(container, "Select all visible")
   await act(async () => {
@@ -257,8 +261,8 @@ test("InboxPage updates folder-scoped results and prunes hidden batch selections
   })
 
   await waitForAssertion(() => {
-    assert.match(container.textContent ?? "", /2 selected/)
-    assert.equal(moveSelectedButton.disabled, false)
+    assert.match(container.textContent ?? "", /3 selected/)
+    assert.ok(getButton(container, "Move selected"))
   })
 
   const moreFiltersButton = getButton(container, "More filters")
@@ -290,20 +294,14 @@ test("InboxPage updates folder-scoped results and prunes hidden batch selections
     clearFiltersButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
 
-  const projectsButton = getButton(container, "Projects")
-  await act(async () => {
-    projectsButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
-  })
-
   await waitForAssertion(() => {
-    assert.match(container.textContent ?? "", /Projects/)
-    assert.match(container.textContent ?? "", /project child bookmark/)
-    assert.doesNotMatch(container.textContent ?? "", /alpha note for inbox/)
+    assert.match(container.textContent ?? "", /alpha note for inbox/)
+    assert.match(container.textContent ?? "", /beta note for inbox/)
+    assert.equal(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Move selected"), false)
   })
-  assert.equal(seeded.projectsFolderId.length > 0, true)
 })
 
-test("InboxPage supports item-level move and tagging from the detail drawer", async () => {
+test("InboxPage supports item-level tagging from the detail drawer", async () => {
   const seeded = await seedWorkspaceData()
   installChromeMock()
 
@@ -313,9 +311,9 @@ test("InboxPage supports item-level move and tagging from the detail drawer", as
     assert.match(container.textContent ?? "", /Alice/)
   })
 
-  const projectsButton = getButton(container, "Projects")
+  const searchInput = getInputByLabel(container, "Search") as HTMLInputElement
   await act(async () => {
-    projectsButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    setInputValue(searchInput, "Cara", dom)
   })
 
   await waitForAssertion(() => {
@@ -327,20 +325,6 @@ test("InboxPage supports item-level move and tagging from the detail drawer", as
 
   await act(async () => {
     caraCell.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
-  })
-
-  const moveToFolderSelect = getInputByLabel(container, "Move to folder") as HTMLSelectElement
-  await act(async () => {
-    setInputValue(moveToFolderSelect, seeded.projectsFolderId, dom)
-  })
-
-  const moveBookmarkButton = getButton(container, "Move bookmark")
-  await act(async () => {
-    moveBookmarkButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
-  })
-
-  await waitForAssertion(() => {
-    assert.match(container.textContent ?? "", /Current folder: Projects/)
   })
 
   const existingTagSelect = getInputByLabel(container, "Existing tag") as HTMLSelectElement
@@ -355,5 +339,20 @@ test("InboxPage supports item-level move and tagging from the detail drawer", as
 
   await waitForAssertion(() => {
     assert.match(container.textContent ?? "", /follow-up/)
+  })
+})
+
+test("InboxPage honors an initial published-date focus from Dashboard", async () => {
+  await seedWorkspaceData()
+  installChromeMock()
+
+  const { container } = render(React.createElement(InboxPage, { initialRouteState: { publishedDate: "2026-03-16" } }))
+
+  await waitForAssertion(() => {
+    assert.match(container.textContent ?? "", /Focused published date:/)
+    assert.match(container.textContent ?? "", /Mar 16, 2026/)
+    assert.match(container.textContent ?? "", /Bob/)
+    assert.doesNotMatch(container.textContent ?? "", /Alice/)
+    assert.doesNotMatch(container.textContent ?? "", /Cara/)
   })
 })

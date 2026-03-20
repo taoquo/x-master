@@ -1,6 +1,9 @@
 import React from "react"
+import { Stack, Text } from "@mantine/core"
 import type { BookmarkRecord } from "../../lib/types.ts"
 import { BookmarkCard } from "./BookmarkCard.tsx"
+import { EmptyState, SectionHeader } from "../../ui/components.tsx"
+import { ExtensionUiProvider } from "../../ui/provider.tsx"
 
 interface BookmarkListProps {
   bookmarks: BookmarkRecord[]
@@ -26,39 +29,31 @@ export function BookmarkList({
   onToggleBookmarkSelection
 }: BookmarkListProps) {
   return (
-    <section style={{ display: "grid", minHeight: 0 }}>
-      <header
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-          paddingBottom: 10,
-          borderBottom: "1px solid #dde7f0",
-          marginBottom: 12
-        }}>
+    <ExtensionUiProvider>
+      <Stack gap="md" h="100%">
         <div>
-          <h2 style={{ margin: 0 }}>Bookmarks</h2>
-          <p style={{ margin: "4px 0 0", color: "#52606d" }}>
-            {folderLabel} · {resultCount} result(s)
-          </p>
+          <SectionHeader title="Bookmarks" description={`${folderLabel} · ${resultCount} result(s)`} />
+          <Text size="sm" c="dimmed" mt={4}>
+            Sorted by {sortLabel}
+          </Text>
         </div>
-        <span style={{ fontSize: 13, color: "#52606d" }}>Sorted by {sortLabel}</span>
-      </header>
-      <div style={{ display: "grid", gap: 12, overflowY: "auto", paddingRight: 4 }}>
-      {!bookmarks.length ? <p>No bookmarks match the current filters.</p> : null}
-      {bookmarks.map((bookmark) => (
-        <BookmarkCard
-          key={bookmark.tweetId}
-          bookmark={bookmark}
-          isSelected={bookmark.tweetId === selectedBookmarkId}
-          onSelect={onSelectBookmark}
-          selectionEnabled={selectionEnabled}
-          isChecked={selectedBookmarkIds.includes(bookmark.tweetId)}
-          onToggleChecked={onToggleBookmarkSelection}
-        />
-      ))}
-      </div>
-    </section>
+        <div style={{ overflowY: "auto", paddingRight: 4 }}>
+          <Stack gap="md">
+          {!bookmarks.length ? <EmptyState title="No bookmarks match the current filters." description="Adjust the current query or browse a different context." /> : null}
+          {bookmarks.map((bookmark) => (
+            <BookmarkCard
+              key={bookmark.tweetId}
+              bookmark={bookmark}
+              isSelected={bookmark.tweetId === selectedBookmarkId}
+              onSelect={onSelectBookmark}
+              selectionEnabled={selectionEnabled}
+              isChecked={selectedBookmarkIds.includes(bookmark.tweetId)}
+              onToggleChecked={onToggleBookmarkSelection}
+            />
+          ))}
+          </Stack>
+        </div>
+      </Stack>
+    </ExtensionUiProvider>
   )
 }

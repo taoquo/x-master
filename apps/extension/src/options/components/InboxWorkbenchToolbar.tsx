@@ -1,4 +1,5 @@
 import React from "react"
+import { Badge, Button, Card, Checkbox, Group, NativeSelect, Paper, SimpleGrid, Stack, Text, TextInput } from "@mantine/core"
 import type { BookmarkSortOrder, MultiValueMatchMode, SavedTimeRange } from "../../lib/search/searchBookmarks.ts"
 import type { FolderRecord, TagRecord } from "../../lib/types.ts"
 
@@ -15,6 +16,8 @@ interface InboxWorkbenchToolbarProps {
   onSortOrderChange: (sortOrder: BookmarkSortOrder) => void
   timeRange: SavedTimeRange
   onTimeRangeChange: (timeRange: SavedTimeRange) => void
+  selectedPublishedDate?: string
+  onClearPublishedDate: () => void
   onlyWithMedia: boolean
   onOnlyWithMediaChange: (value: boolean) => void
   onlyLongform: boolean
@@ -65,6 +68,17 @@ function renderMatchModeControl({
   )
 }
 
+const fieldLabelStyle = { display: "grid", gap: 6 } as const
+const chipLabelStyle = {
+  display: "flex",
+  gap: 8,
+  alignItems: "center",
+  padding: "6px 10px",
+  border: "1px solid #d9e2ec",
+  borderRadius: 999,
+  background: "#ffffff"
+} as const
+
 export function InboxWorkbenchToolbar({
   query,
   onQueryChange,
@@ -72,6 +86,8 @@ export function InboxWorkbenchToolbar({
   onSortOrderChange,
   timeRange,
   onTimeRangeChange,
+  selectedPublishedDate,
+  onClearPublishedDate,
   onlyWithMedia,
   onOnlyWithMediaChange,
   onlyLongform,
@@ -106,191 +122,199 @@ export function InboxWorkbenchToolbar({
 }: InboxWorkbenchToolbarProps) {
   const selectionDisabled = selectedCount === 0
   const advancedFilterCount = selectedAuthorHandles.length + selectedTagIds.length
+  const hasActiveFilters = Boolean(query || selectedAuthorHandles.length || selectedTagIds.length || selectedPublishedDate || onlyWithMedia || onlyLongform || timeRange !== "all")
+  const publishedDateLabel = selectedPublishedDate
+    ? new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "UTC"
+      }).format(new Date(`${selectedPublishedDate}T00:00:00.000Z`))
+    : null
 
   return (
-    <section
-      style={{
-        display: "grid",
-        gap: 14,
-        padding: 16,
-        border: "1px solid #d7e3ee",
-        borderRadius: 16,
-        background: "#ffffff"
-      }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}>
-        <div style={{ display: "grid", gap: 4 }}>
-          <h3 style={{ margin: 0, fontSize: 20 }}>Inbox workbench</h3>
-          <p style={{ margin: 0, color: "#52606d" }}>
-            {resultCount} visible of {totalCount} total bookmarks
-          </p>
-        </div>
-        <div style={{ display: "grid", justifyItems: "end", gap: 4 }}>
-          <p style={{ margin: 0, fontWeight: 600 }}>{selectedCount} selected</p>
-          <p style={{ margin: 0, fontSize: 13, color: "#52606d" }}>Bulk actions stay scoped to the current table view.</p>
-        </div>
-      </div>
+    <Stack gap="sm">
+      <Card
+        padding="md"
+        style={{
+          background: "rgba(255,255,255,0.96)"
+        }}>
+        <Stack gap="md">
+          <Group align="end" gap="sm" wrap="wrap">
+            <label style={{ ...fieldLabelStyle, flex: "1 1 320px", minWidth: 260 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Search</span>
+              <TextInput type="search" value={query} placeholder="Search bookmarks" onChange={(event) => onQueryChange(event.currentTarget.value)} />
+            </label>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
-        <label style={{ display: "grid", gap: 4, minWidth: 240, flex: "1 1 240px" }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>Search</span>
-          <input
-            type="search"
-            value={query}
-            placeholder="Search bookmarks"
-            onChange={(event) => onQueryChange(event.target.value)}
-          />
-        </label>
+            <label style={{ ...fieldLabelStyle, minWidth: 160 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Sort</span>
+              <NativeSelect value={sortOrder} onChange={(event) => onSortOrderChange(event.currentTarget.value as BookmarkSortOrder)}>
+                <option value="saved-desc">Newest saved</option>
+                <option value="saved-asc">Oldest saved</option>
+                <option value="created-desc">Newest on X</option>
+                <option value="likes-desc">Most likes</option>
+              </NativeSelect>
+            </label>
 
-        <label style={{ display: "grid", gap: 4 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>Sort</span>
-          <select value={sortOrder} onChange={(event) => onSortOrderChange(event.target.value as BookmarkSortOrder)}>
-            <option value="saved-desc">Newest saved</option>
-            <option value="saved-asc">Oldest saved</option>
-            <option value="created-desc">Newest on X</option>
-            <option value="likes-desc">Most likes</option>
-          </select>
-        </label>
+            <label style={{ ...fieldLabelStyle, minWidth: 148 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Saved time</span>
+              <NativeSelect value={timeRange} onChange={(event) => onTimeRangeChange(event.currentTarget.value as SavedTimeRange)}>
+                <option value="all">All time</option>
+                <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days</option>
+                <option value="90d">Last 90 days</option>
+              </NativeSelect>
+            </label>
 
-        <label style={{ display: "grid", gap: 4 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>Saved time</span>
-          <select value={timeRange} onChange={(event) => onTimeRangeChange(event.target.value as SavedTimeRange)}>
-            <option value="all">All time</option>
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="90d">Last 90 days</option>
-          </select>
-        </label>
+            <Button type="button" variant="light" onClick={onToggleAdvancedFilters}>
+              {showAdvancedFilters ? "Hide filters" : `More filters${advancedFilterCount ? ` (${advancedFilterCount})` : ""}`}
+            </Button>
+          </Group>
 
-        <label style={{ display: "flex", gap: 8, alignItems: "center", paddingBottom: 6 }}>
-          <input type="checkbox" checked={onlyWithMedia} onChange={(event) => onOnlyWithMediaChange(event.target.checked)} />
-          <span>Only with media</span>
-        </label>
+          <Group justify="space-between" align="center" gap="sm" wrap="wrap">
+            <Group gap="xs" wrap="wrap">
+              <Badge variant="light" color="ocean">
+                {resultCount} visible
+              </Badge>
+              <Badge variant="light" color="gray">
+                {totalCount} total
+              </Badge>
+              {publishedDateLabel ? (
+                <Badge variant="light" color="ocean">
+                  {publishedDateLabel}
+                </Badge>
+              ) : null}
+            </Group>
 
-        <label style={{ display: "flex", gap: 8, alignItems: "center", paddingBottom: 6 }}>
-          <input type="checkbox" checked={onlyLongform} onChange={(event) => onOnlyLongformChange(event.target.checked)} />
-          <span>Only longform</span>
-        </label>
-      </div>
+            <Group gap="sm" wrap="wrap">
+              <Checkbox checked={onlyWithMedia} label="Only with media" onChange={(event) => onOnlyWithMediaChange(event.currentTarget.checked)} />
+              <Checkbox checked={onlyLongform} label="Only longform" onChange={(event) => onOnlyLongformChange(event.currentTarget.checked)} />
+              <Button type="button" variant="subtle" onClick={onSelectAllVisible} disabled={!resultCount}>
+                Select all visible
+              </Button>
+              <Button type="button" variant="subtle" onClick={onClearFilters} disabled={!hasActiveFilters && !selectedCount}>
+                Clear filters
+              </Button>
+            </Group>
+          </Group>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
-        <button type="button" onClick={onToggleAdvancedFilters}>
-          {showAdvancedFilters ? "Hide filters" : `More filters${advancedFilterCount ? ` (${advancedFilterCount})` : ""}`}
-        </button>
-        <button type="button" onClick={onClearFilters}>
-          Clear filters
-        </button>
-        <button type="button" onClick={onSelectAllVisible} disabled={!resultCount}>
-          Select all visible
-        </button>
-        <button type="button" onClick={onClearSelection} disabled={selectionDisabled}>
-          Clear selection
-        </button>
+          {publishedDateLabel ? (
+            <Group gap="xs" align="center" wrap="wrap">
+              <Text size="sm" c="dimmed">
+                Focused published date: {publishedDateLabel}
+              </Text>
+              <Button type="button" size="xs" variant="subtle" onClick={onClearPublishedDate}>
+                Clear date focus
+              </Button>
+            </Group>
+          ) : null}
 
-        <label style={{ display: "grid", gap: 4 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>Move selected to</span>
-          <select value={bulkFolderId} onChange={(event) => onBulkFolderIdChange(event.target.value)}>
-            {folders.map((folder) => (
-              <option key={folder.id} value={folder.id}>
-                {folder.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="button" onClick={onBulkMove} disabled={selectionDisabled || !bulkFolderId || isSavingFolder}>
-          Move selected
-        </button>
+          {showAdvancedFilters ? (
+            <Paper p="md" radius="lg" withBorder bg="slate.0">
+              <Stack gap="md">
+                <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <Group justify="space-between" align="center">
+                      <Text fw={600}>Author filters</Text>
+                      {renderMatchModeControl({
+                        id: "author-match-mode",
+                        value: authorMatchMode,
+                        onChange: onAuthorMatchModeChange
+                      })}
+                    </Group>
+                    {!authorOptions.length ? <Text c="dimmed">No authors available.</Text> : null}
+                    <Group gap="sm" wrap="wrap">
+                      {authorOptions.map((author) => (
+                        <label key={author.handle} style={chipLabelStyle}>
+                          <Checkbox type="checkbox" checked={selectedAuthorHandles.includes(author.handle)} onChange={() => onToggleAuthor(author.handle)} />
+                          <span>
+                            {author.label} ({author.count})
+                          </span>
+                        </label>
+                      ))}
+                    </Group>
+                  </div>
 
-        <label style={{ display: "grid", gap: 4 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>Tag selected with</span>
-          <select value={bulkTagId} onChange={(event) => onBulkTagIdChange(event.target.value)}>
-            <option value="">Select a tag</option>
-            {tags.map((tag) => (
-              <option key={tag.id} value={tag.id}>
-                {tag.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="button" onClick={onBulkTag} disabled={selectionDisabled || !bulkTagId || isSavingTag}>
-          Apply tag
-        </button>
-      </div>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <Group justify="space-between" align="center">
+                      <Text fw={600}>Tag filters</Text>
+                      {renderMatchModeControl({
+                        id: "tag-match-mode",
+                        value: tagMatchMode,
+                        onChange: onTagMatchModeChange
+                      })}
+                    </Group>
+                    {!tags.length ? <Text c="dimmed">No tags available.</Text> : null}
+                    <Group gap="sm" wrap="wrap">
+                      {tags.map((tag) => (
+                        <label key={tag.id} style={chipLabelStyle}>
+                          <Checkbox type="checkbox" checked={selectedTagIds.includes(tag.id)} onChange={() => onToggleTag(tag.id)} />
+                          <span>{tag.name}</span>
+                        </label>
+                      ))}
+                    </Group>
+                  </div>
+                </SimpleGrid>
+              </Stack>
+            </Paper>
+          ) : null}
+        </Stack>
+      </Card>
 
-      {showAdvancedFilters ? (
-        <section
-          style={{
-            display: "grid",
-            gap: 16,
-            padding: 16,
-            border: "1px solid #e6edf5",
-            borderRadius: 12,
-            background: "#f8fbfd"
-          }}>
-          <div style={{ display: "grid", gap: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-              <h4 style={{ margin: 0 }}>Author filters</h4>
-              {renderMatchModeControl({
-                id: "author-match-mode",
-                value: authorMatchMode,
-                onChange: onAuthorMatchModeChange
-              })}
-            </div>
-            {!authorOptions.length ? <p style={{ margin: 0, color: "#52606d" }}>No authors available.</p> : null}
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {authorOptions.map((author) => (
-                <label
-                  key={author.handle}
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    alignItems: "center",
-                    padding: "6px 10px",
-                    border: "1px solid #d9e2ec",
-                    borderRadius: 999
-                  }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedAuthorHandles.includes(author.handle)}
-                    onChange={() => onToggleAuthor(author.handle)}
-                  />
-                  <span>
-                    {author.label} ({author.count})
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
+      {selectedCount ? (
+        <Paper
+          p="md"
+          radius="xl"
+          withBorder
+          style={{ background: "#ffffff" }}>
+          <Stack gap="sm">
+            <Group justify="space-between" align="center" wrap="wrap">
+              <Group gap="xs" wrap="wrap">
+                <Badge variant="filled" color="dark">
+                  {selectedCount} selected
+                </Badge>
+                <Text size="sm" c="dimmed">
+                  Batch actions stay scoped to the current table view.
+                </Text>
+              </Group>
+              <Button type="button" variant="subtle" onClick={onClearSelection} disabled={selectionDisabled}>
+                Clear selection
+              </Button>
+            </Group>
 
-          <div style={{ display: "grid", gap: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-              <h4 style={{ margin: 0 }}>Tag filters</h4>
-              {renderMatchModeControl({
-                id: "tag-match-mode",
-                value: tagMatchMode,
-                onChange: onTagMatchModeChange
-              })}
-            </div>
-            {!tags.length ? <p style={{ margin: 0, color: "#52606d" }}>No tags available.</p> : null}
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {tags.map((tag) => (
-                <label
-                  key={tag.id}
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    alignItems: "center",
-                    padding: "6px 10px",
-                    border: "1px solid #d9e2ec",
-                    borderRadius: 999
-                  }}>
-                  <input type="checkbox" checked={selectedTagIds.includes(tag.id)} onChange={() => onToggleTag(tag.id)} />
-                  <span>{tag.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        </section>
+            <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
+              <label style={fieldLabelStyle}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Move selected to</span>
+                <NativeSelect value={bulkFolderId} onChange={(event) => onBulkFolderIdChange(event.currentTarget.value)}>
+                  {folders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {folder.name}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </label>
+              <Button type="button" onClick={onBulkMove} disabled={!bulkFolderId || isSavingFolder} style={{ alignSelf: "end" }}>
+                Move selected
+              </Button>
+
+              <label style={fieldLabelStyle}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Tag selected with</span>
+                <NativeSelect value={bulkTagId} onChange={(event) => onBulkTagIdChange(event.currentTarget.value)}>
+                  <option value="">Select a tag</option>
+                  {tags.map((tag) => (
+                    <option key={tag.id} value={tag.id}>
+                      {tag.name}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </label>
+              <Button type="button" onClick={onBulkTag} disabled={!bulkTagId || isSavingTag} style={{ alignSelf: "end" }}>
+                Apply tag
+              </Button>
+            </SimpleGrid>
+          </Stack>
+        </Paper>
       ) : null}
-    </section>
+    </Stack>
   )
 }

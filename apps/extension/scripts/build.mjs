@@ -55,10 +55,29 @@ async function writeStaticFiles() {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${name} Workspace</title>
+    <link rel="stylesheet" href="./options.css" />
   </head>
   <body>
     <div id="root"></div>
     <script src="./options.js"></script>
+  </body>
+</html>
+`
+  )
+
+  await writeFile(
+    path.join(outDir, "popup.html"),
+    `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${name}</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="./popup.js"></script>
   </body>
 </html>
 `
@@ -96,9 +115,14 @@ async function buildExtension() {
     path.join(outDir, "background.js"),
     "esm"
   )
+  const popupOptions = createBuildOptions(
+    path.join(appDir, "src", "popup", "index.tsx"),
+    path.join(outDir, "popup.js"),
+    "iife"
+  )
 
   if (watchMode) {
-    const contexts = await Promise.all([context(optionsPageOptions), context(backgroundOptions)])
+    const contexts = await Promise.all([context(optionsPageOptions), context(backgroundOptions), context(popupOptions)])
     await Promise.all(contexts.map((buildContext) => buildContext.watch()))
     await writeStaticFiles()
     console.log(`Watching extension sources and writing output to ${outDir}`)
@@ -106,7 +130,7 @@ async function buildExtension() {
     return
   }
 
-  await Promise.all([build(optionsPageOptions), build(backgroundOptions)])
+  await Promise.all([build(optionsPageOptions), build(backgroundOptions), build(popupOptions)])
   await writeStaticFiles()
   console.log(`Built extension to ${outDir}`)
 }

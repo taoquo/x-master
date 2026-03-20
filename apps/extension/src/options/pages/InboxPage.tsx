@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react"
+import { Stack } from "@mantine/core"
 import {
   applyBookmarkFilters,
   type BookmarkSortOrder,
@@ -7,21 +8,23 @@ import {
 } from "../../lib/search/searchBookmarks.ts"
 import { INBOX_FOLDER_ID } from "../../lib/storage/foldersStore.ts"
 import { InboxBookmarkDetailDrawer } from "../components/InboxBookmarkDetailDrawer.tsx"
-import { InboxFolderNavigation } from "../components/InboxFolderNavigation.tsx"
 import { InboxTable } from "../components/InboxTable.tsx"
 import { InboxWorkbenchToolbar } from "../components/InboxWorkbenchToolbar.tsx"
 import { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
-import { getAuthorOptions, getBookmarkTagsForBookmark, getCurrentFolderForBookmark } from "../lib/pageHelpers.ts"
+import { getAuthorOptions, getBookmarkTagsForBookmark } from "../lib/pageHelpers.ts"
+import { SectionHeader } from "../../ui/components.tsx"
+import { ExtensionUiProvider } from "../../ui/provider.tsx"
+import type { InboxRouteState } from "../lib/navigation.ts"
 
-export function InboxPage() {
+export function InboxPage({ initialRouteState }: { initialRouteState?: InboxRouteState }) {
   const workspace = useWorkspaceData()
   const [query, setQuery] = useState("")
-  const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(INBOX_FOLDER_ID)
   const [selectedAuthorHandles, setSelectedAuthorHandles] = useState<string[]>([])
   const [authorMatchMode, setAuthorMatchMode] = useState<MultiValueMatchMode>("any")
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
   const [tagMatchMode, setTagMatchMode] = useState<MultiValueMatchMode>("all")
   const [timeRange, setTimeRange] = useState<SavedTimeRange>("all")
+  const [selectedPublishedDate, setSelectedPublishedDate] = useState<string | undefined>(initialRouteState?.publishedDate)
   const [sortOrder, setSortOrder] = useState<BookmarkSortOrder>("saved-desc")
   const [onlyWithMedia, setOnlyWithMedia] = useState(false)
   const [onlyLongform, setOnlyLongform] = useState(false)
@@ -33,12 +36,12 @@ export function InboxPage() {
 
   function handleClearFilters() {
     setQuery("")
-    setSelectedFolderId(INBOX_FOLDER_ID)
     setSelectedAuthorHandles([])
     setAuthorMatchMode("any")
     setSelectedTagIds([])
     setTagMatchMode("all")
     setTimeRange("all")
+    setSelectedPublishedDate(undefined)
     setSortOrder("saved-desc")
     setOnlyWithMedia(false)
     setOnlyLongform(false)
@@ -78,7 +81,7 @@ export function InboxPage() {
         query,
         folders: workspace.folders,
         bookmarkFolders: workspace.bookmarkFolders,
-        selectedFolderId,
+        selectedPublishedDate,
         bookmarkTags: workspace.bookmarkTags,
         selectedAuthorHandles,
         authorMatchMode,
@@ -95,7 +98,7 @@ export function InboxPage() {
       onlyWithMedia,
       query,
       selectedAuthorHandles,
-      selectedFolderId,
+      selectedPublishedDate,
       selectedTagIds,
       sortOrder,
       tagMatchMode,
@@ -108,7 +111,7 @@ export function InboxPage() {
   )
 
   const selectedBookmark = useMemo(
-    () => visibleBookmarks.find((bookmark) => bookmark.tweetId === selectedBookmarkId) ?? visibleBookmarks[0] ?? null,
+    () => visibleBookmarks.find((bookmark) => bookmark.tweetId === selectedBookmarkId) ?? null,
     [selectedBookmarkId, visibleBookmarks]
   )
   const visibleBookmarkIds = useMemo(() => new Set(visibleBookmarks.map((bookmark) => bookmark.tweetId)), [visibleBookmarks])
@@ -118,25 +121,15 @@ export function InboxPage() {
   }, [visibleBookmarkIds])
 
   useEffect(() => {
-    if (!selectedBookmark && visibleBookmarks[0]) {
-      setSelectedBookmarkId(visibleBookmarks[0].tweetId)
-      return
+    if (selectedBookmarkId && !visibleBookmarkIds.has(selectedBookmarkId)) {
+      setSelectedBookmarkId(undefined)
     }
-
-    if (selectedBookmark && selectedBookmark.tweetId !== selectedBookmarkId) {
-      setSelectedBookmarkId(selectedBookmark.tweetId)
-    }
-  }, [selectedBookmark, selectedBookmarkId, visibleBookmarks])
+  }, [selectedBookmarkId, visibleBookmarkIds])
 
   const selectedBookmarkTags = useMemo(
     () => getBookmarkTagsForBookmark(selectedBookmark?.tweetId, workspace.bookmarkTags, new Map(workspace.tags.map((tag) => [tag.id, tag]))),
     [selectedBookmark?.tweetId, workspace.bookmarkTags, workspace.tags]
   )
-  const currentFolder = useMemo(
-    () => getCurrentFolderForBookmark(selectedBookmark?.tweetId, workspace.bookmarkFolders, workspace.foldersById),
-    [selectedBookmark?.tweetId, workspace.bookmarkFolders, workspace.foldersById]
-  )
-  const selectedFolderLabel = selectedFolderId ? workspace.foldersById.get(selectedFolderId)?.name ?? "Inbox" : "All folders"
   const folderNameByBookmarkId = useMemo(() => {
     const names = new Map<string, string>()
 
@@ -166,34 +159,14 @@ export function InboxPage() {
   }
 
   return (
-    <div style={{ display: "grid", gap: 20 }}>
-      <header style={{ display: "grid", gap: 6 }}>
-        <h2 style={{ margin: 0, fontSize: 28 }}>Inbox</h2>
-        <p style={{ margin: 0, color: "#52606d" }}>Organize new bookmarks in a dense table, then use the drawer for item-level filing and tagging.</p>
-      </header>
-
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "280px minmax(0, 1fr) 400px",
-          gap: 16,
-          minHeight: 0
-        }}>
-        <InboxFolderNavigation
-          folderTree={workspace.folderTree}
-          selectedFolderId={selectedFolderId}
-          selectedFolderLabel={selectedFolderLabel}
-          visibleCount={visibleBookmarks.length}
-          totalCount={workspace.bookmarks.length}
-          onSelectFolder={setSelectedFolderId}
+    <ExtensionUiProvider>
+      <Stack gap="xl">
+        <SectionHeader
+          title="Inbox"
+          description="Organize new bookmarks in a dense table, then use the drawer for item-level filing and tagging."
         />
 
-        <section
-          style={{
-            minHeight: 0,
-            display: "grid",
-            gap: 16
-          }}>
+        <Stack gap="md" style={{ minHeight: 0 }}>
           <InboxWorkbenchToolbar
             query={query}
             onQueryChange={setQuery}
@@ -201,6 +174,8 @@ export function InboxPage() {
             onSortOrderChange={setSortOrder}
             timeRange={timeRange}
             onTimeRangeChange={setTimeRange}
+            selectedPublishedDate={selectedPublishedDate}
+            onClearPublishedDate={() => setSelectedPublishedDate(undefined)}
             onlyWithMedia={onlyWithMedia}
             onOnlyWithMediaChange={setOnlyWithMedia}
             onlyLongform={onlyLongform}
@@ -241,22 +216,20 @@ export function InboxPage() {
             onSelectBookmark={setSelectedBookmarkId}
             onToggleBookmarkSelection={handleToggleBookmarkSelection}
           />
-        </section>
+        </Stack>
 
         <InboxBookmarkDetailDrawer
+          opened={Boolean(selectedBookmark)}
+          onClose={() => setSelectedBookmarkId(undefined)}
           bookmark={selectedBookmark}
-          currentFolder={currentFolder}
-          availableFolders={workspace.folders}
           tags={selectedBookmarkTags}
           availableTags={workspace.tags}
-          onCreateFolder={workspace.handleCreateFolder}
-          onMoveToFolder={(folderId) => workspace.handleMoveToFolder(selectedBookmark?.tweetId ?? "", folderId)}
           onCreateTag={workspace.handleCreateTag}
           onAttachTag={(tagId) => workspace.handleAttachTag(selectedBookmark?.tweetId ?? "", tagId)}
           onDetachTag={(tagId) => workspace.handleDetachTag(selectedBookmark?.tweetId ?? "", tagId)}
           isSaving={workspace.isSavingTag || workspace.isSavingFolder}
         />
-      </section>
-    </div>
+      </Stack>
+    </ExtensionUiProvider>
   )
 }

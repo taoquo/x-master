@@ -7,6 +7,7 @@ import {
   bookmarkIsLongform,
   filterBookmarks,
   filterBookmarksByAuthors,
+  filterBookmarksByPublishedDate,
   filterBookmarksByFolder,
   filterBookmarksByFlags,
   filterBookmarksBySavedTime,
@@ -184,6 +185,36 @@ test("filterBookmarksBySavedTime filters by savedAt ranges", () => {
 
   assert.equal(results.length, 1)
   assert.equal(results[0].tweetId, "1")
+})
+
+test("filterBookmarksByPublishedDate filters bookmarks to one exact publish day", () => {
+  const bookmarks = [
+    {
+      tweetId: "1",
+      tweetUrl: "https://x.com/alice/status/1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "hello",
+      createdAtOnX: "2026-03-17T00:00:00.000Z",
+      savedAt: "2026-03-17T03:00:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "2",
+      tweetUrl: "https://x.com/bob/status/2",
+      authorName: "Bob",
+      authorHandle: "bob",
+      text: "world",
+      createdAtOnX: "2026-03-18T00:00:00.000Z",
+      savedAt: "2026-03-18T04:00:00.000Z",
+      rawPayload: {}
+    }
+  ]
+
+  const results = filterBookmarksByPublishedDate(bookmarks, "2026-03-18")
+
+  assert.equal(results.length, 1)
+  assert.equal(results[0].tweetId, "2")
 })
 
 test("filterBookmarksByFolder includes bookmarks from the selected folder and its children", () => {
