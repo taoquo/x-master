@@ -33,21 +33,34 @@ export function SectionHeader({
 export function SurfaceCard({
   title,
   description,
-  children
+  children,
+  style,
+  bodyStyle
 }: {
   title?: string
   description?: string
   children: React.ReactNode
+  style?: React.CSSProperties
+  bodyStyle?: React.CSSProperties
 }) {
   return (
-    <Card padding="lg" style={{ background: "#ffffff" }}>
+    <Card
+      padding="lg"
+      style={{
+        background: "#ffffff",
+        ...style
+      }}>
       {title ? (
         <Stack gap={4} mb="md">
           <Title order={3}>{title}</Title>
           {description ? <Text c="dimmed">{description}</Text> : null}
         </Stack>
       ) : null}
-      <Stack gap="sm">{children}</Stack>
+      <Stack
+        gap="sm"
+        style={bodyStyle}>
+        {children}
+      </Stack>
     </Card>
   )
 }
@@ -131,6 +144,7 @@ export function WorkspaceShell({ section, navItems, onSelectSection, children }:
             type="button"
             onClick={() => onSelectSection(item.id)}
             aria-label={item.label}
+            title={collapsed ? item.label : undefined}
             style={{
               display: "flex",
               alignItems: "center",
@@ -213,10 +227,10 @@ export function WorkspaceShell({ section, navItems, onSelectSection, children }:
             {!collapsed ? (
               <div style={{ minWidth: 0 }}>
                 <Text fw={600} size="sm" c="#18181b">
-                  X Bookmark Manager
+                  X Knowledge Cards
                 </Text>
                 <Text size="xs" c="#71717a">
-                  Workspace
+                  Source {"->"} Card {"->"} Vault
                 </Text>
               </div>
             ) : null}

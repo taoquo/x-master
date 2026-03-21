@@ -350,6 +350,13 @@ test("saveSettings persists settings and getSettings returns them", async () => 
   const settings = {
     schemaVersion: 1,
     hasCompletedOnboarding: true,
+    aiGeneration: {
+      enabled: false,
+      provider: "openai" as const,
+      apiKey: "",
+      model: "gpt-5-mini"
+    },
+    exportScope: "all" as const,
     lastSyncSummary: {
       status: "success" as const,
       fetchedCount: 5,

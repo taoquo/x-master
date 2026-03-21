@@ -144,12 +144,35 @@ export function InboxWorkbenchToolbar({
     <Stack gap="sm">
       <Paper p="md" radius="md" withBorder style={{ background: "#ffffff" }}>
         <Stack gap="md">
+          <Group justify="space-between" align="start" gap="sm" wrap="wrap">
+            <Stack gap={4}>
+              <Text fw={600}>Source queue</Text>
+              <Text size="sm" c="dimmed">
+                Filter raw source material, then attach tags so the downstream card workflow stays organized.
+              </Text>
+            </Stack>
+
+            <Group gap="xs" wrap="wrap">
+              <Badge variant="light" color="dark">
+                {resultCount} visible
+              </Badge>
+              <Badge variant="light" color="gray">
+                {totalCount} in queue
+              </Badge>
+              {selectedCount ? (
+                <Badge variant="light" color="blue">
+                  {selectedCount} selected
+                </Badge>
+              ) : null}
+            </Group>
+          </Group>
+
           <Group align="end" gap="sm" wrap="wrap">
             <TextInput
               label="Search"
               type="search"
               value={query}
-              placeholder="Search bookmarks"
+              placeholder="Search source material"
               onChange={(event) => onQueryChange(event.currentTarget.value)}
               style={{ flex: "1 1 260px", minWidth: 220 }}
               leftSection={<AppIcon name="search" size={16} />}
@@ -176,12 +199,6 @@ export function InboxWorkbenchToolbar({
 
           <Group justify="space-between" align="center" gap="sm" wrap="wrap">
             <Group gap="xs" wrap="wrap">
-              <Badge variant="light" color="dark">
-                {resultCount} visible
-              </Badge>
-              <Badge variant="light" color="gray">
-                {totalCount} total
-              </Badge>
               {publishedDateLabel ? (
                 <Badge variant="light" color="blue">
                   {publishedDateLabel}
@@ -286,7 +303,7 @@ export function InboxWorkbenchToolbar({
             </Group>
 
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-              <NativeSelect label="Tag selected with" value={bulkTagId} onChange={(event) => onBulkTagIdChange(event.currentTarget.value)}>
+              <NativeSelect label="Tag selected sources with" value={bulkTagId} onChange={(event) => onBulkTagIdChange(event.currentTarget.value)}>
                 <option value="">Select a tag</option>
                 {tags.map((tag) => (
                   <option key={tag.id} value={tag.id}>
@@ -295,7 +312,7 @@ export function InboxWorkbenchToolbar({
                 ))}
               </NativeSelect>
               <Button type="button" color="dark" onClick={onBulkTag} disabled={!bulkTagId || isSavingTag} style={{ alignSelf: "end" }}>
-                Apply tag
+                Tag sources
               </Button>
             </SimpleGrid>
           </Stack>

@@ -4,9 +4,16 @@ const SETTINGS_STORAGE_KEY = "settings"
 
 export function createDefaultSettings(): ExtensionSettings {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     hasCompletedOnboarding: false,
-    lastSyncSummary: createEmptySyncSummary()
+    lastSyncSummary: createEmptySyncSummary(),
+    aiGeneration: {
+      enabled: false,
+      provider: "openai",
+      apiKey: "",
+      model: "gpt-5-mini"
+    },
+    exportScope: "all"
   }
 }
 
@@ -25,6 +32,10 @@ export async function getSettings(): Promise<ExtensionSettings> {
     ? {
         ...defaults,
         ...stored,
+        aiGeneration: {
+          ...defaults.aiGeneration,
+          ...stored.aiGeneration
+        },
         lastSyncSummary: {
           ...defaults.lastSyncSummary,
           ...stored.lastSyncSummary
@@ -46,6 +57,33 @@ export async function saveLastSyncSummary(summary: SyncSummary) {
   await saveSettings({
     ...settings,
     lastSyncSummary: summary
+  })
+}
+
+export async function saveAiGenerationSettings(settings: ExtensionSettings["aiGeneration"]) {
+  const currentSettings = await getSettings()
+  await saveSettings({
+    ...currentSettings,
+    aiGeneration: {
+      ...currentSettings.aiGeneration,
+      ...settings
+    }
+  })
+}
+
+export async function saveExportScope(exportScope: ExtensionSettings["exportScope"]) {
+  const currentSettings = await getSettings()
+  await saveSettings({
+    ...currentSettings,
+    exportScope
+  })
+}
+
+export async function setHasCompletedOnboarding(hasCompletedOnboarding: boolean) {
+  const currentSettings = await getSettings()
+  await saveSettings({
+    ...currentSettings,
+    hasCompletedOnboarding
   })
 }
 

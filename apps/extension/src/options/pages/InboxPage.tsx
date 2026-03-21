@@ -16,7 +16,7 @@ import { getAuthorOptions, getBookmarkTagsForBookmark } from "../lib/pageHelpers
 import { ExtensionUiProvider } from "../../ui/provider.tsx"
 import type { InboxRouteState } from "../lib/navigation.ts"
 import { isUiTestEnv } from "../../ui/testEnv.ts"
-import { SectionHeader } from "../../ui/components.tsx"
+import { EmptyState, SectionHeader, SurfaceCard } from "../../ui/components.tsx"
 
 type InboxViewMode = "all" | "longform"
 
@@ -186,7 +186,7 @@ export function InboxPage({ initialRouteState }: { initialRouteState?: InboxRout
       <Stack gap="md" style={{ minHeight: 0, height: testEnv ? "auto" : "calc(100vh - 32px)" }}>
         <SectionHeader
           title="Inbox"
-          description="Process untagged bookmarks in a focused triage layout and keep the selected item visible while filing."
+          description="Process raw source material in a focused triage layout before it becomes a durable knowledge card."
           actions={
             <Paper
               p={4}
@@ -198,14 +198,38 @@ export function InboxPage({ initialRouteState }: { initialRouteState?: InboxRout
                 background: "#f3f3f4"
               }}>
               <Button type="button" variant={viewMode === "all" ? "white" : "subtle"} color={viewMode === "all" ? "dark" : "gray"} onClick={() => setViewMode("all")}>
-                All inbox
+                All sources
               </Button>
               <Button type="button" variant={viewMode === "longform" ? "white" : "subtle"} color={viewMode === "longform" ? "dark" : "gray"} onClick={() => setViewMode("longform")}>
-                Longform
+                Long threads
               </Button>
             </Paper>
           }
         />
+
+        {!workspace.bookmarks.length ? (
+          <EmptyState
+            title="No source material yet."
+            description="Run your first sync to pull saved X threads into the source queue. Once source material exists, you can tag it here and review generated cards in Library."
+          />
+        ) : null}
+
+        {workspace.bookmarks.length > 0 && !workspace.knowledgeCards.length ? (
+          <SurfaceCard title="First run" description="You already have source material. The next sync will generate your first knowledge card drafts.">
+            <Text c="dimmed">The intended path is: sync source material, triage it here if needed, review generated cards in Library, then export the reviewed cards into your vault.</Text>
+          </SurfaceCard>
+        ) : null}
+
+        {workspace.bookmarks.length > 0 ? (
+          <SurfaceCard
+            title="Source triage desk"
+            description="Everything in Inbox is still raw source material. Organize it here, then trust and refine the generated cards in Library.">
+            <Group gap="xs" wrap="wrap">
+              <Text c="dimmed">{inboxBookmarks.length} untagged source items are waiting for their first pass.</Text>
+              <Text c="dimmed">This page is for triage and tagging, not final card editing.</Text>
+            </Group>
+          </SurfaceCard>
+        ) : null}
 
         <div
           style={{

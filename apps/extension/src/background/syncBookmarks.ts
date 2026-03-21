@@ -1,6 +1,8 @@
+import { generateKnowledgeCardDraftWithAi } from "../lib/cards/generateKnowledgeCardDraftWithAi.ts"
 import { upsertBookmarks } from "../lib/storage/bookmarksStore.ts"
+import { upsertKnowledgeCardDraftsForSourceMaterials } from "../lib/storage/knowledgeCardsStore.ts"
 import { createSyncRun } from "../lib/storage/syncRunsStore.ts"
-import { createEmptySyncSummary, type BookmarkRecord, type SyncSummary, type SyncRunRecord } from "../lib/types.ts"
+import { createEmptySyncSummary, type BookmarkRecord, type SourceMaterialRecord, type SyncSummary, type SyncRunRecord } from "../lib/types.ts"
 import { getSettings, saveSettings } from "../lib/storage/settings.ts"
 import { extractCsrfToken, getXCookieHeader } from "../lib/x/auth.ts"
 import { fetchBookmarksPage } from "../lib/x/client.ts"
@@ -21,6 +23,13 @@ interface RunBookmarkSyncOptions {
   fetchBookmarksPage?: typeof fetchBookmarksPage
   syncLimit?: number
   upsertBookmarks?: (bookmarks: BookmarkRecord[]) => Promise<{ insertedCount: number; updatedCount: number }>
+  syncKnowledgeCards?: (
+    sourceMaterials: SourceMaterialRecord[],
+    options?: {
+      generateDraft?: (sourceMaterial: SourceMaterialRecord) => Promise<import("../lib/types.ts").KnowledgeCardDraftRecord>
+    }
+  ) => Promise<{ createdCount: number; updatedCount: number; skippedCount?: number }>
+  generateKnowledgeCardDraft?: typeof generateKnowledgeCardDraftWithAi
   createSyncRun?: (syncRun: SyncRunRecord) => Promise<void>
   updateSyncSummary?: (summary: SyncSummary) => Promise<void>
   getSettings?: typeof getSettings
@@ -73,6 +82,8 @@ export async function runBookmarkSync({
   fetchBookmarksPage: loadBookmarksPage = fetchBookmarksPage,
   syncLimit = DEFAULT_SYNC_LIMIT,
   upsertBookmarks: saveBookmarks = upsertBookmarks,
+  syncKnowledgeCards = upsertKnowledgeCardDraftsForSourceMaterials,
+  generateKnowledgeCardDraft = generateKnowledgeCardDraftWithAi,
   createSyncRun: persistSyncRun = createSyncRun,
   updateSyncSummary,
   getSettings: readSettings = getSettings,
@@ -102,6 +113,7 @@ export async function runBookmarkSync({
   })
 
   try {
+    const settings = await readSettings()
     const cookieHeader = await getCookieHeader()
     const csrfToken = extractCsrfToken(cookieHeader)
     const { bookmarks, failedCount } = await paginateBookmarks({
@@ -117,6 +129,19 @@ export async function runBookmarkSync({
     })
 
     const { insertedCount, updatedCount } = await saveBookmarks(bookmarks as BookmarkRecord[])
+    await syncKnowledgeCards(
+      (bookmarks as BookmarkRecord[]).map((bookmark) => ({
+        ...bookmark,
+        sourceKind: "x-bookmark"
+      })),
+      {
+        generateDraft: (sourceMaterial) =>
+          generateKnowledgeCardDraft({
+            sourceMaterial,
+            settings: settings.aiGeneration
+          })
+      }
+    )
     const finishedAt = new Date().toISOString()
     const status = failedCount > 0 ? "partial_success" : "success"
     const summary = createSummary({

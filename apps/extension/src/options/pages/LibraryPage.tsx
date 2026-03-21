@@ -1,214 +1,265 @@
 import React, { useEffect, useMemo, useState } from "react"
-import { Badge, Button, Group, Paper, Stack, Text } from "@mantine/core"
-import { useMediaQuery } from "@mantine/hooks"
-import {
-  applyBookmarkFilters,
-  type BookmarkSortOrder,
-  type MultiValueMatchMode,
-  type SavedTimeRange
-} from "../../lib/search/searchBookmarks.ts"
-import { InboxBookmarkDetailDrawer } from "../components/InboxBookmarkDetailDrawer.tsx"
-import { InboxDetailPanel } from "../components/InboxDetailPanel.tsx"
-import { InboxTable } from "../components/InboxTable.tsx"
-import { InboxWorkbenchToolbar } from "../components/InboxWorkbenchToolbar.tsx"
+import { Badge, Button, Card, Divider, Group, Paper, Stack, Text, TextInput, Textarea, Title } from "@mantine/core"
 import { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
-import { getAuthorOptions, getBookmarkTagsForBookmark } from "../lib/pageHelpers.ts"
-import type { LibraryView } from "../lib/navigation.ts"
-import { SectionHeader, SurfaceCard } from "../../ui/components.tsx"
+import type { LibraryLifecycleFilter, LibraryRouteState, LibraryView } from "../lib/navigation.ts"
+import { EmptyState, SectionHeader, StatusBadge, SurfaceCard } from "../../ui/components.tsx"
 import { ExtensionUiProvider } from "../../ui/provider.tsx"
 import { isUiTestEnv } from "../../ui/testEnv.ts"
 
-function countBookmarksByTag(tagId: string, bookmarkTags: Array<{ tagId: string }>) {
-  return bookmarkTags.filter((bookmarkTag) => bookmarkTag.tagId === tagId).length
+function cardMatchesQuery(card: {
+  title: string
+  theme: string
+  summary: string
+  keyExcerpt: string
+  applicability: string
+  sourceText: string
+  authorName: string
+  authorHandle: string
+}, query: string) {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) {
+    return true
+  }
+
+  return [
+    card.title,
+    card.theme,
+    card.summary,
+    card.keyExcerpt,
+    card.applicability,
+    card.sourceText,
+    card.authorName,
+    card.authorHandle
+  ]
+    .join(" ")
+    .toLowerCase()
+    .includes(normalizedQuery)
+}
+
+function getCardLifecycleStatus(card: {
+  status: "draft" | "reviewed"
+  quality: { needsReview: boolean }
+}) {
+  if (card.status === "reviewed" && card.quality.needsReview) {
+    return "stale"
+  }
+
+  return card.status
 }
 
 interface LibraryPageProps {
   view: LibraryView
   onViewChange: (view: LibraryView) => void
+  initialRouteState?: LibraryRouteState
 }
 
-export function LibraryPage({ view, onViewChange }: LibraryPageProps) {
+export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPageProps) {
   const workspace = useWorkspaceData()
   const testEnv = isUiTestEnv()
-  const showDetailPane = !testEnv && (useMediaQuery("(min-width: 1120px)", false, { getInitialValueInEffect: false }) ?? false)
   const [selectedTagId, setSelectedTagId] = useState<string | undefined>(undefined)
-  const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | undefined>(undefined)
-  const [selectedBookmarkIds, setSelectedBookmarkIds] = useState<string[]>([])
+  const [selectedLifecycle, setSelectedLifecycle] = useState<LibraryLifecycleFilter>(initialRouteState?.lifecycle ?? "all")
   const [query, setQuery] = useState("")
-  const [selectedAuthorHandles, setSelectedAuthorHandles] = useState<string[]>([])
-  const [authorMatchMode, setAuthorMatchMode] = useState<MultiValueMatchMode>("any")
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
-  const [tagMatchMode, setTagMatchMode] = useState<MultiValueMatchMode>("all")
-  const [timeRange, setTimeRange] = useState<SavedTimeRange>("all")
-  const [sortOrder, setSortOrder] = useState<BookmarkSortOrder>("saved-desc")
-  const [onlyWithMedia, setOnlyWithMedia] = useState(false)
-  const [onlyLongform, setOnlyLongform] = useState(false)
-  const [bulkTagId, setBulkTagId] = useState("")
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+  const [selectedCardId, setSelectedCardId] = useState<string | undefined>(undefined)
+  const [draftFields, setDraftFields] = useState({
+    title: "",
+    theme: "",
+    summary: "",
+    keyExcerpt: "",
+    applicability: ""
+  })
+  const [reviewFeedback, setReviewFeedback] = useState<{
+    cardId: string
+    message: string
+    nextCardId?: string
+  } | null>(null)
+
+  const sourceById = useMemo(() => new Map(workspace.sourceMaterials.map((sourceMaterial) => [sourceMaterial.tweetId, sourceMaterial])), [workspace.sourceMaterials])
+  const tagById = useMemo(() => new Map(workspace.tags.map((tag) => [tag.id, tag])), [workspace.tags])
+  const tagIdsBySourceMaterialId = useMemo(() => {
+    const map = new Map<string, string[]>()
+
+    for (const bookmarkTag of workspace.bookmarkTags) {
+      const current = map.get(bookmarkTag.bookmarkId) ?? []
+      current.push(bookmarkTag.tagId)
+      map.set(bookmarkTag.bookmarkId, current)
+    }
+
+    return map
+  }, [workspace.bookmarkTags])
 
   useEffect(() => {
     if (view === "tags") {
       setSelectedTagId((current) => current ?? workspace.tags[0]?.id)
     }
-  }, [workspace.tags, view])
+  }, [view, workspace.tags])
 
-  const scopedBookmarks = useMemo(() => {
-    switch (view) {
-      case "tags": {
-        if (!selectedTagId) {
-          return []
+  useEffect(() => {
+    if (initialRouteState?.lifecycle) {
+      setSelectedLifecycle(initialRouteState.lifecycle)
+    }
+  }, [initialRouteState?.lifecycle])
+
+  const cardsInScope = useMemo(() => {
+    return workspace.knowledgeCards
+      .map((card) => {
+        const sourceMaterial = sourceById.get(card.sourceMaterialId)
+        if (!sourceMaterial) {
+          return null
         }
 
-        const bookmarkIds = new Set(
-          workspace.bookmarkTags.filter((bookmarkTag) => bookmarkTag.tagId === selectedTagId).map((bookmarkTag) => bookmarkTag.bookmarkId)
-        )
+        return {
+          ...card,
+          sourceText: sourceMaterial.text,
+          sourceUrl: sourceMaterial.tweetUrl,
+          sourceSavedAt: sourceMaterial.savedAt,
+          authorName: sourceMaterial.authorName,
+          authorHandle: sourceMaterial.authorHandle,
+          tagIds: tagIdsBySourceMaterialId.get(card.sourceMaterialId) ?? []
+        }
+      })
+      .filter(Boolean)
+      .filter((card) => {
+        if (view !== "tags" || !selectedTagId) {
+          return true
+        }
 
-        return workspace.bookmarks.filter((bookmark) => bookmarkIds.has(bookmark.tweetId))
-      }
-      case "all":
-      default:
-        return workspace.bookmarks
-      }
-  }, [selectedTagId, view, workspace.bookmarkTags, workspace.bookmarks])
+        return card!.tagIds.includes(selectedTagId)
+      })
+      .filter((card) => {
+        if (selectedLifecycle === "all") {
+          return true
+        }
 
-  function handleClearFilters() {
-    setQuery("")
-    setSelectedAuthorHandles([])
-    setAuthorMatchMode("any")
-    setSelectedTagIds([])
-    setTagMatchMode("all")
-    setTimeRange("all")
-    setSortOrder("saved-desc")
-    setOnlyWithMedia(false)
-    setOnlyLongform(false)
-    setSelectedBookmarkIds([])
-    setBulkTagId("")
-  }
+        return getCardLifecycleStatus(card!) === selectedLifecycle
+      })
+      .filter((card) => cardMatchesQuery(card!, query)) as Array<{
+      id: string
+      sourceMaterialId: string
+      status: "draft" | "reviewed"
+      title: string
+      theme: string
+      summary: string
+      keyExcerpt: string
+      applicability: string
+      provenance: Array<{ field: string; excerpt: string }>
+      quality: { score: number; needsReview: boolean; warnings: string[]; generatorVersion: string }
+      sourceText: string
+      sourceUrl: string
+      sourceSavedAt: string
+      authorName: string
+      authorHandle: string
+      tagIds: string[]
+    }>
+  }, [query, selectedLifecycle, selectedTagId, sourceById, tagIdsBySourceMaterialId, view, workspace.knowledgeCards])
 
-  function handleToggleAuthor(authorHandle: string) {
-    setSelectedAuthorHandles((current) =>
-      current.includes(authorHandle) ? current.filter((value) => value !== authorHandle) : [...current, authorHandle]
-    )
-  }
-
-  function handleToggleTag(tagId: string) {
-    setSelectedTagIds((current) => (current.includes(tagId) ? current.filter((value) => value !== tagId) : [...current, tagId]))
-  }
-
-  function handleToggleBookmarkSelection(bookmarkId: string) {
-    setSelectedBookmarkIds((current) =>
-      current.includes(bookmarkId) ? current.filter((value) => value !== bookmarkId) : [...current, bookmarkId]
-    )
-  }
-
-  function handleSelectAllVisible() {
-    setSelectedBookmarkIds(visibleBookmarks.map((bookmark) => bookmark.tweetId))
-  }
-
-  function handleClearSelection() {
-    setSelectedBookmarkIds([])
-  }
-
-  const authorOptions = useMemo(() => getAuthorOptions(scopedBookmarks), [scopedBookmarks])
-  const visibleBookmarks = useMemo(
-    () =>
-      applyBookmarkFilters(scopedBookmarks, {
-        query,
-        bookmarkTags: workspace.bookmarkTags,
-        selectedPublishedDate: undefined,
-        selectedAuthorHandles,
-        authorMatchMode,
-        selectedTagIds,
-        tagMatchMode,
-        timeRange,
-        onlyWithMedia,
-        onlyLongform,
-        sortOrder
-      }),
-    [
-      authorMatchMode,
-      onlyLongform,
-      onlyWithMedia,
-      query,
-      scopedBookmarks,
-      selectedAuthorHandles,
-      selectedTagIds,
-      sortOrder,
-      tagMatchMode,
-      timeRange,
-      workspace.bookmarkTags
-    ]
-  )
-
-  const selectedBookmark = useMemo(
-    () => visibleBookmarks.find((bookmark) => bookmark.tweetId === selectedBookmarkId) ?? null,
-    [selectedBookmarkId, visibleBookmarks]
-  )
-
-  const visibleBookmarkIds = useMemo(() => new Set(visibleBookmarks.map((bookmark) => bookmark.tweetId)), [visibleBookmarks])
-
-  useEffect(() => {
-    setSelectedBookmarkIds((current) => current.filter((bookmarkId) => visibleBookmarkIds.has(bookmarkId)))
-  }, [visibleBookmarkIds])
-
-  useEffect(() => {
-    if (selectedBookmarkId && !visibleBookmarkIds.has(selectedBookmarkId)) {
-      setSelectedBookmarkId(showDetailPane ? visibleBookmarks[0]?.tweetId : undefined)
+  const lifecycleCounts = useMemo(() => {
+    const counts = {
+      all: workspace.knowledgeCards.length,
+      draft: 0,
+      reviewed: 0,
+      stale: 0
     }
-  }, [selectedBookmarkId, showDetailPane, visibleBookmarkIds, visibleBookmarks])
+
+    for (const card of workspace.knowledgeCards) {
+      const status = getCardLifecycleStatus(card)
+      counts[status] += 1
+    }
+
+    return counts
+  }, [workspace.knowledgeCards])
 
   useEffect(() => {
-    if (showDetailPane && visibleBookmarks.length && !selectedBookmarkId) {
-      setSelectedBookmarkId(visibleBookmarks[0]?.tweetId)
-    }
-  }, [selectedBookmarkId, showDetailPane, visibleBookmarks])
-
-  const tagsById = useMemo(() => new Map(workspace.tags.map((tag) => [tag.id, tag])), [workspace.tags])
-  const selectedBookmarkTags = useMemo(
-    () => getBookmarkTagsForBookmark(selectedBookmark?.tweetId, workspace.bookmarkTags, tagsById),
-    [workspace.bookmarkTags, selectedBookmark?.tweetId, tagsById]
-  )
-  const selectedBookmarkIndex = useMemo(
-    () => visibleBookmarks.findIndex((bookmark) => bookmark.tweetId === selectedBookmark?.tweetId),
-    [selectedBookmark?.tweetId, visibleBookmarks]
-  )
-
-  async function handleBulkTag() {
-    if (!selectedBookmarkIds.length || !bulkTagId) {
+    if (!cardsInScope.length) {
+      setSelectedCardId(undefined)
       return
     }
 
-    await workspace.handleBulkAttachTag(selectedBookmarkIds, bulkTagId)
-    setSelectedBookmarkIds([])
-  }
+    if (!selectedCardId || !cardsInScope.some((card) => card.id === selectedCardId)) {
+      setSelectedCardId(cardsInScope[0]?.id)
+    }
+  }, [cardsInScope, selectedCardId])
 
-  function handleSelectPrevious() {
-    if (selectedBookmarkIndex <= 0) {
+  const selectedCard = useMemo(() => cardsInScope.find((card) => card.id === selectedCardId) ?? null, [cardsInScope, selectedCardId])
+  const nextCardCandidate = useMemo(() => {
+    if (!selectedCardId) {
+      return cardsInScope[0] ?? null
+    }
+
+    const currentIndex = cardsInScope.findIndex((card) => card.id === selectedCardId)
+    if (currentIndex < 0) {
+      return cardsInScope[0] ?? null
+    }
+
+    return cardsInScope[currentIndex + 1] ?? cardsInScope[currentIndex - 1] ?? null
+  }, [cardsInScope, selectedCardId])
+  const draftQueueRemaining = useMemo(
+    () => cardsInScope.filter((card) => getCardLifecycleStatus(card) === "draft" && card.id !== selectedCardId).length,
+    [cardsInScope, selectedCardId]
+  )
+  const staleQueueRemaining = useMemo(
+    () => cardsInScope.filter((card) => getCardLifecycleStatus(card) === "stale" && card.id !== selectedCardId).length,
+    [cardsInScope, selectedCardId]
+  )
+
+  useEffect(() => {
+    if (!selectedCard) {
+      setDraftFields({
+        title: "",
+        theme: "",
+        summary: "",
+        keyExcerpt: "",
+        applicability: ""
+      })
       return
     }
 
-    setSelectedBookmarkId(visibleBookmarks[selectedBookmarkIndex - 1]?.tweetId)
-  }
+    setDraftFields({
+      title: selectedCard.title,
+      theme: selectedCard.theme,
+      summary: selectedCard.summary,
+      keyExcerpt: selectedCard.keyExcerpt,
+      applicability: selectedCard.applicability
+    })
+    setReviewFeedback((current) => (current?.cardId === selectedCard.id ? current : null))
+  }, [selectedCard])
 
-  function handleSelectNext() {
-    if (selectedBookmarkIndex < 0 || selectedBookmarkIndex >= visibleBookmarks.length - 1) {
+  async function handleSaveDraft() {
+    if (!selectedCard) {
       return
     }
 
-    setSelectedBookmarkId(visibleBookmarks[selectedBookmarkIndex + 1]?.tweetId)
+    await workspace.handleUpdateKnowledgeCardDraft(selectedCard.id, draftFields)
+    setReviewFeedback({
+      cardId: selectedCard.id,
+      message: "Card saved and marked as reviewed.",
+      nextCardId: nextCardCandidate?.id
+    })
   }
 
-  const currentViewLabel =
-    view === "tags"
-      ? workspace.tags.find((tag) => tag.id === selectedTagId)?.name ?? "Tag"
-      : "All bookmarks"
+  const lifecycleTitle =
+    selectedLifecycle === "draft"
+      ? "Draft queue"
+      : selectedLifecycle === "reviewed"
+        ? "Reviewed library"
+        : selectedLifecycle === "stale"
+          ? "Stale review"
+          : "All cards"
+
+  const lifecycleDescription =
+    selectedLifecycle === "draft"
+      ? "Freshly generated cards waiting for a human pass."
+      : selectedLifecycle === "reviewed"
+        ? "Stable cards that are ready to revisit or export."
+        : selectedLifecycle === "stale"
+          ? "Previously reviewed cards whose source material changed and now need another look."
+          : "Every generated card, regardless of lifecycle state."
 
   return (
     <ExtensionUiProvider>
       <Stack gap="md" style={{ minHeight: 0, height: testEnv ? "auto" : "calc(100vh - 32px)" }}>
         <SectionHeader
           title="Library"
-          description="Review the full collection in the same card-based workbench flow as Inbox, with tags as a browsing and filtering surface."
+          description="Review, trust, and refine knowledge cards before they leave the app and enter your vault."
           actions={
             <Paper
               p={4}
@@ -220,130 +271,291 @@ export function LibraryPage({ view, onViewChange }: LibraryPageProps) {
                 background: "#f3f3f4"
               }}>
               <Button type="button" variant={view === "all" ? "white" : "subtle"} color={view === "all" ? "dark" : "gray"} onClick={() => onViewChange("all")} disabled={view === "all"}>
-                All
+                Library
               </Button>
               <Button type="button" variant={view === "tags" ? "white" : "subtle"} color={view === "tags" ? "dark" : "gray"} onClick={() => onViewChange("tags")} disabled={view === "tags"}>
-                Tags
+                By tag
               </Button>
             </Paper>
           }
         />
 
-        <SurfaceCard title="Library scope" description={`${currentViewLabel} · ${visibleBookmarks.length} visible of ${scopedBookmarks.length} in scope.`}>
-          <Stack gap="md">
-            <Group gap="xs" wrap="wrap">
-              <Badge variant="light" color="dark">
-                {workspace.bookmarks.length} bookmarks
-              </Badge>
-              <Badge variant="light" color="gray">
-                {workspace.tags.length} tags in use
-              </Badge>
-              <Badge variant="light" color="blue">
-                {new Set(workspace.bookmarkTags.map((bookmarkTag) => bookmarkTag.bookmarkId)).size} tagged
-              </Badge>
-            </Group>
+        {!workspace.knowledgeCards.length ? (
+          <EmptyState
+            title="No knowledge cards yet."
+            description="Once source material is synced and card generation runs, this page becomes your draft queue, reviewed library, and stale review desk."
+          />
+        ) : null}
 
-            {view === "tags" ? (
-              <Stack gap="xs">
-            <Text fw={600}>Tag browser</Text>
-            {!workspace.tags.length ? <Text c="dimmed">No tags available yet.</Text> : null}
-                <Group gap="xs" wrap="wrap">
-                  {workspace.tags.map((tag) => (
-                    <Button key={tag.id} type="button" variant={tag.id === selectedTagId ? "filled" : "light"} color={tag.id === selectedTagId ? "dark" : "gray"} onClick={() => setSelectedTagId(tag.id)}>
-                      {tag.name} ({countBookmarksByTag(tag.id, workspace.bookmarkTags)})
-                    </Button>
-              ))}
+        {workspace.onboardingStep === "review-cards" ? (
+          <SurfaceCard
+            title="First review session"
+            description="Your first real milestone is reviewing one draft card until it feels trustworthy enough to export.">
+            <Text c="dimmed">Start with the draft queue. Review one card carefully, save it, and then keep momentum by moving straight to the next card.</Text>
+          </SurfaceCard>
+        ) : null}
+
+        {workspace.onboardingStep === "export-vault" ? (
+          <SurfaceCard
+            title="Review stage complete"
+            description="You now have at least one reviewed card. The next step is exporting a first vault from Settings.">
+            <Text c="dimmed">At this point, Library has done its job: the card is trustworthy enough to become part of your long-term notes system.</Text>
+          </SurfaceCard>
+        ) : null}
+
+        <SurfaceCard
+          title={lifecycleTitle}
+          description={lifecycleDescription}>
+          <Stack gap="sm">
+            <Group gap="xs" wrap="wrap">
+              <Button type="button" variant={selectedLifecycle === "all" ? "filled" : "light"} color={selectedLifecycle === "all" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("all")}>
+                All cards ({lifecycleCounts.all})
+              </Button>
+              <Button type="button" variant={selectedLifecycle === "draft" ? "filled" : "light"} color={selectedLifecycle === "draft" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("draft")}>
+                Draft queue ({lifecycleCounts.draft})
+              </Button>
+              <Button type="button" variant={selectedLifecycle === "reviewed" ? "filled" : "light"} color={selectedLifecycle === "reviewed" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("reviewed")}>
+                Reviewed library ({lifecycleCounts.reviewed})
+              </Button>
+              <Button type="button" variant={selectedLifecycle === "stale" ? "filled" : "light"} color={selectedLifecycle === "stale" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("stale")}>
+                Stale review ({lifecycleCounts.stale})
+              </Button>
             </Group>
             <Text size="sm" c="dimmed">
-              Tag creation lives in Settings.
+              {selectedLifecycle === "draft"
+                ? `You have ${lifecycleCounts.draft} draft card${lifecycleCounts.draft === 1 ? "" : "s"} waiting for trust-building review.`
+                : selectedLifecycle === "reviewed"
+                  ? `${lifecycleCounts.reviewed} reviewed card${lifecycleCounts.reviewed === 1 ? "" : "s"} are currently clean enough to export or revisit.`
+                  : selectedLifecycle === "stale"
+                    ? `${lifecycleCounts.stale} stale card${lifecycleCounts.stale === 1 ? "" : "s"} need another pass because their source changed.`
+                    : `${lifecycleCounts.all} total card${lifecycleCounts.all === 1 ? "" : "s"} are in the system across all lifecycle states.`}
             </Text>
-          </Stack>
-        ) : null}
           </Stack>
         </SurfaceCard>
 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: showDetailPane ? "minmax(360px, 460px) minmax(0, 1fr)" : "1fr",
+            gridTemplateColumns: testEnv ? "1fr" : "320px minmax(320px, 420px) minmax(0, 1fr)",
             gap: 16,
             flex: 1,
-            minHeight: 0
+            minHeight: 0,
+            overflow: "hidden"
           }}>
-          <Stack gap="md" style={{ minHeight: 0 }}>
-            <InboxWorkbenchToolbar
-              query={query}
-              onQueryChange={setQuery}
-              sortOrder={sortOrder}
-              onSortOrderChange={setSortOrder}
-              timeRange={timeRange}
-              onTimeRangeChange={setTimeRange}
-              selectedPublishedDate={undefined}
-              onClearPublishedDate={() => {}}
-              onlyWithMedia={onlyWithMedia}
-              onOnlyWithMediaChange={setOnlyWithMedia}
-              onlyLongform={onlyLongform}
-              onOnlyLongformChange={setOnlyLongform}
-              authorOptions={authorOptions}
-              selectedAuthorHandles={selectedAuthorHandles}
-              authorMatchMode={authorMatchMode}
-              onToggleAuthor={handleToggleAuthor}
-              onAuthorMatchModeChange={setAuthorMatchMode}
-              tags={workspace.tags}
-              selectedTagIds={selectedTagIds}
-              tagMatchMode={tagMatchMode}
-              onToggleTag={handleToggleTag}
-              onTagMatchModeChange={setTagMatchMode}
-              resultCount={visibleBookmarks.length}
-              totalCount={scopedBookmarks.length}
-              selectedCount={selectedBookmarkIds.length}
-              onSelectAllVisible={handleSelectAllVisible}
-              onClearSelection={handleClearSelection}
-              bulkTagId={bulkTagId}
-              onBulkTagIdChange={setBulkTagId}
-              onBulkTag={() => void handleBulkTag()}
-              isSavingTag={workspace.isSavingTag}
-              showAdvancedFilters={showAdvancedFilters}
-              onToggleAdvancedFilters={() => setShowAdvancedFilters((current) => !current)}
-              onClearFilters={handleClearFilters}
-            />
+          <SurfaceCard
+            title="Card scope"
+            description="Cards are the new product object. Bookmarks remain the source layer feeding them."
+            style={{ minHeight: 0, height: "100%" }}
+            bodyStyle={{ minHeight: 0, overflowY: "auto" }}>
+            <Stack gap="md">
+              <Group gap="xs" wrap="wrap">
+                <Badge variant="light" color="blue">
+                  {workspace.knowledgeCards.length} total card drafts
+                </Badge>
+                <Badge variant="light" color="gray">
+                  {workspace.sourceMaterials.length} source materials
+                </Badge>
+                <Badge variant="light" color="dark">
+                  {workspace.tags.length} tags
+                </Badge>
+              </Group>
 
-            <InboxTable
-              bookmarks={visibleBookmarks}
-              selectedBookmarkId={selectedBookmark?.tweetId}
-              selectedBookmarkIds={selectedBookmarkIds}
-              onSelectBookmark={setSelectedBookmarkId}
-              onToggleBookmarkSelection={handleToggleBookmarkSelection}
-            />
-          </Stack>
+              <TextInput label="Search cards" placeholder="Search theme, summary, excerpt, author" value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
 
-          {showDetailPane ? (
-            <InboxDetailPanel
-              bookmark={selectedBookmark}
-              tags={selectedBookmarkTags}
-              availableTags={workspace.tags}
-              onAttachTag={(tagId) => workspace.handleAttachTag(selectedBookmark?.tweetId ?? "", tagId)}
-              onDetachTag={(tagId) => workspace.handleDetachTag(selectedBookmark?.tweetId ?? "", tagId)}
-              isSaving={workspace.isSavingTag}
-              onSelectPrevious={handleSelectPrevious}
-              onSelectNext={handleSelectNext}
-              hasPrevious={selectedBookmarkIndex > 0}
-              hasNext={selectedBookmarkIndex >= 0 && selectedBookmarkIndex < visibleBookmarks.length - 1}
-              onClearSelection={() => setSelectedBookmarkId(undefined)}
-            />
-          ) : null}
+              {view === "tags" ? (
+                <Stack gap="xs">
+                  <Text fw={600}>Tag browser</Text>
+                  {!workspace.tags.length ? <Text c="dimmed">No tags available yet.</Text> : null}
+                  {workspace.tags.map((tag) => (
+                    <Button key={tag.id} type="button" variant={tag.id === selectedTagId ? "filled" : "light"} color={tag.id === selectedTagId ? "dark" : "gray"} justify="flex-start" onClick={() => setSelectedTagId(tag.id)}>
+                      {tag.name} ({workspace.bookmarkTags.filter((bookmarkTag) => bookmarkTag.tagId === tag.id).length})
+                    </Button>
+                  ))}
+                </Stack>
+              ) : null}
+            </Stack>
+          </SurfaceCard>
+
+          <SurfaceCard
+            title="Cards in queue"
+            description={`${cardsInScope.length} visible card${cardsInScope.length === 1 ? "" : "s"} in the current mode.`}
+            style={{ minHeight: 0, height: "100%" }}
+            bodyStyle={{ minHeight: 0, overflow: "hidden" }}>
+            <Stack
+              gap="sm"
+              style={{
+                minHeight: 0,
+                overflowY: "auto",
+                paddingRight: 4
+              }}>
+              {!cardsInScope.length ? <Text c="dimmed">No cards match the current mode and filters.</Text> : null}
+              {cardsInScope.map((card) => (
+                <Card
+                  key={card.id}
+                  component="button"
+                  type="button"
+                  padding="md"
+                  onClick={() => setSelectedCardId(card.id)}
+                  style={{
+                    textAlign: "left",
+                    borderColor: card.id === selectedCardId ? "#111827" : undefined
+                  }}>
+                  <Stack gap={6}>
+                    <Group justify="space-between" align="center">
+                      <Text fw={600}>{card.title}</Text>
+                      <StatusBadge status={getCardLifecycleStatus(card)} />
+                    </Group>
+                    <Text size="sm" c="dimmed">
+                      @{card.authorHandle} · quality {card.quality.score}
+                    </Text>
+                    <Text size="sm" lineClamp={3}>
+                      {card.summary}
+                    </Text>
+                  </Stack>
+                </Card>
+              ))}
+            </Stack>
+          </SurfaceCard>
+
+          <SurfaceCard
+            title="Selected card"
+            description="Refine the generated card, inspect provenance, and keep the source thread visible while making review decisions."
+            style={{ minHeight: 0, height: "100%" }}
+            bodyStyle={{ minHeight: 0, overflow: "hidden" }}>
+            {!selectedCard ? (
+              <Text c="dimmed">Select a card draft to inspect it.</Text>
+            ) : (
+              <Stack
+                gap="md"
+                style={{
+                  minHeight: 0,
+                  overflowY: "auto",
+                  paddingRight: 4
+                }}>
+                <Group gap="xs" wrap="wrap">
+                  <StatusBadge status={getCardLifecycleStatus(selectedCard)} />
+                  <Badge variant="light" color={selectedCard.quality.needsReview ? "red" : "blue"}>
+                    Quality {selectedCard.quality.score}
+                  </Badge>
+                  <Badge variant="light" color="gray">
+                    {selectedCard.quality.generatorVersion}
+                  </Badge>
+                </Group>
+
+                {selectedCard.quality.warnings.length ? (
+                  <Card padding="md" bg="red.0" withBorder>
+                    <Stack gap={4}>
+                      <Text fw={600}>Needs review</Text>
+                      {selectedCard.quality.warnings.map((warning) => (
+                        <Text key={warning} size="sm">
+                          - {warning}
+                        </Text>
+                      ))}
+                    </Stack>
+                  </Card>
+                ) : null}
+
+                <TextInput label="Title" value={draftFields.title} onChange={(event) => setDraftFields((current) => ({ ...current, title: event.currentTarget.value }))} />
+                <TextInput label="Theme" value={draftFields.theme} onChange={(event) => setDraftFields((current) => ({ ...current, theme: event.currentTarget.value }))} />
+                <Textarea label="Summary" minRows={4} value={draftFields.summary} onChange={(event) => setDraftFields((current) => ({ ...current, summary: event.currentTarget.value }))} />
+                <Textarea label="Key excerpt / code" minRows={4} value={draftFields.keyExcerpt} onChange={(event) => setDraftFields((current) => ({ ...current, keyExcerpt: event.currentTarget.value }))} />
+                <Textarea label="Applicability" minRows={3} value={draftFields.applicability} onChange={(event) => setDraftFields((current) => ({ ...current, applicability: event.currentTarget.value }))} />
+
+                <Group gap="sm">
+                  <Button type="button" color="dark" onClick={() => void handleSaveDraft()} disabled={workspace.isSavingTag}>
+                    Save draft
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="light"
+                    onClick={() => void workspace.handleRegenerateKnowledgeCardDraft(selectedCard.id)}
+                    disabled={workspace.isSavingTag}>
+                    Regenerate with AI
+                  </Button>
+                </Group>
+
+                {reviewFeedback?.cardId === selectedCard.id ? (
+                  <Card padding="md" bg="blue.0" withBorder>
+                    <Stack gap={6}>
+                      <Text fw={600}>{reviewFeedback.message}</Text>
+                      <Text size="sm" c="dimmed">
+                        Use this moment to keep momentum going while the current card is still fresh in your head.
+                      </Text>
+                      <Group gap="xs" wrap="wrap">
+                        <Badge variant="light" color="blue">
+                          {draftQueueRemaining} draft remaining
+                        </Badge>
+                        <Badge variant="light" color={staleQueueRemaining ? "red" : "gray"}>
+                          {staleQueueRemaining} stale remaining
+                        </Badge>
+                      </Group>
+                      <Text size="sm" c="dimmed">
+                        {draftQueueRemaining > 0
+                          ? "Stay in review mode and clear the next draft while the context is fresh."
+                          : staleQueueRemaining > 0
+                            ? "Drafts are clear. Next best move is resolving stale cards."
+                            : "You cleared the visible queue. The next milestone is exporting a clean vault."}
+                      </Text>
+                      <Group gap="sm">
+                        {reviewFeedback.nextCardId ? (
+                          <Button
+                            type="button"
+                            variant="light"
+                            onClick={() => {
+                              setSelectedCardId(reviewFeedback.nextCardId)
+                              setReviewFeedback(null)
+                            }}>
+                            Review next card
+                          </Button>
+                        ) : null}
+                        <Button
+                          type="button"
+                          variant="subtle"
+                          onClick={() => setReviewFeedback(null)}>
+                          Stay here
+                        </Button>
+                      </Group>
+                    </Stack>
+                  </Card>
+                ) : null}
+
+                <Divider />
+
+                <Stack gap="xs">
+                  <Title order={4}>Provenance</Title>
+                  {selectedCard.provenance.map((item, index) => (
+                    <Card key={`${item.field}-${index}`} padding="sm" withBorder>
+                      <Stack gap={4}>
+                        <Text size="sm" fw={600}>
+                          {item.field}
+                        </Text>
+                        <Text size="sm">{item.excerpt}</Text>
+                      </Stack>
+                    </Card>
+                  ))}
+                </Stack>
+
+                <Stack gap="xs">
+                  <Title order={4}>Source material</Title>
+                  <Text size="sm" c="dimmed">
+                    @{selectedCard.authorHandle} · saved {selectedCard.sourceSavedAt}
+                  </Text>
+                  <Text size="sm" style={{ whiteSpace: "pre-wrap", lineHeight: 1.65 }}>
+                    {selectedCard.sourceText}
+                  </Text>
+                  <Text size="sm">Source: {selectedCard.sourceUrl}</Text>
+                  <Group gap="xs" wrap="wrap">
+                    {selectedCard.tagIds.map((tagId) => (
+                      <Badge key={tagId} variant="light" color="dark">
+                        {tagById.get(tagId)?.name ?? tagId}
+                      </Badge>
+                    ))}
+                  </Group>
+                </Stack>
+              </Stack>
+            )}
+          </SurfaceCard>
         </div>
-
-        <InboxBookmarkDetailDrawer
-          opened={!showDetailPane && Boolean(selectedBookmark)}
-          onClose={() => setSelectedBookmarkId(undefined)}
-          bookmark={selectedBookmark}
-          tags={selectedBookmarkTags}
-          availableTags={workspace.tags}
-          onAttachTag={(tagId) => workspace.handleAttachTag(selectedBookmark?.tweetId ?? "", tagId)}
-          onDetachTag={(tagId) => workspace.handleDetachTag(selectedBookmark?.tweetId ?? "", tagId)}
-          isSaving={workspace.isSavingTag}
-        />
       </Stack>
     </ExtensionUiProvider>
   )

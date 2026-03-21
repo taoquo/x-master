@@ -29,7 +29,7 @@ async function writeStaticFiles() {
         name,
         version,
         permissions: ["cookies", "storage"],
-        host_permissions: ["https://x.com/*"],
+        host_permissions: ["https://x.com/*", "https://api.openai.com/*"],
         action: {
           default_title: name
         },

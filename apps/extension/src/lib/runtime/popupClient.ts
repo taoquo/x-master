@@ -1,5 +1,5 @@
 import { createEmptySyncSummary, type PopupData } from "../types.ts"
-import { LOAD_POPUP_DATA_MESSAGE, RESET_LOCAL_DATA_MESSAGE, RUN_SYNC_MESSAGE } from "./messages.ts"
+import { LOAD_POPUP_DATA_MESSAGE, REGENERATE_CARD_MESSAGE, RESET_LOCAL_DATA_MESSAGE, RUN_SYNC_MESSAGE } from "./messages.ts"
 
 function assertNoRuntimeError<T>(response: T | { error: string }): T {
   if (typeof response === "object" && response !== null && "error" in response) {
@@ -13,8 +13,18 @@ export async function loadPopupData(): Promise<PopupData> {
   if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) {
     return {
       bookmarks: [],
+      sourceMaterials: [],
+      knowledgeCards: [],
       tags: [],
       bookmarkTags: [],
+      aiGeneration: {
+        enabled: false,
+        provider: "openai",
+        apiKey: "",
+        model: "gpt-5-mini"
+      },
+      exportScope: "all",
+      hasCompletedOnboarding: false,
       summary: createEmptySyncSummary(),
       latestSyncRun: null
     }
@@ -42,4 +52,12 @@ export async function resetStoredData() {
   }
 
   return assertNoRuntimeError(await chrome.runtime.sendMessage({ type: RESET_LOCAL_DATA_MESSAGE }))
+}
+
+export async function regenerateKnowledgeCard(cardId: string) {
+  if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) {
+    return { success: true }
+  }
+
+  return assertNoRuntimeError(await chrome.runtime.sendMessage({ type: REGENERATE_CARD_MESSAGE, cardId }))
 }

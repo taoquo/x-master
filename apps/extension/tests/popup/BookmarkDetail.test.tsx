@@ -125,6 +125,7 @@ test("SettingsPanel triggers bookmark export", async () => {
   const { container, dom } = render(
     React.createElement(SettingsPanel, {
       bookmarks,
+      knowledgeCards: [],
       tags: [{ id: "tag-1", name: "saved", createdAt: "2026-03-16T00:00:00.000Z" }],
       summary: {
         status: "running",
@@ -149,7 +150,17 @@ test("SettingsPanel triggers bookmark export", async () => {
         return exportBookmarks(bookmarks)
       },
       onReset: async () => {},
-      isResetting: false
+      isResetting: false,
+      isExporting: false,
+      exportSummary: {
+        fileName: "x-knowledge-cards-obsidian.zip",
+        cardCount: 1,
+        sourceCount: 1,
+        draftCount: 0,
+        reviewedCount: 1,
+        staleCount: 0,
+        exportedAt: "2026-03-16T00:02:00.000Z"
+      }
     })
   )
 
@@ -164,4 +175,6 @@ test("SettingsPanel triggers bookmark export", async () => {
   assert.match(container.textContent ?? "", /Tags stored: 1/)
   assert.match(container.textContent ?? "", /Current sync status: running/)
   assert.match(container.textContent ?? "", /Latest recorded sync finished: 2026-03-16T00:01:00.000Z/)
+  assert.match(container.textContent ?? "", /Last export/)
+  assert.match(container.textContent ?? "", /x-knowledge-cards-obsidian.zip/)
 })

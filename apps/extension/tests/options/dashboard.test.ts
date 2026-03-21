@@ -36,6 +36,50 @@ test("buildDashboardModel derives dashboard pressure and recommendation from wor
         rawPayload: {}
       }
     ],
+    knowledgeCards: [
+      {
+        id: "card-1",
+        sourceMaterialId: "1",
+        status: "draft",
+        title: "Card 1",
+        theme: "Card 1",
+        summary: "Card 1",
+        keyExcerpt: "Card 1",
+        applicability: "Card 1",
+        provenance: [],
+        quality: {
+          score: 80,
+          needsReview: false,
+          warnings: [],
+          generatorVersion: "heuristic-v1"
+        },
+        generatedAt: "2026-03-18T02:00:00.000Z",
+        updatedAt: "2026-03-18T02:00:00.000Z",
+        sourceFingerprint: "fp-1",
+        lastGeneratedFromModel: "heuristic-v1"
+      },
+      {
+        id: "card-2",
+        sourceMaterialId: "2",
+        status: "reviewed",
+        title: "Card 2",
+        theme: "Card 2",
+        summary: "Card 2",
+        keyExcerpt: "Card 2",
+        applicability: "Card 2",
+        provenance: [],
+        quality: {
+          score: 70,
+          needsReview: true,
+          warnings: ["Source changed."],
+          generatorVersion: "heuristic-v1"
+        },
+        generatedAt: "2026-03-18T02:00:00.000Z",
+        updatedAt: "2026-03-18T02:00:00.000Z",
+        sourceFingerprint: "fp-2",
+        lastGeneratedFromModel: "heuristic-v1"
+      }
+    ],
     tags: [
       { id: "tag-1", name: "research", createdAt: "2026-03-18T00:00:00.000Z" }
     ],
@@ -58,9 +102,13 @@ test("buildDashboardModel derives dashboard pressure and recommendation from wor
   assert.equal(model.metrics.organizedCount, 1)
   assert.equal(model.metrics.taggedCount, 1)
   assert.equal(model.metrics.untaggedCount, 2)
+  assert.equal(model.metrics.draftCount, 1)
+  assert.equal(model.metrics.reviewedCount, 0)
+  assert.equal(model.metrics.staleCount, 1)
   assert.equal(model.pressure.inboxShare, 67)
   assert.equal(model.pressure.taggedShare, 33)
   assert.equal(model.pressure.untaggedShare, 67)
+  assert.equal(model.pressure.staleShare, 50)
   assert.equal(model.recommendation.action, "inbox")
   assert.equal(model.recent.savedLast7Days, 3)
   assert.equal(model.recent.activeDaysLast7Days, 2)
@@ -90,6 +138,7 @@ test("buildDashboardModel escalates sync failures ahead of filing recommendation
         rawPayload: {}
       }
     ],
+    knowledgeCards: [],
     tags: [],
     bookmarkTags: [],
     summary: {
@@ -107,4 +156,58 @@ test("buildDashboardModel escalates sync failures ahead of filing recommendation
   assert.equal(model.recommendation.action, "settings")
   assert.match(model.recommendation.title, /Resolve sync health/)
   assert.equal(model.sync.errorSummary, "Missing auth")
+})
+
+test("buildDashboardModel recommends stale card review before broad library browsing", () => {
+  const model = buildDashboardModel({
+    bookmarks: [
+      {
+        tweetId: "1",
+        tweetUrl: "https://x.com/alice/status/1",
+        authorName: "Alice",
+        authorHandle: "alice",
+        text: "alpha",
+        createdAtOnX: "2026-03-10T00:00:00.000Z",
+        savedAt: "2026-03-17T01:00:00.000Z",
+        rawPayload: {}
+      }
+    ],
+    knowledgeCards: [
+      {
+        id: "card-1",
+        sourceMaterialId: "1",
+        status: "reviewed",
+        title: "Card 1",
+        theme: "Card 1",
+        summary: "Card 1",
+        keyExcerpt: "Card 1",
+        applicability: "Card 1",
+        provenance: [],
+        quality: {
+          score: 60,
+          needsReview: true,
+          warnings: ["Changed"],
+          generatorVersion: "heuristic-v1"
+        },
+        generatedAt: "2026-03-18T02:00:00.000Z",
+        updatedAt: "2026-03-18T02:00:00.000Z",
+        sourceFingerprint: "fp-1",
+        lastGeneratedFromModel: "heuristic-v1"
+      }
+    ],
+    tags: [{ id: "tag-1", name: "research", createdAt: "2026-03-18T00:00:00.000Z" }],
+    bookmarkTags: [{ id: "bookmark-tag-1", bookmarkId: "1", tagId: "tag-1", createdAt: "2026-03-18T02:00:00.000Z" }],
+    summary: {
+      status: "success",
+      fetchedCount: 1,
+      insertedCount: 1,
+      updatedCount: 0,
+      failedCount: 0,
+      lastSyncedAt: "2026-03-18T08:00:00.000Z"
+    },
+    now: new Date("2026-03-19T12:00:00.000Z")
+  })
+
+  assert.equal(model.recommendation.action, "library-lifecycle")
+  assert.equal(model.recommendation.lifecycle, "stale")
 })

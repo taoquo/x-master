@@ -1,6 +1,7 @@
 const DB_NAME = "x-bookmark-manager"
-const DB_VERSION = 3
+const DB_VERSION = 4
 const BOOKMARKS_STORE = "bookmarks"
+const KNOWLEDGE_CARDS_STORE = "knowledge-cards"
 const FOLDERS_STORE = "folders"
 const BOOKMARK_FOLDERS_STORE = "bookmark-folders"
 const TAGS_STORE = "tags"
@@ -25,6 +26,12 @@ function openBookmarksDb() {
 
       if (!db.objectStoreNames.contains(BOOKMARKS_STORE)) {
         db.createObjectStore(BOOKMARKS_STORE, { keyPath: "tweetId" })
+      }
+
+      if (!db.objectStoreNames.contains(KNOWLEDGE_CARDS_STORE)) {
+        const knowledgeCardsStore = db.createObjectStore(KNOWLEDGE_CARDS_STORE, { keyPath: "id" })
+        knowledgeCardsStore.createIndex("sourceMaterialId", "sourceMaterialId", { unique: true })
+        knowledgeCardsStore.createIndex("status", "status", { unique: false })
       }
 
       if (!db.objectStoreNames.contains(FOLDERS_STORE)) {
@@ -110,6 +117,7 @@ export async function resetBookmarksDb() {
 
 export {
   BOOKMARKS_STORE,
+  KNOWLEDGE_CARDS_STORE,
   FOLDERS_STORE,
   BOOKMARK_FOLDERS_STORE,
   TAGS_STORE,

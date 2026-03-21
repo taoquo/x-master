@@ -66,7 +66,7 @@ export function InboxBookmarkDetailContent({
   }, [availableTags, tags])
 
   if (!bookmark) {
-    return <EmptyState title="No bookmark selected." description="Choose a bookmark from the inbox to inspect content, media, and tagging actions." />
+    return <EmptyState title="No source selected." description="Choose a source item from the inbox to inspect the raw thread, media, and source-level tagging actions." />
   }
 
   const currentBookmark = bookmark
@@ -141,7 +141,7 @@ export function InboxBookmarkDetailContent({
 
           <Stack gap={6}>
             <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-              Bookmark details
+              Source material
             </Text>
             <Text fw={600} size="sm">
               {currentBookmark.authorName}
@@ -180,6 +180,10 @@ export function InboxBookmarkDetailContent({
             </Badge>
           ))}
         </Group>
+
+        <Text size="sm" c="dimmed">
+          This is raw source material, not a final knowledge card. Tag and inspect it here, then review the generated card in Library.
+        </Text>
       </Stack>
 
       <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
@@ -225,7 +229,7 @@ export function InboxBookmarkDetailContent({
                 </NativeSelect>
               </label>
               <Button type="button" color="dark" onClick={() => void handleAttachTag()} disabled={isSaving || !selectedAvailableTagId}>
-                Save to library
+                Tag source
               </Button>
             </Group>
           </Stack>
@@ -240,6 +244,10 @@ export function InboxBookmarkDetailContent({
             ))}
           </Group>
         ) : null}
+
+        <Text size="sm" c="dimmed">
+          Tagging here organizes the source layer. Final card review and trust decisions happen in Library.
+        </Text>
 
         <Text size="sm" c="dimmed">
           Need a new tag? Create it in Settings, then come back here to attach it.

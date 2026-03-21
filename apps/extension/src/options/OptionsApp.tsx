@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react"
-import type { InboxRouteState, LibraryView, OptionsSection } from "./lib/navigation.ts"
+import type { InboxRouteState, LibraryRouteState, LibraryView, OptionsSection } from "./lib/navigation.ts"
 import { DashboardPage } from "./pages/DashboardPage.tsx"
 import { InboxPage } from "./pages/InboxPage.tsx"
 import { LibraryPage } from "./pages/LibraryPage.tsx"
@@ -17,10 +17,20 @@ const NAV_ITEMS: Array<{ id: OptionsSection; label: string }> = [
 export function OptionsApp() {
   const [section, setSection] = useState<OptionsSection>("dashboard")
   const [libraryView, setLibraryView] = useState<LibraryView>("all")
+  const [libraryRouteState, setLibraryRouteState] = useState<LibraryRouteState | undefined>(undefined)
   const [inboxRouteState, setInboxRouteState] = useState<InboxRouteState | undefined>(undefined)
 
   const openLibraryView = useCallback((view: LibraryView) => {
     setLibraryView(view)
+    setLibraryRouteState(undefined)
+    setSection("library")
+  }, [])
+
+  const openLibrary = useCallback((routeState?: LibraryRouteState) => {
+    if (routeState?.view) {
+      setLibraryView(routeState.view)
+    }
+    setLibraryRouteState(routeState)
     setSection("library")
   }, [])
 
@@ -29,11 +39,19 @@ export function OptionsApp() {
     setSection("inbox")
   }, [])
 
+  const openSettings = useCallback(() => {
+    setSection("settings")
+  }, [])
+
   const handleSelectSection = useCallback((nextSection: OptionsSection) => {
     if (nextSection !== "inbox") {
       setInboxRouteState(undefined)
     } else if (section !== "inbox") {
       setInboxRouteState(undefined)
+    }
+
+    if (nextSection !== "library") {
+      setLibraryRouteState(undefined)
     }
 
     setSection(nextSection)
@@ -44,14 +62,14 @@ export function OptionsApp() {
       case "inbox":
         return <InboxPage initialRouteState={inboxRouteState} />
       case "library":
-        return <LibraryPage view={libraryView} onViewChange={setLibraryView} />
+        return <LibraryPage view={libraryView} onViewChange={setLibraryView} initialRouteState={libraryRouteState} />
       case "settings":
         return <SettingsPage />
       case "dashboard":
       default:
-        return <DashboardPage onOpenInbox={openInbox} />
+        return <DashboardPage onOpenInbox={openInbox} onOpenLibrary={openLibrary} onOpenSettings={openSettings} />
     }
-  }, [inboxRouteState, libraryView, openInbox, openLibraryView, section])
+  }, [inboxRouteState, libraryRouteState, libraryView, openInbox, openLibrary, openLibraryView, openSettings, section])
 
   return (
     <ExtensionUiProvider>

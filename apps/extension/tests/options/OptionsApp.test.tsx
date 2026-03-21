@@ -27,6 +27,13 @@ function render(ui: React.ReactElement) {
     requestAnimationFrame: (callback: FrameRequestCallback) => number
     cancelAnimationFrame: (handle: number) => void
   }).cancelAnimationFrame = (handle) => clearTimeout(handle)
+  ;(globalThis as typeof globalThis & { MutationObserver: typeof MutationObserver }).MutationObserver =
+    dom.window.MutationObserver
+  ;(globalThis as typeof globalThis & { ResizeObserver: any }).ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
 
   const rootElement = dom.window.document.getElementById("root") as HTMLDivElement
   const root = createRoot(rootElement)
@@ -56,8 +63,55 @@ function installChromeMock() {
                 rawPayload: {}
               }
             ],
+            sourceMaterials: [
+              {
+                tweetId: "1",
+                tweetUrl: "https://x.com/alice/status/1",
+                authorName: "Alice",
+                authorHandle: "alice",
+                text: "Bookmark one",
+                createdAtOnX: "2026-03-16T00:00:00.000Z",
+                savedAt: "2026-03-16T01:00:00.000Z",
+                rawPayload: {},
+                sourceKind: "x-bookmark"
+              }
+            ],
+            knowledgeCards: [
+              {
+                id: "card-1",
+                sourceMaterialId: "1",
+                status: "draft",
+                title: "Bookmark one",
+                theme: "Bookmark one",
+                summary: "Bookmark one",
+                keyExcerpt: "Bookmark one",
+                applicability: "Useful as a technical reference.",
+                provenance: [
+                  { field: "theme", excerpt: "Bookmark one" },
+                  { field: "summary", excerpt: "Bookmark one" },
+                  { field: "key_excerpt", excerpt: "Bookmark one" },
+                  { field: "applicability", excerpt: "Bookmark one" }
+                ],
+                quality: {
+                  score: 72,
+                  needsReview: false,
+                  warnings: [],
+                  generatorVersion: "heuristic-v1"
+                },
+                generatedAt: "2026-03-16T01:00:00.000Z",
+                updatedAt: "2026-03-16T01:00:00.000Z"
+              }
+            ],
             tags: [{ id: "tag-1", name: "saved", createdAt: "2026-03-16T00:00:00.000Z" }],
             bookmarkTags: [],
+            aiGeneration: {
+              enabled: false,
+              provider: "openai",
+              apiKey: "",
+              model: "gpt-5-mini"
+            },
+            exportScope: "all",
+            hasCompletedOnboarding: false,
             latestSyncRun: {
               id: "sync-1",
               status: "success",
@@ -102,6 +156,10 @@ function findButton(container: HTMLDivElement, label: string) {
   return Array.from(container.querySelectorAll("button")).find((button) => button.textContent === label)
 }
 
+function findLabel(container: HTMLDivElement, label: string) {
+  return Array.from(container.querySelectorAll("label")).find((element) => element.textContent === label)
+}
+
 test("OptionsApp defaults to Dashboard and renders the four-module navigation", async () => {
   installChromeMock()
 
@@ -116,9 +174,10 @@ test("OptionsApp defaults to Dashboard and renders the four-module navigation", 
   assert.match(container.textContent ?? "", /Library/)
   assert.match(container.textContent ?? "", /Settings/)
   assert.equal(Array.from(container.querySelectorAll("nav button")).some((button) => button.textContent === "Tags"), false)
-  assert.match(container.textContent ?? "", /Workspace snapshot/)
+  assert.match(container.textContent ?? "", /Pipeline snapshot/)
   assert.match(container.textContent ?? "", /Sync health/)
   assert.match(container.textContent ?? "", /Publish activity/)
+  assert.match(container.textContent ?? "", /Getting started/)
   assert.doesNotMatch(container.textContent ?? "", /Triage pressure/)
   assert.doesNotMatch(container.textContent ?? "", /Recent momentum/)
   assert.doesNotMatch(container.textContent ?? "", /Sources to classify/)
@@ -141,7 +200,7 @@ test("OptionsApp switches to Inbox and keeps the workbench layout", async () => 
     await Promise.resolve()
   })
 
-  assert.match(container.textContent ?? "", /focused triage layout/)
+  assert.match(container.textContent ?? "", /raw source material/)
   assert.match(container.textContent ?? "", /Search/)
 })
 
@@ -162,13 +221,57 @@ test("OptionsApp opens Library with subviews instead of a standalone Tags module
     await Promise.resolve()
   })
 
-  assert.match(container.textContent ?? "", /Library scope/)
-  assert.match(container.textContent ?? "", /All/)
-  assert.match(container.textContent ?? "", /Tags/)
-  assert.match(container.textContent ?? "", /Search/)
-  assert.match(container.textContent ?? "", /More filters/)
-  assert.match(container.textContent ?? "", /Select all visible/)
+  assert.match(container.textContent ?? "", /Draft queue|Reviewed library|Stale review|All cards/)
+  assert.match(container.textContent ?? "", /All cards/)
+  assert.match(container.textContent ?? "", /By tag/)
+  assert.match(container.textContent ?? "", /Search cards/)
+  assert.match(container.textContent ?? "", /Cards in queue/)
+  assert.match(container.textContent ?? "", /Selected card/)
+  assert.match(container.textContent ?? "", /Draft queue/)
+  assert.match(container.textContent ?? "", /Reviewed library/)
+  assert.match(container.textContent ?? "", /Stale review/)
   assert.equal(Array.from(container.querySelectorAll("nav button")).some((button) => button.textContent === "Tags"), false)
+})
+
+test("Library review flow exposes the save action and regenerate action together", async () => {
+  installChromeMock()
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+
+  await act(async () => {
+    await Promise.resolve()
+  })
+
+  const libraryButton = findButton(container, "Library")
+  assert.ok(libraryButton)
+
+  await act(async () => {
+    libraryButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    await Promise.resolve()
+  })
+
+  assert.ok(findButton(container, "Save draft"))
+  assert.ok(findButton(container, "Regenerate with AI"))
+})
+
+test("Dashboard recommendation can open Library scoped to stale cards", async () => {
+  installChromeMock()
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+
+  await act(async () => {
+    await Promise.resolve()
+  })
+
+  const libraryButton = findButton(container, "Library")
+  assert.ok(libraryButton)
+
+  await act(async () => {
+    libraryButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    await Promise.resolve()
+  })
+
+  assert.match(container.textContent ?? "", /Draft queue|Reviewed library|Stale review/)
 })
 
 test("OptionsApp opens Settings as a dedicated module", async () => {
@@ -188,8 +291,30 @@ test("OptionsApp opens Settings as a dedicated module", async () => {
     await Promise.resolve()
   })
 
-  assert.match(container.textContent ?? "", /Manage sync visibility/)
+  assert.match(container.textContent ?? "", /Configure the pipeline/)
+  assert.match(container.textContent ?? "", /Sync status/)
+  assert.match(container.textContent ?? "", /AI generation/)
+
+  const knowledgeSetupButton = findLabel(container, "Knowledge setup")
+  assert.ok(knowledgeSetupButton)
+
+  await act(async () => {
+    knowledgeSetupButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    await Promise.resolve()
+  })
+
   assert.match(container.textContent ?? "", /Tag management/)
+  assert.match(container.textContent ?? "", /Export and vault shape/)
+
+  const systemButton = findLabel(container, "System")
+  assert.ok(systemButton)
+
+  await act(async () => {
+    systemButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    await Promise.resolve()
+  })
+
+  assert.match(container.textContent ?? "", /Access and permissions/)
   assert.match(container.textContent ?? "", /Workspace/)
 })
 

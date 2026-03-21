@@ -1,11 +1,13 @@
 import { getAllBookmarks } from "../lib/storage/bookmarksStore.ts"
+import { getAllKnowledgeCardDrafts, regenerateKnowledgeCardDraft } from "../lib/storage/knowledgeCardsStore.ts"
 import { resetLocalData } from "../lib/storage/resetLocalData.ts"
 import { getSettings } from "../lib/storage/settings.ts"
 import { getLatestSyncRun } from "../lib/storage/syncRunsStore.ts"
 import { getAllBookmarkTags, getAllTags } from "../lib/storage/tagsStore.ts"
-import { LOAD_POPUP_DATA_MESSAGE, RESET_LOCAL_DATA_MESSAGE, RUN_SYNC_MESSAGE } from "../lib/runtime/messages.ts"
-import type { PopupData } from "../lib/types.ts"
+import { LOAD_POPUP_DATA_MESSAGE, REGENERATE_CARD_MESSAGE, RESET_LOCAL_DATA_MESSAGE, RUN_SYNC_MESSAGE } from "../lib/runtime/messages.ts"
+import type { PopupData, SourceMaterialRecord } from "../lib/types.ts"
 import { runBookmarkSync } from "./syncBookmarks.ts"
+import { generateKnowledgeCardDraftWithAi } from "../lib/cards/generateKnowledgeCardDraftWithAi.ts"
 
 const OPTIONS_PAGE_PATH = "options.html"
 
@@ -13,10 +15,11 @@ interface BackgroundDependencies {
   loadPopupData: () => Promise<PopupData>
   resetData: () => Promise<unknown>
   runSync: () => Promise<unknown>
+  regenerateCard: (cardId: string) => Promise<unknown>
 }
 
-export function createBackgroundMessageHandler({ loadPopupData, resetData, runSync }: BackgroundDependencies) {
-  return async function handleMessage(message: { type: string }) {
+export function createBackgroundMessageHandler({ loadPopupData, resetData, runSync, regenerateCard }: BackgroundDependencies) {
+  return async function handleMessage(message: { type: string; cardId?: string }) {
     if (message.type === LOAD_POPUP_DATA_MESSAGE) {
       return loadPopupData()
     }
@@ -29,23 +32,42 @@ export function createBackgroundMessageHandler({ loadPopupData, resetData, runSy
       return runSync()
     }
 
+    if (message.type === REGENERATE_CARD_MESSAGE) {
+      if (!message.cardId) {
+        throw new Error("Missing cardId")
+      }
+
+      return regenerateCard(message.cardId)
+    }
+
     throw new Error(`Unsupported message type: ${message.type}`)
   }
 }
 
 async function loadPopupData() {
-  const [bookmarks, tags, bookmarkTags, settings, latestSyncRun] = await Promise.all([
+  const [bookmarks, knowledgeCards, tags, bookmarkTags, settings, latestSyncRun] = await Promise.all([
     getAllBookmarks(),
+    getAllKnowledgeCardDrafts(),
     getAllTags(),
     getAllBookmarkTags(),
     getSettings(),
     getLatestSyncRun()
   ])
 
+  const sourceMaterials: SourceMaterialRecord[] = bookmarks.map((bookmark) => ({
+    ...bookmark,
+    sourceKind: "x-bookmark"
+  }))
+
   return {
     bookmarks,
+    sourceMaterials,
+    knowledgeCards,
     tags,
     bookmarkTags,
+    aiGeneration: settings.aiGeneration,
+    exportScope: settings.exportScope,
+    hasCompletedOnboarding: settings.hasCompletedOnboarding,
     summary: settings.lastSyncSummary,
     latestSyncRun
   }
@@ -79,7 +101,31 @@ const handleMessage = createBackgroundMessageHandler({
     await resetLocalData()
     return { success: true }
   },
-  runSync: runBookmarkSync
+  runSync: runBookmarkSync,
+  regenerateCard: async (cardId: string) => {
+    const [settings, bookmarks] = await Promise.all([getSettings(), getAllBookmarks()])
+    const sourceMaterial = bookmarks.find((bookmark) => `card-${bookmark.tweetId}` === cardId)
+
+    if (!sourceMaterial) {
+      throw new Error("Source material not found for card regeneration")
+    }
+
+    await regenerateKnowledgeCardDraft(
+      {
+        ...sourceMaterial,
+        sourceKind: "x-bookmark"
+      },
+      {
+        generateDraft: (nextSourceMaterial) =>
+          generateKnowledgeCardDraftWithAi({
+            sourceMaterial: nextSourceMaterial,
+            settings: settings.aiGeneration
+          })
+      }
+    )
+
+    return { success: true }
+  }
 })
 
 if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {

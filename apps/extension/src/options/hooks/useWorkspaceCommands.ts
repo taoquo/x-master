@@ -1,15 +1,17 @@
 import { useCallback, useState } from "react"
-import { exportBookmarks } from "../../lib/export/exportBookmarks.ts"
+import { exportKnowledgeCardsAsObsidianVault } from "../../lib/export/exportKnowledgeCards.ts"
 import { attachTagToBookmark, attachTagToBookmarks, createTag, deleteTag, detachTagFromBookmark, renameTag } from "../../lib/storage/tagsStore.ts"
-import { resetStoredData, runSync } from "../../lib/runtime/popupClient.ts"
-import type { BookmarkRecord } from "../../lib/types.ts"
+import { updateKnowledgeCardDraft } from "../../lib/storage/knowledgeCardsStore.ts"
+import { regenerateKnowledgeCard, resetStoredData, runSync } from "../../lib/runtime/popupClient.ts"
+import { saveExportScope, setHasCompletedOnboarding } from "../../lib/storage/settings.ts"
+import type { BookmarkRecord, BookmarkTagRecord, ExportScope, KnowledgeCardDraftRecord, TagRecord } from "../../lib/types.ts"
 
-function downloadJson(filename: string, content: string) {
+function downloadFile(filename: string, content: Blob | string, mimeType: string) {
   if (typeof document === "undefined" || typeof URL === "undefined") {
     return
   }
 
-  const blob = new Blob([content], { type: "application/json" })
+  const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement("a")
   anchor.href = url
@@ -20,13 +22,30 @@ function downloadJson(filename: string, content: string) {
 
 interface UseWorkspaceCommandsOptions {
   bookmarks: BookmarkRecord[]
+  knowledgeCards?: KnowledgeCardDraftRecord[]
+  bookmarkTags?: BookmarkTagRecord[]
+  tags?: TagRecord[]
+  exportScope?: ExportScope
   refreshData: () => Promise<void>
 }
 
-export function useWorkspaceCommands({ bookmarks, refreshData }: UseWorkspaceCommandsOptions) {
+export interface ExportSummary {
+  fileName: string
+  cardCount: number
+  sourceCount: number
+  draftCount: number
+  reviewedCount: number
+  staleCount: number
+  exportedAt: string
+}
+
+export function useWorkspaceCommands({ bookmarks, knowledgeCards = [], bookmarkTags = [], tags = [], exportScope = "all", refreshData }: UseWorkspaceCommandsOptions) {
   const [isSyncing, setIsSyncing] = useState(false)
   const [isSavingTag, setIsSavingTag] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [lastExportSummary, setLastExportSummary] = useState<ExportSummary | null>(null)
+  const [isSavingExportScope, setIsSavingExportScope] = useState(false)
 
   const handleSync = useCallback(async () => {
     setIsSyncing(true)
@@ -129,11 +148,89 @@ export function useWorkspaceCommands({ bookmarks, refreshData }: UseWorkspaceCom
     [refreshData]
   )
 
+  const handleUpdateKnowledgeCardDraft = useCallback(
+    async (
+      cardId: string,
+      updates: Pick<KnowledgeCardDraftRecord, "title" | "theme" | "summary" | "keyExcerpt" | "applicability">
+    ) => {
+      setIsSavingTag(true)
+      try {
+        await updateKnowledgeCardDraft(cardId, updates)
+        await refreshData()
+      } finally {
+        setIsSavingTag(false)
+      }
+    },
+    [refreshData]
+  )
+
+  const handleRegenerateKnowledgeCardDraft = useCallback(
+    async (cardId: string) => {
+      setIsSavingTag(true)
+      try {
+        await regenerateKnowledgeCard(cardId)
+        await refreshData()
+      } finally {
+        setIsSavingTag(false)
+      }
+    },
+    [refreshData]
+  )
+
   const handleExport = useCallback(async () => {
-    const payload = exportBookmarks(bookmarks)
-    downloadJson("x-bookmarks.json", payload)
-    return payload
-  }, [bookmarks])
+    setIsExporting(true)
+
+    try {
+      const cardsToExport = knowledgeCards.filter((card) => {
+        if (exportScope === "all") {
+          return true
+        }
+
+        if (exportScope === "reviewed") {
+          return card.status === "reviewed" && !card.quality.needsReview
+        }
+
+        return card.status === "reviewed"
+      })
+      const payload = await exportKnowledgeCardsAsObsidianVault({
+        cards: cardsToExport,
+        sourceMaterials: bookmarks.map((bookmark) => ({
+          ...bookmark,
+          sourceKind: "x-bookmark" as const
+        })),
+        bookmarkTags,
+        tags
+      })
+      const summary: ExportSummary = {
+        fileName: "x-knowledge-cards-obsidian.zip",
+        cardCount: cardsToExport.length,
+        sourceCount: bookmarks.length,
+        draftCount: cardsToExport.filter((card) => card.status === "draft").length,
+        reviewedCount: cardsToExport.filter((card) => card.status === "reviewed" && !card.quality.needsReview).length,
+        staleCount: cardsToExport.filter((card) => card.status === "reviewed" && card.quality.needsReview).length,
+        exportedAt: new Date().toISOString()
+      }
+      downloadFile(summary.fileName, payload, "application/zip")
+      setLastExportSummary(summary)
+      await setHasCompletedOnboarding(true)
+      return summary
+    } finally {
+      setIsExporting(false)
+    }
+  }, [bookmarkTags, bookmarks, exportScope, knowledgeCards, tags])
+
+  const handleSaveExportScope = useCallback(
+    async (nextExportScope: ExportScope) => {
+      setIsSavingExportScope(true)
+      try {
+        await saveExportScope(nextExportScope)
+        await refreshData()
+      } finally {
+        setIsSavingExportScope(false)
+      }
+    },
+    [refreshData]
+  )
 
   const handleReset = useCallback(async () => {
     setIsResetting(true)
@@ -150,6 +247,9 @@ export function useWorkspaceCommands({ bookmarks, refreshData }: UseWorkspaceCom
     isSyncing,
     isSavingTag,
     isResetting,
+    isExporting,
+    isSavingExportScope,
+    lastExportSummary,
     handleSync,
     handleCreateTag,
     handleRenameTag,
@@ -157,7 +257,10 @@ export function useWorkspaceCommands({ bookmarks, refreshData }: UseWorkspaceCom
     handleAttachTag,
     handleDetachTag,
     handleBulkAttachTag,
+    handleUpdateKnowledgeCardDraft,
+    handleRegenerateKnowledgeCardDraft,
     handleExport,
+    handleSaveExportScope,
     handleReset
   }
 }

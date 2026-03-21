@@ -1,4 +1,5 @@
-import type { BookmarkRecord, BookmarkTagRecord, SyncSummary, TagRecord } from "../../lib/types.ts"
+import type { BookmarkRecord, BookmarkTagRecord, KnowledgeCardDraftRecord, SyncSummary, TagRecord } from "../../lib/types.ts"
+import type { LibraryLifecycleFilter } from "./navigation.ts"
 
 const HEATMAP_WEEKS = 12
 const DAYS_PER_WEEK = 7
@@ -18,8 +19,9 @@ export interface DashboardHeatmapWeek {
 export interface DashboardRecommendation {
   title: string
   description: string
-  action: "sync" | "inbox" | "library-tags" | "settings"
+  action: "sync" | "inbox" | "library-tags" | "library-lifecycle" | "settings"
   actionLabel: string
+  lifecycle?: LibraryLifecycleFilter
 }
 
 export interface DashboardModel {
@@ -30,6 +32,9 @@ export interface DashboardModel {
     taggedCount: number
     untaggedCount: number
     tagsCount: number
+    draftCount: number
+    reviewedCount: number
+    staleCount: number
   }
   sync: {
     status: SyncSummary["status"]
@@ -44,6 +49,7 @@ export interface DashboardModel {
     inboxShare: number
     taggedShare: number
     untaggedShare: number
+    staleShare: number
   }
   recent: {
     latestTagName?: string
@@ -70,10 +76,19 @@ export interface DashboardModel {
 
 interface BuildDashboardModelOptions {
   bookmarks: BookmarkRecord[]
+  knowledgeCards: KnowledgeCardDraftRecord[]
   tags: TagRecord[]
   bookmarkTags: BookmarkTagRecord[]
   summary: SyncSummary
   now?: Date
+}
+
+function getCardLifecycle(card: Pick<KnowledgeCardDraftRecord, "status" | "quality">): LibraryLifecycleFilter {
+  if (card.status === "reviewed" && card.quality.needsReview) {
+    return "stale"
+  }
+
+  return card.status
 }
 
 function startOfUtcDay(date: Date) {
@@ -154,17 +169,23 @@ function getHeatLevel(count: number, maxCount: number): 0 | 1 | 2 | 3 | 4 {
 function buildRecommendation({
   totalBookmarks,
   inboxCount,
+  draftCount,
+  staleCount,
   tagsCount,
   summaryStatus,
   failedCount,
-  inboxShare
+  inboxShare,
+  staleShare
 }: {
   totalBookmarks: number
   inboxCount: number
+  draftCount: number
+  staleCount: number
   tagsCount: number
   summaryStatus: SyncSummary["status"]
   failedCount: number
   inboxShare: number
+  staleShare: number
 }): DashboardRecommendation {
   if (totalBookmarks === 0) {
     return {
@@ -193,6 +214,26 @@ function buildRecommendation({
     }
   }
 
+  if (staleCount >= 3 || staleShare >= 25) {
+    return {
+      title: "Reviewed cards have gone stale",
+      description: "Source material changed after manual review. Refresh those cards before trusting them again.",
+      action: "library-lifecycle",
+      actionLabel: "Open stale cards",
+      lifecycle: "stale"
+    }
+  }
+
+  if (draftCount >= 5) {
+    return {
+      title: "Draft review queue is building up",
+      description: "You already generated learning cards, but too many are still unreviewed. Turn drafts into reviewed assets before expanding the library.",
+      action: "library-lifecycle",
+      actionLabel: "Open draft cards",
+      lifecycle: "draft"
+    }
+  }
+
   if (tagsCount === 0) {
     return {
       title: "Tag taxonomy needs setup",
@@ -212,6 +253,7 @@ function buildRecommendation({
 
 export function buildDashboardModel({
   bookmarks,
+  knowledgeCards,
   tags,
   bookmarkTags,
   summary,
@@ -224,10 +266,14 @@ export function buildDashboardModel({
   const inboxCount = totalBookmarks - taggedCount
   const organizedCount = taggedCount
   const untaggedCount = Math.max(totalBookmarks - taggedCount, 0)
+  const draftCount = knowledgeCards.filter((card) => getCardLifecycle(card) === "draft").length
+  const reviewedCount = knowledgeCards.filter((card) => getCardLifecycle(card) === "reviewed").length
+  const staleCount = knowledgeCards.filter((card) => getCardLifecycle(card) === "stale").length
 
   const inboxShare = totalBookmarks ? clampPercent((inboxCount / totalBookmarks) * 100) : 0
   const taggedShare = totalBookmarks ? clampPercent((taggedCount / totalBookmarks) * 100) : 0
   const untaggedShare = totalBookmarks ? clampPercent((untaggedCount / totalBookmarks) * 100) : 0
+  const staleShare = knowledgeCards.length ? clampPercent((staleCount / knowledgeCards.length) * 100) : 0
 
   const today = startOfUtcDay(now)
   const last7DaysThreshold = addUtcDays(today, -6)
@@ -315,7 +361,10 @@ export function buildDashboardModel({
       organizedCount,
       taggedCount,
       untaggedCount,
-      tagsCount: tags.length
+      tagsCount: tags.length,
+      draftCount,
+      reviewedCount,
+      staleCount
     },
     sync: {
       status: summary.status,
@@ -329,7 +378,8 @@ export function buildDashboardModel({
     pressure: {
       inboxShare,
       taggedShare,
-      untaggedShare
+      untaggedShare,
+      staleShare
     },
     recent: {
       latestTagName: pickLatestByCreatedAt(tags)?.name,
@@ -358,10 +408,13 @@ export function buildDashboardModel({
     recommendation: buildRecommendation({
       totalBookmarks,
       inboxCount,
+      draftCount,
+      staleCount,
       tagsCount: tags.length,
       summaryStatus: summary.status,
       failedCount: summary.failedCount,
-      inboxShare
+      inboxShare,
+      staleShare
     }),
     heatmap: {
       totalPublishedInWindow: countsInWindow.reduce((sum, count) => sum + count, 0),

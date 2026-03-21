@@ -131,8 +131,21 @@ function installChromeMock() {
 
           return {
             bookmarks,
+            sourceMaterials: bookmarks.map((bookmark) => ({
+              ...bookmark,
+              sourceKind: "x-bookmark"
+            })),
+            knowledgeCards: [],
             tags,
             bookmarkTags,
+            aiGeneration: {
+              enabled: false,
+              provider: "openai",
+              apiKey: "",
+              model: "gpt-5-mini"
+            },
+            exportScope: "all",
+            hasCompletedOnboarding: false,
             latestSyncRun: null,
             summary: {
               status: "idle",
@@ -198,14 +211,14 @@ test("InboxPage renders the workbench layout and switches detail drawer with row
   const { container, dom } = render(React.createElement(InboxPage))
 
   await waitForAssertion(() => {
-    assert.match(container.textContent ?? "", /Alice/)
+  assert.match(container.textContent ?? "", /Alice/)
   })
 
   assert.match(container.textContent ?? "", /Search/)
-  assert.match(container.textContent ?? "", /All inbox/)
-  assert.match(container.textContent ?? "", /Longform/)
+  assert.match(container.textContent ?? "", /All sources/)
+  assert.match(container.textContent ?? "", /Long threads/)
   assert.match(container.textContent ?? "", /Select all visible/)
-  assert.doesNotMatch(container.textContent ?? "", /Bookmark details/)
+  assert.doesNotMatch(container.textContent ?? "", /Source material/)
 
   const bobCard = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Bob"))
   assert.ok(bobCard)
@@ -215,7 +228,7 @@ test("InboxPage renders the workbench layout and switches detail drawer with row
   })
 
   await waitForAssertion(() => {
-    assert.match(container.textContent ?? "", /Bookmark details/)
+    assert.match(container.textContent ?? "", /Source material/)
     assert.match(container.textContent ?? "", /Bob/)
     assert.match(container.textContent ?? "", /beta note for inbox/)
   })
@@ -240,7 +253,7 @@ test("InboxPage prunes hidden batch selections when filters change", async () =>
 
   await waitForAssertion(() => {
     assert.match(container.textContent ?? "", /3 selected/)
-    assert.ok(getButton(container, "Apply tag"))
+    assert.ok(getButton(container, "Tag sources"))
   })
 
   const moreFiltersButton = getButton(container, "More filters")
@@ -275,7 +288,7 @@ test("InboxPage prunes hidden batch selections when filters change", async () =>
   await waitForAssertion(() => {
     assert.match(container.textContent ?? "", /alpha note for inbox/)
     assert.match(container.textContent ?? "", /beta note for inbox/)
-    assert.equal(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Apply tag"), false)
+    assert.equal(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Tag sources"), false)
   })
 })
 
@@ -312,7 +325,7 @@ test("InboxPage supports item-level tagging from the detail drawer", async () =>
     setInputValue(existingTagSelect, seeded.followUpTagId, dom)
   })
 
-  const addTagButton = getButton(container, "Save to library")
+  const addTagButton = getButton(container, "Tag source")
   await act(async () => {
     addTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
