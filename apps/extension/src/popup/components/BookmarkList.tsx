@@ -10,7 +10,7 @@ interface BookmarkListProps {
   selectedBookmarkId?: string
   resultCount: number
   sortLabel: string
-  folderLabel: string
+  contextLabel: string
   onSelectBookmark: (bookmarkId: string) => void
   selectionEnabled?: boolean
   selectedBookmarkIds?: string[]
@@ -22,7 +22,7 @@ export function BookmarkList({
   selectedBookmarkId,
   resultCount,
   sortLabel,
-  folderLabel,
+  contextLabel,
   onSelectBookmark,
   selectionEnabled = false,
   selectedBookmarkIds = [],
@@ -32,7 +32,7 @@ export function BookmarkList({
     <ExtensionUiProvider>
       <Stack gap="md" h="100%">
         <div>
-          <SectionHeader title="Bookmarks" description={`${folderLabel} · ${resultCount} result(s)`} />
+          <SectionHeader title="Bookmarks" description={`${contextLabel} · ${resultCount} result(s)`} />
           <Text size="sm" c="dimmed" mt={4}>
             Sorted by {sortLabel}
           </Text>

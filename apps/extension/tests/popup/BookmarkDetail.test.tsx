@@ -43,18 +43,11 @@ test("BookmarkDetail renders the selected bookmark and tag actions", async () =>
         metrics: { likes: 12, retweets: 5, replies: 1 },
         rawPayload: {}
       },
-      currentFolder: { id: "folder-inbox", name: "Inbox", createdAt: "2026-03-16T00:00:00.000Z" },
-      availableFolders: [
-        { id: "folder-inbox", name: "Inbox", createdAt: "2026-03-16T00:00:00.000Z" },
-        { id: "folder-1", name: "Research", createdAt: "2026-03-16T00:00:00.000Z" }
-      ],
       tags: [{ id: "tag-1", name: "saved", createdAt: "2026-03-16T00:00:00.000Z" }],
       availableTags: [
         { id: "tag-1", name: "saved", createdAt: "2026-03-16T00:00:00.000Z" },
         { id: "tag-2", name: "research", createdAt: "2026-03-16T00:00:00.000Z" }
       ],
-      onCreateFolder: async () => {},
-      onMoveToFolder: async () => {},
       onCreateTag: async (name) => {
         events.push(`create:${name}`)
       },
@@ -70,7 +63,6 @@ test("BookmarkDetail renders the selected bookmark and tag actions", async () =>
 
   assert.match(container.textContent ?? "", /Alice/)
   assert.match(container.textContent ?? "", /Longform bookmark/)
-  assert.match(container.textContent ?? "", /Current folder: Inbox/)
   assert.match(container.textContent ?? "", /saved/)
   assert.match(container.textContent ?? "", /Likes: 12/)
   assert.equal(container.querySelectorAll("img").length, 1)
@@ -84,7 +76,7 @@ test("BookmarkDetail renders the selected bookmark and tag actions", async () =>
   assert.ok(removeTagButton)
 
   await act(async () => {
-    const tagSelect = selects[1]
+    const tagSelect = selects[0]
     tagSelect.value = "tag-2"
     tagSelect.dispatchEvent(new dom.window.Event("change", { bubbles: true }))
     await Promise.resolve()
@@ -102,12 +94,8 @@ test("BookmarkDetail renders an empty selection state", () => {
   const { container } = render(
     React.createElement(BookmarkDetail, {
       bookmark: null,
-      currentFolder: null,
-      availableFolders: [],
       tags: [],
       availableTags: [],
-      onCreateFolder: async () => {},
-      onMoveToFolder: async () => {},
       onCreateTag: async () => {},
       onAttachTag: async () => {},
       onDetachTag: async () => {},
@@ -138,6 +126,14 @@ test("SettingsPanel triggers bookmark export", async () => {
     React.createElement(SettingsPanel, {
       bookmarks,
       tags: [{ id: "tag-1", name: "saved", createdAt: "2026-03-16T00:00:00.000Z" }],
+      summary: {
+        status: "running",
+        fetchedCount: 1,
+        insertedCount: 1,
+        updatedCount: 0,
+        failedCount: 0,
+        lastSyncedAt: "2026-03-16T00:01:30.000Z"
+      },
       latestSyncRun: {
         id: "sync-1",
         status: "success",
@@ -166,5 +162,6 @@ test("SettingsPanel triggers bookmark export", async () => {
 
   assert.equal(clicked, 1)
   assert.match(container.textContent ?? "", /Tags stored: 1/)
-  assert.match(container.textContent ?? "", /Latest sync status: success/)
+  assert.match(container.textContent ?? "", /Current sync status: running/)
+  assert.match(container.textContent ?? "", /Latest recorded sync finished: 2026-03-16T00:01:00.000Z/)
 })

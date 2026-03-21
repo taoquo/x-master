@@ -56,13 +56,8 @@ function installChromeMock() {
                 rawPayload: {}
               }
             ],
-            folders: [
-              { id: "folder-inbox", name: "Inbox", createdAt: "2026-03-16T00:00:00.000Z" },
-              { id: "folder-research", name: "Research", createdAt: "2026-03-17T00:00:00.000Z" }
-            ],
-            bookmarkFolders: [{ bookmarkId: "1", folderId: "folder-inbox", updatedAt: "2026-03-16T01:00:00.000Z" }],
             tags: [{ id: "tag-1", name: "saved", createdAt: "2026-03-16T00:00:00.000Z" }],
-            bookmarkTags: [{ id: "1:tag-1", bookmarkId: "1", tagId: "tag-1", createdAt: "2026-03-16T01:00:00.000Z" }],
+            bookmarkTags: [],
             latestSyncRun: {
               id: "sync-1",
               status: "success",
@@ -146,7 +141,7 @@ test("OptionsApp switches to Inbox and keeps the workbench layout", async () => 
     await Promise.resolve()
   })
 
-  assert.match(container.textContent ?? "", /Organize new bookmarks in a dense table/)
+  assert.match(container.textContent ?? "", /focused triage layout/)
   assert.match(container.textContent ?? "", /Search/)
 })
 
@@ -167,11 +162,12 @@ test("OptionsApp opens Library with subviews instead of a standalone Tags module
     await Promise.resolve()
   })
 
-  assert.match(container.textContent ?? "", /Library views/)
+  assert.match(container.textContent ?? "", /Library scope/)
   assert.match(container.textContent ?? "", /All/)
   assert.match(container.textContent ?? "", /Tags/)
-  assert.match(container.textContent ?? "", /Folders/)
-  assert.match(container.textContent ?? "", /Coverage/)
+  assert.match(container.textContent ?? "", /Search/)
+  assert.match(container.textContent ?? "", /More filters/)
+  assert.match(container.textContent ?? "", /Select all visible/)
   assert.equal(Array.from(container.querySelectorAll("nav button")).some((button) => button.textContent === "Tags"), false)
 })
 
@@ -193,7 +189,7 @@ test("OptionsApp opens Settings as a dedicated module", async () => {
   })
 
   assert.match(container.textContent ?? "", /Manage sync visibility/)
-  assert.match(container.textContent ?? "", /Organization config/)
+  assert.match(container.textContent ?? "", /Tag management/)
   assert.match(container.textContent ?? "", /Workspace/)
 })
 

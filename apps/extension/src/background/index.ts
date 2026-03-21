@@ -1,5 +1,4 @@
 import { getAllBookmarks } from "../lib/storage/bookmarksStore.ts"
-import { ensureBookmarksHaveFolders, getAllBookmarkFolders, getAllFolders } from "../lib/storage/foldersStore.ts"
 import { resetLocalData } from "../lib/storage/resetLocalData.ts"
 import { getSettings } from "../lib/storage/settings.ts"
 import { getLatestSyncRun } from "../lib/storage/syncRunsStore.ts"
@@ -35,12 +34,8 @@ export function createBackgroundMessageHandler({ loadPopupData, resetData, runSy
 }
 
 async function loadPopupData() {
-  await ensureBookmarksHaveFolders()
-
-  const [bookmarks, folders, bookmarkFolders, tags, bookmarkTags, settings, latestSyncRun] = await Promise.all([
+  const [bookmarks, tags, bookmarkTags, settings, latestSyncRun] = await Promise.all([
     getAllBookmarks(),
-    getAllFolders(),
-    getAllBookmarkFolders(),
     getAllTags(),
     getAllBookmarkTags(),
     getSettings(),
@@ -49,8 +44,6 @@ async function loadPopupData() {
 
   return {
     bookmarks,
-    folders,
-    bookmarkFolders,
     tags,
     bookmarkTags,
     summary: settings.lastSyncSummary,

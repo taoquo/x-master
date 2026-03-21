@@ -27,6 +27,37 @@ export async function createTag({ name }: { name: string }): Promise<TagRecord> 
   return tag
 }
 
+export async function renameTag({
+  tagId,
+  name
+}: {
+  tagId: string
+  name: string
+}): Promise<TagRecord> {
+  const trimmedName = name.trim()
+  if (!trimmedName) {
+    throw new Error("Tag name is required")
+  }
+
+  const db = await getBookmarksDb()
+  const transaction = db.transaction(TAGS_STORE, "readwrite")
+  const store = transaction.objectStore(TAGS_STORE)
+  const existing = (await requestToPromise(store.get(tagId))) as TagRecord | undefined
+
+  if (!existing) {
+    throw new Error("Tag not found")
+  }
+
+  const updatedTag: TagRecord = {
+    ...existing,
+    name: trimmedName
+  }
+
+  store.put(updatedTag)
+  await transactionDone(transaction)
+  return updatedTag
+}
+
 export async function getAllTags(): Promise<TagRecord[]> {
   const db = await getBookmarksDb()
   const transaction = db.transaction(TAGS_STORE, "readonly")
@@ -113,6 +144,21 @@ export async function detachTagFromBookmark({
   const transaction = db.transaction(BOOKMARK_TAGS_STORE, "readwrite")
   const store = transaction.objectStore(BOOKMARK_TAGS_STORE)
   store.delete(createBookmarkTagId(bookmarkId, tagId))
+  await transactionDone(transaction)
+}
+
+export async function deleteTag(tagId: string) {
+  const db = await getBookmarksDb()
+  const transaction = db.transaction([TAGS_STORE, BOOKMARK_TAGS_STORE], "readwrite")
+  const tagsStore = transaction.objectStore(TAGS_STORE)
+  const bookmarkTagsStore = transaction.objectStore(BOOKMARK_TAGS_STORE)
+  const relatedBookmarkTags = (await requestToPromise(bookmarkTagsStore.index("tagId").getAll(tagId))) as BookmarkTagRecord[]
+
+  for (const bookmarkTag of relatedBookmarkTags) {
+    bookmarkTagsStore.delete(bookmarkTag.id)
+  }
+
+  tagsStore.delete(tagId)
   await transactionDone(transaction)
 }
 

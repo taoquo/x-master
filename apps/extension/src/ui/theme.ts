@@ -1,14 +1,14 @@
 import { createTheme } from "@mantine/core"
 
 export const extensionTheme = createTheme({
-  primaryColor: "ocean",
-  fontFamily: '"IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif',
+  primaryColor: "blue",
+  fontFamily: '"Inter", "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif',
   headings: {
-    fontFamily: '"IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif',
+    fontFamily: '"Inter", "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif',
     sizes: {
       h1: { fontSize: "2rem", lineHeight: "1.1", fontWeight: "700" },
-      h2: { fontSize: "1.65rem", lineHeight: "1.15", fontWeight: "700" },
-      h3: { fontSize: "1.15rem", lineHeight: "1.2", fontWeight: "650" }
+      h2: { fontSize: "1.45rem", lineHeight: "1.15", fontWeight: "700" },
+      h3: { fontSize: "1.05rem", lineHeight: "1.2", fontWeight: "600" }
     }
   },
   defaultRadius: "md",
@@ -25,14 +25,14 @@ export const extensionTheme = createTheme({
     },
     Card: {
       defaultProps: {
-        radius: "xl",
-        shadow: "sm",
+        radius: "md",
+        shadow: "xs",
         withBorder: true
       }
     },
     Paper: {
       defaultProps: {
-        radius: "lg",
+        radius: "md",
         withBorder: true
       }
     },

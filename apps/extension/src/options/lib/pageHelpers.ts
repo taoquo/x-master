@@ -1,4 +1,4 @@
-import type { BookmarkFolderRecord, BookmarkRecord, FolderRecord, TagRecord } from "../../lib/types.ts"
+import type { BookmarkRecord, TagRecord } from "../../lib/types.ts"
 import type { BookmarkSortOrder } from "../../lib/search/searchBookmarks.ts"
 
 export function getSortLabel(sortOrder: BookmarkSortOrder) {
@@ -50,17 +50,4 @@ export function getBookmarkTagsForBookmark(
     .filter((bookmarkTag) => bookmarkTag.bookmarkId === bookmarkId)
     .map((bookmarkTag) => tagsById.get(bookmarkTag.tagId))
     .filter(Boolean) as TagRecord[]
-}
-
-export function getCurrentFolderForBookmark(
-  bookmarkId: string | undefined,
-  bookmarkFolders: BookmarkFolderRecord[],
-  foldersById: Map<string, FolderRecord>
-) {
-  if (!bookmarkId) {
-    return null
-  }
-
-  const bookmarkFolder = bookmarkFolders.find((item) => item.bookmarkId === bookmarkId)
-  return bookmarkFolder ? foldersById.get(bookmarkFolder.folderId) ?? null : null
 }

@@ -1,5 +1,4 @@
-import { INBOX_FOLDER_ID } from "../../lib/storage/foldersStore.ts"
-import type { BookmarkFolderRecord, BookmarkRecord, BookmarkTagRecord, FolderRecord, SyncRunRecord, SyncSummary, TagRecord } from "../../lib/types.ts"
+import type { BookmarkRecord, BookmarkTagRecord, SyncSummary, TagRecord } from "../../lib/types.ts"
 
 const HEATMAP_WEEKS = 12
 const DAYS_PER_WEEK = 7
@@ -19,7 +18,7 @@ export interface DashboardHeatmapWeek {
 export interface DashboardRecommendation {
   title: string
   description: string
-  action: "sync" | "inbox" | "library-tags" | "library-folders" | "settings"
+  action: "sync" | "inbox" | "library-tags" | "settings"
   actionLabel: string
 }
 
@@ -30,7 +29,6 @@ export interface DashboardModel {
     organizedCount: number
     taggedCount: number
     untaggedCount: number
-    foldersCount: number
     tagsCount: number
   }
   sync: {
@@ -41,8 +39,6 @@ export interface DashboardModel {
     updatedCount: number
     failedCount: number
     errorSummary?: string
-    latestRunStatus: SyncRunRecord["status"] | "idle"
-    latestRunFinishedAt?: string
   }
   pressure: {
     inboxShare: number
@@ -51,7 +47,6 @@ export interface DashboardModel {
   }
   recent: {
     latestTagName?: string
-    latestFolderName?: string
     savedLast7Days: number
     activeDaysLast7Days: number
   }
@@ -75,12 +70,9 @@ export interface DashboardModel {
 
 interface BuildDashboardModelOptions {
   bookmarks: BookmarkRecord[]
-  bookmarkFolders: BookmarkFolderRecord[]
   tags: TagRecord[]
   bookmarkTags: BookmarkTagRecord[]
-  folders: FolderRecord[]
   summary: SyncSummary
-  latestSyncRun: SyncRunRecord | null
   now?: Date
 }
 
@@ -162,23 +154,17 @@ function getHeatLevel(count: number, maxCount: number): 0 | 1 | 2 | 3 | 4 {
 function buildRecommendation({
   totalBookmarks,
   inboxCount,
-  untaggedCount,
   tagsCount,
-  foldersCount,
   summaryStatus,
   failedCount,
-  inboxShare,
-  untaggedShare
+  inboxShare
 }: {
   totalBookmarks: number
   inboxCount: number
-  untaggedCount: number
   tagsCount: number
-  foldersCount: number
   summaryStatus: SyncSummary["status"]
   failedCount: number
   inboxShare: number
-  untaggedShare: number
 }): DashboardRecommendation {
   if (totalBookmarks === 0) {
     return {
@@ -201,25 +187,16 @@ function buildRecommendation({
   if (inboxCount >= 12 || inboxShare >= 45) {
     return {
       title: "Inbox pressure is high",
-      description: "Too much of the workspace is still waiting in Inbox. Clear filing debt before doing broad library review.",
+      description: "Too much of the workspace is still untagged. Clear filing debt before doing broad library review.",
       action: "inbox",
       actionLabel: "Open Inbox"
     }
   }
 
-  if (untaggedCount >= 10 || untaggedShare >= 35) {
+  if (tagsCount === 0) {
     return {
-      title: "Tag coverage is lagging",
-      description: "A large share of bookmarks is filed but still not labeled. Tighten tags before the library gets harder to review.",
-      action: "library-tags",
-      actionLabel: "Open Library tags view"
-    }
-  }
-
-  if (tagsCount === 0 || foldersCount <= 1) {
-    return {
-      title: "Taxonomy needs setup",
-      description: "You have bookmarks, but the organization system is still thin. Add a few stable tags or folders next.",
+      title: "Tag taxonomy needs setup",
+      description: "You have bookmarks, but no shared tags yet. Create a small stable taxonomy before filing more.",
       action: "settings",
       actionLabel: "Open Settings"
     }
@@ -227,41 +204,25 @@ function buildRecommendation({
 
   return {
     title: "Workspace is stable enough for review",
-    description: "Operational pressure is under control. Move into the library and inspect collections by destination.",
-    action: "library-folders",
-    actionLabel: "Open Library folders view"
+    description: "Operational pressure is under control. Move into the library and review the collection through tags.",
+    action: "library-tags",
+    actionLabel: "Open Library tags view"
   }
 }
 
 export function buildDashboardModel({
   bookmarks,
-  bookmarkFolders,
   tags,
   bookmarkTags,
-  folders,
   summary,
-  latestSyncRun,
   now = new Date()
 }: BuildDashboardModelOptions): DashboardModel {
   const totalBookmarks = bookmarks.length
-  const folderIdByBookmarkId = new Map<string, string>()
-
-  for (const bookmarkFolder of bookmarkFolders) {
-    folderIdByBookmarkId.set(bookmarkFolder.bookmarkId, bookmarkFolder.folderId)
-  }
-
-  let inboxCount = 0
-  for (const bookmark of bookmarks) {
-    const folderId = folderIdByBookmarkId.get(bookmark.tweetId) ?? INBOX_FOLDER_ID
-    if (folderId === INBOX_FOLDER_ID) {
-      inboxCount += 1
-    }
-  }
-
   const taggedBookmarkIds = new Set(bookmarkTags.map((bookmarkTag) => bookmarkTag.bookmarkId))
   const authorStatsByHandle = new Map<string, { handle: string; label: string; count: number; inboxCount: number; untaggedCount: number }>()
   const taggedCount = bookmarks.reduce((count, bookmark) => count + (taggedBookmarkIds.has(bookmark.tweetId) ? 1 : 0), 0)
-  const organizedCount = Math.max(totalBookmarks - inboxCount, 0)
+  const inboxCount = totalBookmarks - taggedCount
+  const organizedCount = taggedCount
   const untaggedCount = Math.max(totalBookmarks - taggedCount, 0)
 
   const inboxShare = totalBookmarks ? clampPercent((inboxCount / totalBookmarks) * 100) : 0
@@ -278,7 +239,6 @@ export function buildDashboardModel({
   const savedCountByDateLast7Days = new Map<string, number>()
 
   for (const bookmark of bookmarks) {
-    const folderId = folderIdByBookmarkId.get(bookmark.tweetId) ?? INBOX_FOLDER_ID
     const authorHandle = bookmark.authorHandle.trim()
     if (authorHandle) {
       const current = authorStatsByHandle.get(authorHandle) ?? {
@@ -290,10 +250,8 @@ export function buildDashboardModel({
       }
 
       current.count += 1
-      if (folderId === INBOX_FOLDER_ID) {
-        current.inboxCount += 1
-      }
       if (!taggedBookmarkIds.has(bookmark.tweetId)) {
+        current.inboxCount += 1
         current.untaggedCount += 1
       }
 
@@ -357,7 +315,6 @@ export function buildDashboardModel({
       organizedCount,
       taggedCount,
       untaggedCount,
-      foldersCount: folders.length,
       tagsCount: tags.length
     },
     sync: {
@@ -367,9 +324,7 @@ export function buildDashboardModel({
       insertedCount: summary.insertedCount,
       updatedCount: summary.updatedCount,
       failedCount: summary.failedCount,
-      errorSummary: summary.errorSummary,
-      latestRunStatus: latestSyncRun?.status ?? "idle",
-      latestRunFinishedAt: latestSyncRun?.finishedAt
+      errorSummary: summary.errorSummary
     },
     pressure: {
       inboxShare,
@@ -378,7 +333,6 @@ export function buildDashboardModel({
     },
     recent: {
       latestTagName: pickLatestByCreatedAt(tags)?.name,
-      latestFolderName: pickLatestByCreatedAt(folders.filter((folder) => folder.id !== INBOX_FOLDER_ID))?.name,
       savedLast7Days: countsLast7Days.reduce((sum, count) => sum + count, 0),
       activeDaysLast7Days: countsLast7Days.length
     },
@@ -404,13 +358,10 @@ export function buildDashboardModel({
     recommendation: buildRecommendation({
       totalBookmarks,
       inboxCount,
-      untaggedCount,
       tagsCount: tags.length,
-      foldersCount: folders.length,
       summaryStatus: summary.status,
       failedCount: summary.failedCount,
-      inboxShare,
-      untaggedShare
+      inboxShare
     }),
     heatmap: {
       totalPublishedInWindow: countsInWindow.reduce((sum, count) => sum + count, 0),

@@ -5,7 +5,7 @@ import type { ExtensionSettings } from "../../src/lib/types.ts"
 
 test("runBookmarkSync stores fetched bookmarks locally and returns sync stats", async () => {
   const recordedSummaries: Array<{ status: string; errorSummary?: string }> = []
-  let recordedSyncRun: unknown
+  const recordedSyncRuns: Array<{ id: string; status: string; finishedAt?: string }> = []
 
   const result = await runBookmarkSync({
     getXCookieHeader: async () => "auth_token=abc; ct0=token123",
@@ -40,11 +40,12 @@ test("runBookmarkSync stores fetched bookmarks locally and returns sync stats", 
       assert.equal(bookmarks.length, 1)
       return { insertedCount: 1, updatedCount: 0 }
     },
-    assignBookmarksToInboxIfMissing: async (bookmarkIds) => {
-      assert.deepEqual(bookmarkIds, ["123"])
-    },
     createSyncRun: async (syncRun) => {
-      recordedSyncRun = syncRun
+      recordedSyncRuns.push({
+        id: syncRun.id,
+        status: syncRun.status,
+        finishedAt: syncRun.finishedAt
+      })
     },
     updateSyncSummary: async (summary) => {
       recordedSummaries.push({ status: summary.status, errorSummary: summary.errorSummary })
@@ -59,7 +60,13 @@ test("runBookmarkSync stores fetched bookmarks locally and returns sync stats", 
     recordedSummaries.map((summary) => summary.status),
     ["running", "success"]
   )
-  assert.match(String((recordedSyncRun as { status?: string })?.status), /success/)
+  assert.deepEqual(
+    recordedSyncRuns.map((syncRun) => syncRun.status),
+    ["running", "success"]
+  )
+  assert.equal(recordedSyncRuns[0]?.id, recordedSyncRuns[1]?.id)
+  assert.equal(Boolean(recordedSyncRuns[0]?.finishedAt), false)
+  assert.match(String(recordedSyncRuns[1]?.finishedAt), /^\d{4}-\d{2}-\d{2}T/)
 })
 
 test("runBookmarkSync default summary persistence updates saved settings", async () => {
@@ -79,7 +86,6 @@ test("runBookmarkSync default summary persistence updates saved settings", async
     getXCookieHeader: async () => "auth_token=abc; ct0=token123",
     fetchAllBookmarks: async () => ({ bookmarks: [], failedCount: 0 }),
     upsertBookmarks: async () => ({ insertedCount: 0, updatedCount: 0 }),
-    assignBookmarksToInboxIfMissing: async () => {},
     createSyncRun: async () => {},
     getSettings: async () => savedSettings,
     saveSettings: async (nextSettings) => {
@@ -93,7 +99,7 @@ test("runBookmarkSync default summary persistence updates saved settings", async
 
 test("runBookmarkSync persists an error summary and rethrows when sync fails", async () => {
   const recordedSummaries: Array<{ status: string; errorSummary?: string }> = []
-  let recordedSyncRun: unknown
+  const recordedSyncRuns: Array<{ id: string; status: string; errorSummary?: string; finishedAt?: string }> = []
 
   await assert.rejects(
     () =>
@@ -102,9 +108,13 @@ test("runBookmarkSync persists an error summary and rethrows when sync fails", a
         fetchBookmarksPage: async () => {
           throw new Error("X API error 401: unauthorized response body")
         },
-        assignBookmarksToInboxIfMissing: async () => {},
         createSyncRun: async (syncRun) => {
-          recordedSyncRun = syncRun
+          recordedSyncRuns.push({
+            id: syncRun.id,
+            status: syncRun.status,
+            errorSummary: syncRun.errorSummary,
+            finishedAt: syncRun.finishedAt
+          })
         },
         updateSyncSummary: async (summary) => {
           recordedSummaries.push({ status: summary.status, errorSummary: summary.errorSummary })
@@ -118,9 +128,11 @@ test("runBookmarkSync persists an error summary and rethrows when sync fails", a
     ["running", "error"]
   )
   assert.equal(recordedSummaries[1].errorSummary, "X API error 401: unauthorized response body")
-  assert.equal((recordedSyncRun as { status?: string; errorSummary?: string }).status, "error")
-  assert.equal(
-    (recordedSyncRun as { status?: string; errorSummary?: string }).errorSummary,
-    "X API error 401: unauthorized response body"
+  assert.deepEqual(
+    recordedSyncRuns.map((syncRun) => syncRun.status),
+    ["running", "error"]
   )
+  assert.equal(recordedSyncRuns[0]?.id, recordedSyncRuns[1]?.id)
+  assert.equal(recordedSyncRuns[1]?.errorSummary, "X API error 401: unauthorized response body")
+  assert.match(String(recordedSyncRuns[1]?.finishedAt), /^\d{4}-\d{2}-\d{2}T/)
 })

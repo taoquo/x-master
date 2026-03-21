@@ -1,5 +1,4 @@
-import { getDescendantFolderIds } from "../storage/foldersStore.ts"
-import type { BookmarkFolderRecord, BookmarkRecord, BookmarkTagRecord, FolderRecord } from "../types.ts"
+import type { BookmarkRecord, BookmarkTagRecord } from "../types.ts"
 import { getAllBookmarks } from "../storage/bookmarksStore.ts"
 
 export type BookmarkSortOrder = "saved-desc" | "saved-asc" | "created-desc" | "likes-desc"
@@ -8,9 +7,6 @@ export type SavedTimeRange = "all" | "7d" | "30d" | "90d"
 
 export interface BookmarkFilterOptions {
   query: string
-  folders: FolderRecord[]
-  bookmarkFolders: BookmarkFolderRecord[]
-  selectedFolderId?: string
   selectedPublishedDate?: string
   bookmarkTags: BookmarkTagRecord[]
   selectedAuthorHandles: string[]
@@ -151,25 +147,6 @@ export function filterBookmarksByPublishedDate(bookmarks: BookmarkRecord[], sele
   return bookmarks.filter((bookmark) => toDateKey(bookmark.createdAtOnX) === dateKey)
 }
 
-export function filterBookmarksByFolder(
-  bookmarks: BookmarkRecord[],
-  folders: FolderRecord[],
-  bookmarkFolders: BookmarkFolderRecord[],
-  selectedFolderId?: string
-) {
-  if (!selectedFolderId) {
-    return bookmarks
-  }
-
-  const validFolderIds = getDescendantFolderIds(folders, selectedFolderId)
-  const folderIdByBookmarkId = new Map(bookmarkFolders.map((bookmarkFolder) => [bookmarkFolder.bookmarkId, bookmarkFolder.folderId]))
-
-  return bookmarks.filter((bookmark) => {
-    const folderId = folderIdByBookmarkId.get(bookmark.tweetId)
-    return folderId ? validFolderIds.has(folderId) : false
-  })
-}
-
 export function filterBookmarksByFlags(
   bookmarks: BookmarkRecord[],
   {
@@ -220,7 +197,7 @@ export function applyBookmarkFilters(bookmarks: BookmarkRecord[], options: Bookm
         filterBookmarksBySavedTime(
           filterBookmarksByTags(
             filterBookmarksByAuthors(
-              filterBookmarksByFolder(filterBookmarks(bookmarks, options.query), options.folders, options.bookmarkFolders, options.selectedFolderId),
+              filterBookmarks(bookmarks, options.query),
               options.selectedAuthorHandles,
               options.authorMatchMode
             ),

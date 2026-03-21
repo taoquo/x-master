@@ -30,7 +30,7 @@ test("BookmarkList renders bookmark cards", () => {
       selectedBookmarkId: "1",
       resultCount: 2,
       sortLabel: "newest saved",
-      folderLabel: "Inbox",
+      contextLabel: "Inbox",
       onSelectBookmark: () => {},
       bookmarks: [
         {

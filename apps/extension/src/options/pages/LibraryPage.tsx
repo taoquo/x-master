@@ -1,60 +1,25 @@
 import React, { useEffect, useMemo, useState } from "react"
-import { Button, Grid, Group, NativeSelect, Stack, Text } from "@mantine/core"
-import { filterBookmarks, filterBookmarksByFolder, sortBookmarks, type BookmarkSortOrder } from "../../lib/search/searchBookmarks.ts"
-import { buildFolderTree, INBOX_FOLDER_ID } from "../../lib/storage/foldersStore.ts"
-import type { FolderRecord } from "../../lib/types.ts"
-import { BookmarkDetail } from "../../popup/components/BookmarkDetail.tsx"
-import { BookmarkList } from "../../popup/components/BookmarkList.tsx"
-import { useWorkspaceCommands } from "../hooks/useWorkspaceCommands.ts"
-import { useWorkspaceQueries } from "../hooks/useWorkspaceQueries.ts"
-import { getBookmarkTagsForBookmark, getCurrentFolderForBookmark, getSortLabel } from "../lib/pageHelpers.ts"
+import { Badge, Button, Group, Paper, Stack, Text } from "@mantine/core"
+import { useMediaQuery } from "@mantine/hooks"
+import {
+  applyBookmarkFilters,
+  type BookmarkSortOrder,
+  type MultiValueMatchMode,
+  type SavedTimeRange
+} from "../../lib/search/searchBookmarks.ts"
+import { InboxBookmarkDetailDrawer } from "../components/InboxBookmarkDetailDrawer.tsx"
+import { InboxDetailPanel } from "../components/InboxDetailPanel.tsx"
+import { InboxTable } from "../components/InboxTable.tsx"
+import { InboxWorkbenchToolbar } from "../components/InboxWorkbenchToolbar.tsx"
+import { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
+import { getAuthorOptions, getBookmarkTagsForBookmark } from "../lib/pageHelpers.ts"
 import type { LibraryView } from "../lib/navigation.ts"
 import { SectionHeader, SurfaceCard } from "../../ui/components.tsx"
+import { ExtensionUiProvider } from "../../ui/provider.tsx"
+import { isUiTestEnv } from "../../ui/testEnv.ts"
 
 function countBookmarksByTag(tagId: string, bookmarkTags: Array<{ tagId: string }>) {
   return bookmarkTags.filter((bookmarkTag) => bookmarkTag.tagId === tagId).length
-}
-
-function FolderNode({
-  node,
-  depth,
-  selectedFolderId,
-  onSelectFolder,
-  bookmarkCountByFolderId
-}: {
-  node: FolderRecord & { children: Array<FolderRecord & { children: never[] }> }
-  depth: number
-  selectedFolderId?: string
-  onSelectFolder: (folderId: string) => void
-  bookmarkCountByFolderId: Map<string, number>
-}) {
-  return (
-    <div style={{ display: "grid", gap: 4 }}>
-      <button
-        type="button"
-        onClick={() => onSelectFolder(node.id)}
-        style={{
-          marginLeft: depth * 14,
-          padding: "8px 10px",
-          borderRadius: 8,
-          border: node.id === selectedFolderId ? "1px solid #486581" : "1px solid #d9e2ec",
-          background: node.id === selectedFolderId ? "#e3f2fd" : "#ffffff",
-          textAlign: "left"
-        }}>
-        {node.name} ({bookmarkCountByFolderId.get(node.id) ?? 0})
-      </button>
-      {node.children.map((childNode) => (
-        <FolderNode
-          key={childNode.id}
-          node={childNode}
-          depth={depth + 1}
-          selectedFolderId={selectedFolderId}
-          onSelectFolder={onSelectFolder}
-          bookmarkCountByFolderId={bookmarkCountByFolderId}
-        />
-      ))}
-    </div>
-  )
 }
 
 interface LibraryPageProps {
@@ -63,40 +28,31 @@ interface LibraryPageProps {
 }
 
 export function LibraryPage({ view, onViewChange }: LibraryPageProps) {
-  const queries = useWorkspaceQueries()
-  const commands = useWorkspaceCommands({
-    bookmarks: queries.bookmarks,
-    refreshData: queries.refreshData
-  })
+  const workspace = useWorkspaceData()
+  const testEnv = isUiTestEnv()
+  const showDetailPane = !testEnv && (useMediaQuery("(min-width: 1120px)", false, { getInitialValueInEffect: false }) ?? false)
   const [selectedTagId, setSelectedTagId] = useState<string | undefined>(undefined)
-  const [selectedFolderId, setSelectedFolderId] = useState<string>(INBOX_FOLDER_ID)
   const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | undefined>(undefined)
+  const [selectedBookmarkIds, setSelectedBookmarkIds] = useState<string[]>([])
   const [query, setQuery] = useState("")
+  const [selectedAuthorHandles, setSelectedAuthorHandles] = useState<string[]>([])
+  const [authorMatchMode, setAuthorMatchMode] = useState<MultiValueMatchMode>("any")
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
+  const [tagMatchMode, setTagMatchMode] = useState<MultiValueMatchMode>("all")
+  const [timeRange, setTimeRange] = useState<SavedTimeRange>("all")
   const [sortOrder, setSortOrder] = useState<BookmarkSortOrder>("saved-desc")
+  const [onlyWithMedia, setOnlyWithMedia] = useState(false)
+  const [onlyLongform, setOnlyLongform] = useState(false)
+  const [bulkTagId, setBulkTagId] = useState("")
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
 
   useEffect(() => {
     if (view === "tags") {
-      setSelectedTagId((current) => current ?? queries.tags[0]?.id)
-      return
+      setSelectedTagId((current) => current ?? workspace.tags[0]?.id)
     }
+  }, [workspace.tags, view])
 
-    if (view === "folders") {
-      setSelectedFolderId((current) => current || queries.folders[0]?.id || INBOX_FOLDER_ID)
-    }
-  }, [queries.folders, queries.tags, view])
-
-  const folderTree = useMemo(() => buildFolderTree(queries.folders), [queries.folders])
-  const bookmarkCountByFolderId = useMemo(() => {
-    const counts = new Map<string, number>()
-
-    for (const bookmarkFolder of queries.bookmarkFolders) {
-      counts.set(bookmarkFolder.folderId, (counts.get(bookmarkFolder.folderId) ?? 0) + 1)
-    }
-
-    return counts
-  }, [queries.bookmarkFolders])
-
-  const filteredBookmarks = useMemo(() => {
+  const scopedBookmarks = useMemo(() => {
     switch (view) {
       case "tags": {
         if (!selectedTagId) {
@@ -104,163 +60,291 @@ export function LibraryPage({ view, onViewChange }: LibraryPageProps) {
         }
 
         const bookmarkIds = new Set(
-          queries.bookmarkTags.filter((bookmarkTag) => bookmarkTag.tagId === selectedTagId).map((bookmarkTag) => bookmarkTag.bookmarkId)
+          workspace.bookmarkTags.filter((bookmarkTag) => bookmarkTag.tagId === selectedTagId).map((bookmarkTag) => bookmarkTag.bookmarkId)
         )
 
-        return queries.bookmarks.filter((bookmark) => bookmarkIds.has(bookmark.tweetId))
+        return workspace.bookmarks.filter((bookmark) => bookmarkIds.has(bookmark.tweetId))
       }
-      case "folders":
-        return filterBookmarksByFolder(queries.bookmarks, queries.folders, queries.bookmarkFolders, selectedFolderId)
       case "all":
       default:
-        return queries.bookmarks
-    }
-  }, [queries.bookmarkFolders, queries.bookmarkTags, queries.bookmarks, queries.folders, selectedFolderId, selectedTagId, view])
+        return workspace.bookmarks
+      }
+  }, [selectedTagId, view, workspace.bookmarkTags, workspace.bookmarks])
 
+  function handleClearFilters() {
+    setQuery("")
+    setSelectedAuthorHandles([])
+    setAuthorMatchMode("any")
+    setSelectedTagIds([])
+    setTagMatchMode("all")
+    setTimeRange("all")
+    setSortOrder("saved-desc")
+    setOnlyWithMedia(false)
+    setOnlyLongform(false)
+    setSelectedBookmarkIds([])
+    setBulkTagId("")
+  }
+
+  function handleToggleAuthor(authorHandle: string) {
+    setSelectedAuthorHandles((current) =>
+      current.includes(authorHandle) ? current.filter((value) => value !== authorHandle) : [...current, authorHandle]
+    )
+  }
+
+  function handleToggleTag(tagId: string) {
+    setSelectedTagIds((current) => (current.includes(tagId) ? current.filter((value) => value !== tagId) : [...current, tagId]))
+  }
+
+  function handleToggleBookmarkSelection(bookmarkId: string) {
+    setSelectedBookmarkIds((current) =>
+      current.includes(bookmarkId) ? current.filter((value) => value !== bookmarkId) : [...current, bookmarkId]
+    )
+  }
+
+  function handleSelectAllVisible() {
+    setSelectedBookmarkIds(visibleBookmarks.map((bookmark) => bookmark.tweetId))
+  }
+
+  function handleClearSelection() {
+    setSelectedBookmarkIds([])
+  }
+
+  const authorOptions = useMemo(() => getAuthorOptions(scopedBookmarks), [scopedBookmarks])
   const visibleBookmarks = useMemo(
-    () => sortBookmarks(filterBookmarks(filteredBookmarks, query), sortOrder),
-    [filteredBookmarks, query, sortOrder]
+    () =>
+      applyBookmarkFilters(scopedBookmarks, {
+        query,
+        bookmarkTags: workspace.bookmarkTags,
+        selectedPublishedDate: undefined,
+        selectedAuthorHandles,
+        authorMatchMode,
+        selectedTagIds,
+        tagMatchMode,
+        timeRange,
+        onlyWithMedia,
+        onlyLongform,
+        sortOrder
+      }),
+    [
+      authorMatchMode,
+      onlyLongform,
+      onlyWithMedia,
+      query,
+      scopedBookmarks,
+      selectedAuthorHandles,
+      selectedTagIds,
+      sortOrder,
+      tagMatchMode,
+      timeRange,
+      workspace.bookmarkTags
+    ]
   )
 
   const selectedBookmark = useMemo(
-    () => visibleBookmarks.find((bookmark) => bookmark.tweetId === selectedBookmarkId) ?? visibleBookmarks[0] ?? null,
+    () => visibleBookmarks.find((bookmark) => bookmark.tweetId === selectedBookmarkId) ?? null,
     [selectedBookmarkId, visibleBookmarks]
   )
 
+  const visibleBookmarkIds = useMemo(() => new Set(visibleBookmarks.map((bookmark) => bookmark.tweetId)), [visibleBookmarks])
+
   useEffect(() => {
-    if (!selectedBookmark && visibleBookmarks[0]) {
-      setSelectedBookmarkId(visibleBookmarks[0].tweetId)
+    setSelectedBookmarkIds((current) => current.filter((bookmarkId) => visibleBookmarkIds.has(bookmarkId)))
+  }, [visibleBookmarkIds])
+
+  useEffect(() => {
+    if (selectedBookmarkId && !visibleBookmarkIds.has(selectedBookmarkId)) {
+      setSelectedBookmarkId(showDetailPane ? visibleBookmarks[0]?.tweetId : undefined)
+    }
+  }, [selectedBookmarkId, showDetailPane, visibleBookmarkIds, visibleBookmarks])
+
+  useEffect(() => {
+    if (showDetailPane && visibleBookmarks.length && !selectedBookmarkId) {
+      setSelectedBookmarkId(visibleBookmarks[0]?.tweetId)
+    }
+  }, [selectedBookmarkId, showDetailPane, visibleBookmarks])
+
+  const tagsById = useMemo(() => new Map(workspace.tags.map((tag) => [tag.id, tag])), [workspace.tags])
+  const selectedBookmarkTags = useMemo(
+    () => getBookmarkTagsForBookmark(selectedBookmark?.tweetId, workspace.bookmarkTags, tagsById),
+    [workspace.bookmarkTags, selectedBookmark?.tweetId, tagsById]
+  )
+  const selectedBookmarkIndex = useMemo(
+    () => visibleBookmarks.findIndex((bookmark) => bookmark.tweetId === selectedBookmark?.tweetId),
+    [selectedBookmark?.tweetId, visibleBookmarks]
+  )
+
+  async function handleBulkTag() {
+    if (!selectedBookmarkIds.length || !bulkTagId) {
       return
     }
 
-    if (selectedBookmark && selectedBookmark.tweetId !== selectedBookmarkId) {
-      setSelectedBookmarkId(selectedBookmark.tweetId)
-    }
-  }, [selectedBookmark, selectedBookmarkId, visibleBookmarks])
+    await workspace.handleBulkAttachTag(selectedBookmarkIds, bulkTagId)
+    setSelectedBookmarkIds([])
+  }
 
-  const tagsById = useMemo(() => new Map(queries.tags.map((tag) => [tag.id, tag])), [queries.tags])
-  const selectedBookmarkTags = useMemo(
-    () => getBookmarkTagsForBookmark(selectedBookmark?.tweetId, queries.bookmarkTags, tagsById),
-    [queries.bookmarkTags, selectedBookmark?.tweetId, tagsById]
-  )
-  const currentFolder = useMemo(
-    () => getCurrentFolderForBookmark(selectedBookmark?.tweetId, queries.bookmarkFolders, queries.foldersById),
-    [queries.bookmarkFolders, queries.foldersById, selectedBookmark?.tweetId]
-  )
+  function handleSelectPrevious() {
+    if (selectedBookmarkIndex <= 0) {
+      return
+    }
+
+    setSelectedBookmarkId(visibleBookmarks[selectedBookmarkIndex - 1]?.tweetId)
+  }
+
+  function handleSelectNext() {
+    if (selectedBookmarkIndex < 0 || selectedBookmarkIndex >= visibleBookmarks.length - 1) {
+      return
+    }
+
+    setSelectedBookmarkId(visibleBookmarks[selectedBookmarkIndex + 1]?.tweetId)
+  }
 
   const currentViewLabel =
     view === "tags"
-      ? queries.tags.find((tag) => tag.id === selectedTagId)?.name ?? "Tag"
-      : view === "folders"
-        ? queries.foldersById.get(selectedFolderId)?.name ?? "Folder"
-        : "All bookmarks"
+      ? workspace.tags.find((tag) => tag.id === selectedTagId)?.name ?? "Tag"
+      : "All bookmarks"
 
   return (
-    <Stack gap="lg">
-      <SectionHeader
-        title="Library"
-        description="Review organized bookmarks through all-items, tag, and folder views without leaving the main workspace."
-      />
-
-      <Grid gutter="lg">
-        <Grid.Col span={{ base: 12, xl: 3 }}>
-          <SurfaceCard title="Library views">
-            <Group gap="xs" wrap="wrap">
-              <Button type="button" variant={view === "all" ? "filled" : "light"} onClick={() => onViewChange("all")} disabled={view === "all"}>
+    <ExtensionUiProvider>
+      <Stack gap="md" style={{ minHeight: 0, height: testEnv ? "auto" : "calc(100vh - 32px)" }}>
+        <SectionHeader
+          title="Library"
+          description="Review the full collection in the same card-based workbench flow as Inbox, with tags as a browsing and filtering surface."
+          actions={
+            <Paper
+              p={4}
+              radius="md"
+              withBorder
+              style={{
+                display: "inline-flex",
+                gap: 3,
+                background: "#f3f3f4"
+              }}>
+              <Button type="button" variant={view === "all" ? "white" : "subtle"} color={view === "all" ? "dark" : "gray"} onClick={() => onViewChange("all")} disabled={view === "all"}>
                 All
               </Button>
-              <Button type="button" variant={view === "tags" ? "filled" : "light"} onClick={() => onViewChange("tags")} disabled={view === "tags"}>
+              <Button type="button" variant={view === "tags" ? "white" : "subtle"} color={view === "tags" ? "dark" : "gray"} onClick={() => onViewChange("tags")} disabled={view === "tags"}>
                 Tags
               </Button>
-              <Button type="button" variant={view === "folders" ? "filled" : "light"} onClick={() => onViewChange("folders")} disabled={view === "folders"}>
-                Folders
-              </Button>
+            </Paper>
+          }
+        />
+
+        <SurfaceCard title="Library scope" description={`${currentViewLabel} · ${visibleBookmarks.length} visible of ${scopedBookmarks.length} in scope.`}>
+          <Stack gap="md">
+            <Group gap="xs" wrap="wrap">
+              <Badge variant="light" color="dark">
+                {workspace.bookmarks.length} bookmarks
+              </Badge>
+              <Badge variant="light" color="gray">
+                {workspace.tags.length} tags in use
+              </Badge>
+              <Badge variant="light" color="blue">
+                {new Set(workspace.bookmarkTags.map((bookmarkTag) => bookmarkTag.bookmarkId)).size} tagged
+              </Badge>
             </Group>
-
-            <label style={{ display: "grid", gap: 4 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>Search</span>
-              <input value={query} placeholder="Search library" onChange={(event) => setQuery(event.target.value)} />
-            </label>
-            <label style={{ display: "grid", gap: 4 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>Sort</span>
-              <NativeSelect value={sortOrder} onChange={(event) => setSortOrder(event.currentTarget.value as BookmarkSortOrder)}>
-                <option value="saved-desc">Newest saved</option>
-                <option value="saved-asc">Oldest saved</option>
-                <option value="created-desc">Newest on X</option>
-                <option value="likes-desc">Most likes</option>
-              </NativeSelect>
-            </label>
-
-            {view === "all" ? (
-              <Stack gap={4}>
-                <Text fw={600}>Coverage</Text>
-                <Text>Bookmarks: {queries.bookmarks.length}</Text>
-                <Text>Tags in use: {queries.tags.length}</Text>
-                <Text>Folders in use: {queries.folders.length}</Text>
-              </Stack>
-            ) : null}
 
             {view === "tags" ? (
               <Stack gap="xs">
-                <Text fw={600}>Tag browser</Text>
-                {!queries.tags.length ? <Text c="dimmed">No tags available yet.</Text> : null}
-                {queries.tags.map((tag) => (
-                  <Button key={tag.id} type="button" variant={tag.id === selectedTagId ? "filled" : "subtle"} justify="flex-start" onClick={() => setSelectedTagId(tag.id)}>
-                    {tag.name} ({countBookmarksByTag(tag.id, queries.bookmarkTags)})
-                  </Button>
-                ))}
-              </Stack>
-            ) : null}
+            <Text fw={600}>Tag browser</Text>
+            {!workspace.tags.length ? <Text c="dimmed">No tags available yet.</Text> : null}
+                <Group gap="xs" wrap="wrap">
+                  {workspace.tags.map((tag) => (
+                    <Button key={tag.id} type="button" variant={tag.id === selectedTagId ? "filled" : "light"} color={tag.id === selectedTagId ? "dark" : "gray"} onClick={() => setSelectedTagId(tag.id)}>
+                      {tag.name} ({countBookmarksByTag(tag.id, workspace.bookmarkTags)})
+                    </Button>
+              ))}
+            </Group>
+            <Text size="sm" c="dimmed">
+              Tag creation lives in Settings.
+            </Text>
+          </Stack>
+        ) : null}
+          </Stack>
+        </SurfaceCard>
 
-            {view === "folders" ? (
-              <Stack gap="xs">
-                <Text fw={600}>Folder browser</Text>
-                {folderTree.map((folderNode) => (
-                  <FolderNode
-                    key={folderNode.id}
-                    node={folderNode as FolderRecord & { children: Array<FolderRecord & { children: never[] }> }}
-                    depth={0}
-                    selectedFolderId={selectedFolderId}
-                    onSelectFolder={setSelectedFolderId}
-                    bookmarkCountByFolderId={bookmarkCountByFolderId}
-                  />
-                ))}
-              </Stack>
-            ) : null}
-          </SurfaceCard>
-        </Grid.Col>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: showDetailPane ? "minmax(360px, 460px) minmax(0, 1fr)" : "1fr",
+            gap: 16,
+            flex: 1,
+            minHeight: 0
+          }}>
+          <Stack gap="md" style={{ minHeight: 0 }}>
+            <InboxWorkbenchToolbar
+              query={query}
+              onQueryChange={setQuery}
+              sortOrder={sortOrder}
+              onSortOrderChange={setSortOrder}
+              timeRange={timeRange}
+              onTimeRangeChange={setTimeRange}
+              selectedPublishedDate={undefined}
+              onClearPublishedDate={() => {}}
+              onlyWithMedia={onlyWithMedia}
+              onOnlyWithMediaChange={setOnlyWithMedia}
+              onlyLongform={onlyLongform}
+              onOnlyLongformChange={setOnlyLongform}
+              authorOptions={authorOptions}
+              selectedAuthorHandles={selectedAuthorHandles}
+              authorMatchMode={authorMatchMode}
+              onToggleAuthor={handleToggleAuthor}
+              onAuthorMatchModeChange={setAuthorMatchMode}
+              tags={workspace.tags}
+              selectedTagIds={selectedTagIds}
+              tagMatchMode={tagMatchMode}
+              onToggleTag={handleToggleTag}
+              onTagMatchModeChange={setTagMatchMode}
+              resultCount={visibleBookmarks.length}
+              totalCount={scopedBookmarks.length}
+              selectedCount={selectedBookmarkIds.length}
+              onSelectAllVisible={handleSelectAllVisible}
+              onClearSelection={handleClearSelection}
+              bulkTagId={bulkTagId}
+              onBulkTagIdChange={setBulkTagId}
+              onBulkTag={() => void handleBulkTag()}
+              isSavingTag={workspace.isSavingTag}
+              showAdvancedFilters={showAdvancedFilters}
+              onToggleAdvancedFilters={() => setShowAdvancedFilters((current) => !current)}
+              onClearFilters={handleClearFilters}
+            />
 
-        <Grid.Col span={{ base: 12, xl: 4 }}>
-          <SurfaceCard title="Results" description={`${currentViewLabel} · sorted by ${getSortLabel(sortOrder)}`}>
-            <BookmarkList
+            <InboxTable
               bookmarks={visibleBookmarks}
               selectedBookmarkId={selectedBookmark?.tweetId}
-              resultCount={visibleBookmarks.length}
-              sortLabel={getSortLabel(sortOrder)}
-              folderLabel={currentViewLabel}
+              selectedBookmarkIds={selectedBookmarkIds}
               onSelectBookmark={setSelectedBookmarkId}
+              onToggleBookmarkSelection={handleToggleBookmarkSelection}
             />
-          </SurfaceCard>
-        </Grid.Col>
+          </Stack>
 
-        <Grid.Col span={{ base: 12, xl: 5 }}>
-          <SurfaceCard title="Details" description="Review the current bookmark without leaving the library view.">
-            <BookmarkDetail
+          {showDetailPane ? (
+            <InboxDetailPanel
               bookmark={selectedBookmark}
-              currentFolder={currentFolder}
-              availableFolders={queries.folders}
               tags={selectedBookmarkTags}
-              availableTags={queries.tags}
-              onCreateFolder={commands.handleCreateFolder}
-              onMoveToFolder={(folderId) => commands.handleMoveToFolder(selectedBookmark?.tweetId ?? "", folderId)}
-              onCreateTag={commands.handleCreateTag}
-              onAttachTag={(tagId) => commands.handleAttachTag(selectedBookmark?.tweetId ?? "", tagId)}
-              onDetachTag={(tagId) => commands.handleDetachTag(selectedBookmark?.tweetId ?? "", tagId)}
-              isSaving={commands.isSavingTag || commands.isSavingFolder}
+              availableTags={workspace.tags}
+              onAttachTag={(tagId) => workspace.handleAttachTag(selectedBookmark?.tweetId ?? "", tagId)}
+              onDetachTag={(tagId) => workspace.handleDetachTag(selectedBookmark?.tweetId ?? "", tagId)}
+              isSaving={workspace.isSavingTag}
+              onSelectPrevious={handleSelectPrevious}
+              onSelectNext={handleSelectNext}
+              hasPrevious={selectedBookmarkIndex > 0}
+              hasNext={selectedBookmarkIndex >= 0 && selectedBookmarkIndex < visibleBookmarks.length - 1}
+              onClearSelection={() => setSelectedBookmarkId(undefined)}
             />
-          </SurfaceCard>
-        </Grid.Col>
-      </Grid>
-    </Stack>
+          ) : null}
+        </div>
+
+        <InboxBookmarkDetailDrawer
+          opened={!showDetailPane && Boolean(selectedBookmark)}
+          onClose={() => setSelectedBookmarkId(undefined)}
+          bookmark={selectedBookmark}
+          tags={selectedBookmarkTags}
+          availableTags={workspace.tags}
+          onAttachTag={(tagId) => workspace.handleAttachTag(selectedBookmark?.tweetId ?? "", tagId)}
+          onDetachTag={(tagId) => workspace.handleDetachTag(selectedBookmark?.tweetId ?? "", tagId)}
+          isSaving={workspace.isSavingTag}
+        />
+      </Stack>
+    </ExtensionUiProvider>
   )
 }

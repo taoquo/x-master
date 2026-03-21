@@ -8,7 +8,6 @@ import {
   filterBookmarks,
   filterBookmarksByAuthors,
   filterBookmarksByPublishedDate,
-  filterBookmarksByFolder,
   filterBookmarksByFlags,
   filterBookmarksBySavedTime,
   filterBookmarksByTags,
@@ -217,47 +216,6 @@ test("filterBookmarksByPublishedDate filters bookmarks to one exact publish day"
   assert.equal(results[0].tweetId, "2")
 })
 
-test("filterBookmarksByFolder includes bookmarks from the selected folder and its children", () => {
-  const bookmarks = [
-    {
-      tweetId: "1",
-      tweetUrl: "https://x.com/alice/status/1",
-      authorName: "Alice",
-      authorHandle: "alice",
-      text: "hello",
-      createdAtOnX: "2026-03-15T00:00:00.000Z",
-      savedAt: "2026-03-17T00:00:00.000Z",
-      rawPayload: {}
-    },
-    {
-      tweetId: "2",
-      tweetUrl: "https://x.com/bob/status/2",
-      authorName: "Bob",
-      authorHandle: "bob",
-      text: "world",
-      createdAtOnX: "2026-03-15T00:00:00.000Z",
-      savedAt: "2026-03-17T00:00:00.000Z",
-      rawPayload: {}
-    }
-  ]
-
-  const results = filterBookmarksByFolder(
-    bookmarks,
-    [
-      { id: "folder-inbox", name: "Inbox", createdAt: "2026-03-16T00:00:00.000Z" },
-      { id: "folder-projects", name: "Projects", createdAt: "2026-03-16T00:00:00.000Z" },
-      { id: "folder-ai", name: "AI", parentId: "folder-projects", createdAt: "2026-03-16T00:00:00.000Z" }
-    ],
-    [
-      { bookmarkId: "1", folderId: "folder-projects", updatedAt: "2026-03-16T00:00:00.000Z" },
-      { bookmarkId: "2", folderId: "folder-ai", updatedAt: "2026-03-16T00:00:00.000Z" }
-    ],
-    "folder-projects"
-  )
-
-  assert.equal(results.length, 2)
-})
-
 test("filterBookmarksByFlags keeps only bookmarks matching media and longform filters", () => {
   const bookmarks = [
     {
@@ -359,9 +317,6 @@ test("applyBookmarkFilters combines cross-group filters with AND and sorts the r
 
   const results = applyBookmarkFilters(bookmarks, {
     query: "important",
-    folders: [{ id: "folder-inbox", name: "Inbox", createdAt: "2026-03-16T00:00:00.000Z" }],
-    bookmarkFolders: [{ bookmarkId: "1", folderId: "folder-inbox", updatedAt: "2026-03-16T00:00:00.000Z" }],
-    selectedFolderId: "folder-inbox",
     bookmarkTags: [{ id: "1:tag-1", bookmarkId: "1", tagId: "tag-1", createdAt: "2026-03-16T00:00:00.000Z" }],
     selectedAuthorHandles: ["alice"],
     authorMatchMode: "any",

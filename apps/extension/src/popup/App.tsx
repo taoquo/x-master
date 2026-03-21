@@ -17,8 +17,6 @@ function openWorkspace() {
 export default function App() {
   const [data, setData] = useState<PopupData>({
     bookmarks: [],
-    folders: [],
-    bookmarkFolders: [],
     tags: [],
     bookmarkTags: [],
     summary: createEmptySyncSummary(),
@@ -95,8 +93,8 @@ export default function App() {
             <Title order={4}>Overview</Title>
             <Text>Bookmarks: {data.bookmarks.length}</Text>
             <Text>Tags: {data.tags.length}</Text>
-            <Text>Latest sync status: {data.latestSyncRun?.status ?? "idle"}</Text>
-            {data.latestSyncRun?.finishedAt ? <Text>Latest sync finished: {data.latestSyncRun.finishedAt}</Text> : null}
+            <Text>Current sync status: {data.summary.status}</Text>
+            {data.summary.lastSyncedAt ? <Text>Last synced: {data.summary.lastSyncedAt}</Text> : null}
           </Stack>
         </Card>
 

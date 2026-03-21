@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react"
 import { exportBookmarks } from "../../lib/export/exportBookmarks.ts"
-import { createFolder, moveBookmarkToFolder, moveBookmarksToFolder } from "../../lib/storage/foldersStore.ts"
-import { attachTagToBookmark, attachTagToBookmarks, createTag, detachTagFromBookmark } from "../../lib/storage/tagsStore.ts"
+import { attachTagToBookmark, attachTagToBookmarks, createTag, deleteTag, detachTagFromBookmark, renameTag } from "../../lib/storage/tagsStore.ts"
 import { resetStoredData, runSync } from "../../lib/runtime/popupClient.ts"
 import type { BookmarkRecord } from "../../lib/types.ts"
 
@@ -27,7 +26,6 @@ interface UseWorkspaceCommandsOptions {
 export function useWorkspaceCommands({ bookmarks, refreshData }: UseWorkspaceCommandsOptions) {
   const [isSyncing, setIsSyncing] = useState(false)
   const [isSavingTag, setIsSavingTag] = useState(false)
-  const [isSavingFolder, setIsSavingFolder] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
 
   const handleSync = useCallback(async () => {
@@ -53,6 +51,37 @@ export function useWorkspaceCommands({ bookmarks, refreshData }: UseWorkspaceCom
       setIsSavingTag(true)
       try {
         await createTag({ name: trimmedName })
+        await refreshData()
+      } finally {
+        setIsSavingTag(false)
+      }
+    },
+    [refreshData]
+  )
+
+  const handleRenameTag = useCallback(
+    async (tagId: string, name: string) => {
+      const trimmedName = name.trim()
+      if (!trimmedName) {
+        return
+      }
+
+      setIsSavingTag(true)
+      try {
+        await renameTag({ tagId, name: trimmedName })
+        await refreshData()
+      } finally {
+        setIsSavingTag(false)
+      }
+    },
+    [refreshData]
+  )
+
+  const handleDeleteTag = useCallback(
+    async (tagId: string) => {
+      setIsSavingTag(true)
+      try {
+        await deleteTag(tagId)
         await refreshData()
       } finally {
         setIsSavingTag(false)
@@ -100,50 +129,6 @@ export function useWorkspaceCommands({ bookmarks, refreshData }: UseWorkspaceCom
     [refreshData]
   )
 
-  const handleCreateFolder = useCallback(
-    async (name: string, parentId?: string) => {
-      const trimmedName = name.trim()
-      if (!trimmedName) {
-        return
-      }
-
-      setIsSavingFolder(true)
-      try {
-        await createFolder({ name: trimmedName, parentId })
-        await refreshData()
-      } finally {
-        setIsSavingFolder(false)
-      }
-    },
-    [refreshData]
-  )
-
-  const handleMoveToFolder = useCallback(
-    async (bookmarkId: string, folderId: string) => {
-      setIsSavingFolder(true)
-      try {
-        await moveBookmarkToFolder({ bookmarkId, folderId })
-        await refreshData()
-      } finally {
-        setIsSavingFolder(false)
-      }
-    },
-    [refreshData]
-  )
-
-  const handleBulkMoveToFolder = useCallback(
-    async (bookmarkIds: string[], folderId: string) => {
-      setIsSavingFolder(true)
-      try {
-        await moveBookmarksToFolder({ bookmarkIds, folderId })
-        await refreshData()
-      } finally {
-        setIsSavingFolder(false)
-      }
-    },
-    [refreshData]
-  )
-
   const handleExport = useCallback(async () => {
     const payload = exportBookmarks(bookmarks)
     downloadJson("x-bookmarks.json", payload)
@@ -164,16 +149,14 @@ export function useWorkspaceCommands({ bookmarks, refreshData }: UseWorkspaceCom
   return {
     isSyncing,
     isSavingTag,
-    isSavingFolder,
     isResetting,
     handleSync,
     handleCreateTag,
+    handleRenameTag,
+    handleDeleteTag,
     handleAttachTag,
     handleDetachTag,
     handleBulkAttachTag,
-    handleCreateFolder,
-    handleMoveToFolder,
-    handleBulkMoveToFolder,
     handleExport,
     handleReset
   }

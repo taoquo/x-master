@@ -1,5 +1,4 @@
 import { upsertBookmarks } from "../lib/storage/bookmarksStore.ts"
-import { assignBookmarksToInboxIfMissing } from "../lib/storage/foldersStore.ts"
 import { createSyncRun } from "../lib/storage/syncRunsStore.ts"
 import { createEmptySyncSummary, type BookmarkRecord, type SyncSummary, type SyncRunRecord } from "../lib/types.ts"
 import { getSettings, saveSettings } from "../lib/storage/settings.ts"
@@ -22,7 +21,6 @@ interface RunBookmarkSyncOptions {
   fetchBookmarksPage?: typeof fetchBookmarksPage
   syncLimit?: number
   upsertBookmarks?: (bookmarks: BookmarkRecord[]) => Promise<{ insertedCount: number; updatedCount: number }>
-  assignBookmarksToInboxIfMissing?: (bookmarkIds: string[]) => Promise<void>
   createSyncRun?: (syncRun: SyncRunRecord) => Promise<void>
   updateSyncSummary?: (summary: SyncSummary) => Promise<void>
   getSettings?: typeof getSettings
@@ -75,13 +73,13 @@ export async function runBookmarkSync({
   fetchBookmarksPage: loadBookmarksPage = fetchBookmarksPage,
   syncLimit = DEFAULT_SYNC_LIMIT,
   upsertBookmarks: saveBookmarks = upsertBookmarks,
-  assignBookmarksToInboxIfMissing: assignToInbox = assignBookmarksToInboxIfMissing,
   createSyncRun: persistSyncRun = createSyncRun,
   updateSyncSummary,
   getSettings: readSettings = getSettings,
   saveSettings: writeSettings = saveSettings
 }: RunBookmarkSyncOptions = {}): Promise<SyncResult> {
   const startedAt = new Date().toISOString()
+  const syncRunId = `sync-${startedAt}`
 
   await persistSummary(
     createSummary({
@@ -92,6 +90,16 @@ export async function runBookmarkSync({
     readSettings,
     writeSettings
   )
+
+  await persistSyncRun({
+    id: syncRunId,
+    status: "running",
+    startedAt,
+    fetchedCount: 0,
+    insertedCount: 0,
+    updatedCount: 0,
+    failedCount: 0
+  })
 
   try {
     const cookieHeader = await getCookieHeader()
@@ -109,7 +117,6 @@ export async function runBookmarkSync({
     })
 
     const { insertedCount, updatedCount } = await saveBookmarks(bookmarks as BookmarkRecord[])
-    await assignToInbox(bookmarks.map((bookmark) => String(bookmark.tweetId)))
     const finishedAt = new Date().toISOString()
     const status = failedCount > 0 ? "partial_success" : "success"
     const summary = createSummary({
@@ -123,7 +130,7 @@ export async function runBookmarkSync({
     })
 
     await persistSyncRun({
-      id: `sync-${finishedAt}`,
+      id: syncRunId,
       status,
       startedAt,
       finishedAt,
@@ -152,7 +159,7 @@ export async function runBookmarkSync({
     })
 
     await persistSyncRun({
-      id: `sync-${finishedAt}`,
+      id: syncRunId,
       status: "error",
       startedAt,
       finishedAt,

@@ -36,20 +36,11 @@ test("buildDashboardModel derives dashboard pressure and recommendation from wor
         rawPayload: {}
       }
     ],
-    bookmarkFolders: [
-      { bookmarkId: "1", folderId: "folder-inbox", updatedAt: "2026-03-17T01:00:00.000Z" },
-      { bookmarkId: "2", folderId: "folder-research", updatedAt: "2026-03-18T01:00:00.000Z" },
-      { bookmarkId: "3", folderId: "folder-research", updatedAt: "2026-03-18T06:00:00.000Z" }
-    ],
     tags: [
       { id: "tag-1", name: "research", createdAt: "2026-03-18T00:00:00.000Z" }
     ],
     bookmarkTags: [
       { id: "bookmark-tag-1", bookmarkId: "2", tagId: "tag-1", createdAt: "2026-03-18T02:00:00.000Z" }
-    ],
-    folders: [
-      { id: "folder-inbox", name: "Inbox", createdAt: "2026-03-10T00:00:00.000Z" },
-      { id: "folder-research", name: "Research", createdAt: "2026-03-18T00:00:00.000Z" }
     ],
     summary: {
       status: "success",
@@ -59,29 +50,18 @@ test("buildDashboardModel derives dashboard pressure and recommendation from wor
       failedCount: 0,
       lastSyncedAt: "2026-03-18T08:00:00.000Z"
     },
-    latestSyncRun: {
-      id: "sync-1",
-      status: "success",
-      startedAt: "2026-03-18T07:59:00.000Z",
-      finishedAt: "2026-03-18T08:00:00.000Z",
-      fetchedCount: 3,
-      insertedCount: 3,
-      updatedCount: 0,
-      failedCount: 0
-    },
     now: new Date("2026-03-19T12:00:00.000Z")
   })
 
   assert.equal(model.metrics.totalBookmarks, 3)
-  assert.equal(model.metrics.inboxCount, 1)
-  assert.equal(model.metrics.organizedCount, 2)
+  assert.equal(model.metrics.inboxCount, 2)
+  assert.equal(model.metrics.organizedCount, 1)
   assert.equal(model.metrics.taggedCount, 1)
   assert.equal(model.metrics.untaggedCount, 2)
-  assert.equal(model.pressure.inboxShare, 33)
+  assert.equal(model.pressure.inboxShare, 67)
   assert.equal(model.pressure.taggedShare, 33)
   assert.equal(model.pressure.untaggedShare, 67)
-  assert.equal(model.recommendation.action, "library-tags")
-  assert.equal(model.recent.latestFolderName, "Research")
+  assert.equal(model.recommendation.action, "inbox")
   assert.equal(model.recent.savedLast7Days, 3)
   assert.equal(model.recent.activeDaysLast7Days, 2)
   assert.equal(model.authors.topAuthors[0]?.handle, "alice")
@@ -110,10 +90,8 @@ test("buildDashboardModel escalates sync failures ahead of filing recommendation
         rawPayload: {}
       }
     ],
-    bookmarkFolders: [{ bookmarkId: "1", folderId: "folder-inbox", updatedAt: "2026-03-17T01:00:00.000Z" }],
     tags: [],
     bookmarkTags: [],
-    folders: [{ id: "folder-inbox", name: "Inbox", createdAt: "2026-03-10T00:00:00.000Z" }],
     summary: {
       status: "error",
       fetchedCount: 1,
@@ -121,17 +99,6 @@ test("buildDashboardModel escalates sync failures ahead of filing recommendation
       updatedCount: 0,
       failedCount: 1,
       lastSyncedAt: "2026-03-18T08:00:00.000Z",
-      errorSummary: "Missing auth"
-    },
-    latestSyncRun: {
-      id: "sync-1",
-      status: "error",
-      startedAt: "2026-03-18T07:59:00.000Z",
-      finishedAt: "2026-03-18T08:00:00.000Z",
-      fetchedCount: 1,
-      insertedCount: 1,
-      updatedCount: 0,
-      failedCount: 1,
       errorSummary: "Missing auth"
     },
     now: new Date("2026-03-19T12:00:00.000Z")

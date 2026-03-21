@@ -13,8 +13,6 @@ export async function loadPopupData(): Promise<PopupData> {
   if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) {
     return {
       bookmarks: [],
-      folders: [],
-      bookmarkFolders: [],
       tags: [],
       bookmarkTags: [],
       summary: createEmptySyncSummary(),

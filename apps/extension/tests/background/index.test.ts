@@ -7,8 +7,6 @@ test("background message handler loads popup data", async () => {
   const handler = createBackgroundMessageHandler({
     loadPopupData: async () => ({
       bookmarks: [],
-      folders: [],
-      bookmarkFolders: [],
       tags: [],
       bookmarkTags: [],
       latestSyncRun: null,
@@ -42,8 +40,6 @@ test("background message handler runs sync", async () => {
   const handler = createBackgroundMessageHandler({
     loadPopupData: async () => ({
       bookmarks: [],
-      folders: [],
-      bookmarkFolders: [],
       tags: [],
       bookmarkTags: [],
       latestSyncRun: null,
@@ -77,8 +73,6 @@ test("background message handler resets local data", async () => {
   const handler = createBackgroundMessageHandler({
     loadPopupData: async () => ({
       bookmarks: [],
-      folders: [],
-      bookmarkFolders: [],
       tags: [],
       bookmarkTags: [],
       latestSyncRun: null,

@@ -7,14 +7,6 @@ import { act } from "react"
 import { createRoot } from "react-dom/client"
 import { getAllBookmarks, upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
-import {
-  assignBookmarksToInboxIfMissing,
-  createFolder,
-  ensureInboxFolder,
-  getAllBookmarkFolders,
-  getAllFolders,
-  moveBookmarkToFolder
-} from "../../src/lib/storage/foldersStore.ts"
 import { createTag, getAllBookmarkTags, getAllTags } from "../../src/lib/storage/tagsStore.ts"
 import { InboxPage } from "../../src/options/pages/InboxPage.tsx"
 
@@ -77,10 +69,6 @@ async function waitForAssertion(assertion: () => void, attempts = 8) {
 async function seedWorkspaceData() {
   await resetBookmarksDb()
 
-  await ensureInboxFolder()
-  const projectsFolder = await createFolder({ name: "Projects" })
-  const aiFolder = await createFolder({ name: "AI", parentId: projectsFolder.id })
-
   await upsertBookmarks([
     {
       tweetId: "1",
@@ -114,9 +102,6 @@ async function seedWorkspaceData() {
     }
   ])
 
-  await assignBookmarksToInboxIfMissing(["1", "2", "3"])
-  await moveBookmarkToFolder({ bookmarkId: "3", folderId: aiFolder.id })
-
   await createTag({ name: "saved" })
   await createTag({ name: "follow-up" })
 
@@ -125,8 +110,6 @@ async function seedWorkspaceData() {
   assert.ok(followUpTag)
 
   return {
-    projectsFolderId: projectsFolder.id,
-    aiFolderId: aiFolder.id,
     followUpTagId: followUpTag.id
   }
 }
@@ -140,18 +123,14 @@ function installChromeMock() {
         messages.push(message)
 
         if (message.type === "popup/load") {
-          const [bookmarks, folders, bookmarkFolders, tags, bookmarkTags] = await Promise.all([
+          const [bookmarks, tags, bookmarkTags] = await Promise.all([
             getAllBookmarks(),
-            getAllFolders(),
-            getAllBookmarkFolders(),
             getAllTags(),
             getAllBookmarkTags()
           ])
 
           return {
             bookmarks,
-            folders,
-            bookmarkFolders,
             tags,
             bookmarkTags,
             latestSyncRun: null,
@@ -223,17 +202,16 @@ test("InboxPage renders the workbench layout and switches detail drawer with row
   })
 
   assert.match(container.textContent ?? "", /Search/)
-  assert.match(container.textContent ?? "", /User/)
-  assert.match(container.textContent ?? "", /Folder/)
-  assert.match(container.textContent ?? "", /Summary/)
+  assert.match(container.textContent ?? "", /All inbox/)
+  assert.match(container.textContent ?? "", /Longform/)
   assert.match(container.textContent ?? "", /Select all visible/)
   assert.doesNotMatch(container.textContent ?? "", /Bookmark details/)
 
-  const bobCell = Array.from(container.querySelectorAll("td")).find((cell) => cell.textContent?.includes("Bob"))
-  assert.ok(bobCell)
+  const bobCard = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Bob"))
+  assert.ok(bobCard)
 
   await act(async () => {
-    bobCell.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    bobCard.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
 
   await waitForAssertion(() => {
@@ -253,7 +231,7 @@ test("InboxPage prunes hidden batch selections when filters change", async () =>
     assert.match(container.textContent ?? "", /Alice/)
   })
 
-  assert.equal(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Move selected"), false)
+  assert.equal(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Apply tag"), false)
 
   const selectAllVisibleButton = getButton(container, "Select all visible")
   await act(async () => {
@@ -262,7 +240,7 @@ test("InboxPage prunes hidden batch selections when filters change", async () =>
 
   await waitForAssertion(() => {
     assert.match(container.textContent ?? "", /3 selected/)
-    assert.ok(getButton(container, "Move selected"))
+    assert.ok(getButton(container, "Apply tag"))
   })
 
   const moreFiltersButton = getButton(container, "More filters")
@@ -297,7 +275,7 @@ test("InboxPage prunes hidden batch selections when filters change", async () =>
   await waitForAssertion(() => {
     assert.match(container.textContent ?? "", /alpha note for inbox/)
     assert.match(container.textContent ?? "", /beta note for inbox/)
-    assert.equal(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Move selected"), false)
+    assert.equal(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Apply tag"), false)
   })
 })
 
@@ -311,7 +289,8 @@ test("InboxPage supports item-level tagging from the detail drawer", async () =>
     assert.match(container.textContent ?? "", /Alice/)
   })
 
-  const searchInput = getInputByLabel(container, "Search") as HTMLInputElement
+  const searchInput = container.querySelector('input[type="search"]') as HTMLInputElement | null
+  assert.ok(searchInput)
   await act(async () => {
     setInputValue(searchInput, "Cara", dom)
   })
@@ -320,25 +299,26 @@ test("InboxPage supports item-level tagging from the detail drawer", async () =>
     assert.match(container.textContent ?? "", /Cara/)
   })
 
-  const caraCell = Array.from(container.querySelectorAll("td")).find((cell) => cell.textContent?.includes("Cara"))
-  assert.ok(caraCell)
+  const caraCard = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Cara"))
+  assert.ok(caraCard)
 
   await act(async () => {
-    caraCell.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    caraCard.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
 
-  const existingTagSelect = getInputByLabel(container, "Existing tag") as HTMLSelectElement
+  const existingTagSelect = Array.from(container.querySelectorAll("select")).at(-1) as HTMLSelectElement | undefined
+  assert.ok(existingTagSelect)
   await act(async () => {
     setInputValue(existingTagSelect, seeded.followUpTagId, dom)
   })
 
-  const addTagButton = getButton(container, "Add tag")
+  const addTagButton = getButton(container, "Save to library")
   await act(async () => {
     addTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
 
   await waitForAssertion(() => {
-    assert.match(container.textContent ?? "", /follow-up/)
+    assert.doesNotMatch(container.textContent ?? "", /Cara/)
   })
 })
 

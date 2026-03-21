@@ -8,11 +8,13 @@ import {
   attachTagToBookmark,
   attachTagToBookmarks,
   createTag,
+  deleteTag,
   detachTagFromBookmark,
   getAllBookmarkTags,
   getAllTags,
   listBookmarksByTag,
-  listTagsForBookmark
+  listTagsForBookmark,
+  renameTag
 } from "../../src/lib/storage/tagsStore.ts"
 
 test("createTag stores a tag and getAllTags returns it", async () => {
@@ -114,6 +116,44 @@ test("attachTagToBookmarks stores one relation per bookmark", async () => {
   const bookmarkTags = await getAllBookmarkTags()
   assert.equal(bookmarkTags.length, 2)
   assert.equal(bookmarkTags.every((bookmarkTag) => bookmarkTag.tagId === tag.id), true)
+})
+
+test("renameTag updates the stored tag name", async () => {
+  await resetBookmarksDb()
+
+  const created = await createTag({ name: "follow-up" })
+  const renamed = await renameTag({ tagId: created.id, name: "deep-read" })
+  const tags = await getAllTags()
+
+  assert.equal(renamed.name, "deep-read")
+  assert.equal(tags[0]?.name, "deep-read")
+})
+
+test("deleteTag removes the tag and all of its bookmark relations", async () => {
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-1",
+      tweetUrl: "https://x.com/alice/status/tweet-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "taggable",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T00:01:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const tag = await createTag({ name: "follow-up" })
+  await attachTagToBookmark({ bookmarkId: "tweet-1", tagId: tag.id })
+  await deleteTag(tag.id)
+
+  const tags = await getAllTags()
+  const bookmarkTags = await getAllBookmarkTags()
+
+  assert.equal(tags.length, 0)
+  assert.equal(bookmarkTags.length, 0)
 })
 
 test("createSyncRun stores sync runs in IndexedDB and getLatestSyncRun returns the newest one", async () => {

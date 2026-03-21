@@ -69,8 +69,6 @@ export interface ExtensionSettings {
 
 export interface PopupData {
   bookmarks: BookmarkRecord[]
-  folders: FolderRecord[]
-  bookmarkFolders: BookmarkFolderRecord[]
   tags: TagRecord[]
   bookmarkTags: BookmarkTagRecord[]
   summary: SyncSummary

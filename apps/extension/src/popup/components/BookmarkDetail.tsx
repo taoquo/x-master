@@ -1,17 +1,13 @@
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useMemo, useState } from "react"
 import { Anchor, Badge, Button, Card, Group, Image, NativeSelect, Stack, Text, TextInput, Title } from "@mantine/core"
-import type { FolderRecord, BookmarkRecord, TagRecord } from "../../lib/types.ts"
+import type { BookmarkRecord, TagRecord } from "../../lib/types.ts"
 import { EmptyState } from "../../ui/components.tsx"
 import { ExtensionUiProvider } from "../../ui/provider.tsx"
 
 interface BookmarkDetailProps {
   bookmark: BookmarkRecord | null
-  currentFolder: FolderRecord | null
-  availableFolders: FolderRecord[]
   tags: TagRecord[]
   availableTags: TagRecord[]
-  onCreateFolder: (name: string, parentId?: string) => Promise<void> | void
-  onMoveToFolder: (folderId: string) => Promise<void> | void
   onCreateTag: (name: string) => Promise<void> | void
   onAttachTag: (tagId: string) => Promise<void> | void
   onDetachTag: (tagId: string) => Promise<void> | void
@@ -20,12 +16,8 @@ interface BookmarkDetailProps {
 
 export function BookmarkDetail({
   bookmark,
-  currentFolder,
-  availableFolders,
   tags,
   availableTags,
-  onCreateFolder,
-  onMoveToFolder,
   onCreateTag,
   onAttachTag,
   onDetachTag,
@@ -33,18 +25,12 @@ export function BookmarkDetail({
 }: BookmarkDetailProps) {
   const [newTagName, setNewTagName] = useState("")
   const [selectedAvailableTagId, setSelectedAvailableTagId] = useState("")
-  const [newFolderName, setNewFolderName] = useState("")
-  const [selectedFolderId, setSelectedFolderId] = useState(currentFolder?.id ?? "")
   const hasMedia = Array.isArray(bookmark?.media) && bookmark.media.length > 0
 
   const selectableTags = useMemo(() => {
     const attachedTagIds = new Set(tags.map((tag) => tag.id))
     return availableTags.filter((tag) => !attachedTagIds.has(tag.id))
   }, [availableTags, tags])
-
-  useEffect(() => {
-    setSelectedFolderId(currentFolder?.id ?? availableFolders[0]?.id ?? "")
-  }, [availableFolders, currentFolder])
 
   if (!bookmark) {
     return (
@@ -77,24 +63,6 @@ export function BookmarkDetail({
 
     await onAttachTag(selectedAvailableTagId)
     setSelectedAvailableTagId("")
-  }
-
-  async function handleMoveToFolder() {
-    if (!selectedFolderId) {
-      return
-    }
-
-    await onMoveToFolder(selectedFolderId)
-  }
-
-  async function handleCreateFolder() {
-    const trimmedName = newFolderName.trim()
-    if (!trimmedName) {
-      return
-    }
-
-    await onCreateFolder(trimmedName, currentFolder?.id)
-    setNewFolderName("")
   }
 
   return (
@@ -148,29 +116,6 @@ export function BookmarkDetail({
           </Stack>
         </Card>
       ) : null}
-      <Card padding="lg">
-        <Stack gap="sm">
-          <Title order={3}>Folder</Title>
-          <Text>Current folder: {currentFolder?.name ?? "Inbox"}</Text>
-          <label>
-            Move to folder
-            <NativeSelect value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.currentTarget.value)} disabled={isSaving}>
-              {availableFolders.map((folder) => (
-                <option key={folder.id} value={folder.id}>
-                  {folder.name}
-                </option>
-              ))}
-            </NativeSelect>
-          </label>
-          <Button type="button" onClick={() => void handleMoveToFolder()} disabled={isSaving || !selectedFolderId}>
-            Move bookmark
-          </Button>
-          <TextInput label="New child folder" value={newFolderName} onChange={(event) => setNewFolderName(event.currentTarget.value)} />
-          <Button type="button" variant="light" onClick={() => void handleCreateFolder()} disabled={isSaving || !newFolderName.trim()}>
-            Create child folder
-          </Button>
-        </Stack>
-      </Card>
       <Card padding="lg">
         <Stack gap="sm">
           <Title order={3}>Tags</Title>

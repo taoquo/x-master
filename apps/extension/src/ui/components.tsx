@@ -1,14 +1,32 @@
-import React from "react"
-import { AppShell, Badge, Button, Card, Group, SimpleGrid, Stack, Text, Title } from "@mantine/core"
+import React, { useMemo, useState } from "react"
+import { ActionIcon, Badge, Button, Card, Group, SimpleGrid, Stack, Text, Title, UnstyledButton } from "@mantine/core"
+import { useMediaQuery } from "@mantine/hooks"
 import type { OptionsSection } from "../options/lib/navigation.ts"
 import { getStatusColor } from "./theme.ts"
+import { isUiTestEnv } from "./testEnv.ts"
+import { AppIcon } from "./icons.tsx"
 
-export function SectionHeader({ title, description }: { title: string; description: string }) {
+export function SectionHeader({
+  title,
+  description,
+  actions
+}: {
+  title: string
+  description: string
+  actions?: React.ReactNode
+}) {
   return (
-    <Stack gap={4}>
-      <Title order={2}>{title}</Title>
-      <Text c="dimmed">{description}</Text>
-    </Stack>
+    <Group justify="space-between" align="center" wrap="wrap">
+      <Stack gap={4}>
+        <Text fw={700} size="xl" c="#18181b">
+          {title}
+        </Text>
+        <Text size="sm" c="dimmed">
+          {description}
+        </Text>
+      </Stack>
+      {actions ? <Group gap="sm">{actions}</Group> : null}
+    </Group>
   )
 }
 
@@ -22,7 +40,7 @@ export function SurfaceCard({
   children: React.ReactNode
 }) {
   return (
-    <Card padding="lg">
+    <Card padding="lg" style={{ background: "#ffffff" }}>
       {title ? (
         <Stack gap={4} mb="md">
           <Title order={3}>{title}</Title>
@@ -36,9 +54,9 @@ export function SurfaceCard({
 
 export function MetricCard({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
-    <Card padding="lg">
-      <Stack gap={6}>
-        <Text size="sm" c="dimmed">
+    <Card padding="lg" style={{ background: "#ffffff" }}>
+      <Stack gap={8}>
+        <Text size="xs" tt="uppercase" fw={700} c="#71717a">
           {label}
         </Text>
         <Title order={2}>{value}</Title>
@@ -67,9 +85,7 @@ export function EmptyState({ title, description }: { title: string; description:
 
 export function StatusBadge({ status }: { status?: string }) {
   return (
-    <Badge
-      variant="light"
-      color={getStatusColor(status)}>
+    <Badge variant="light" color={getStatusColor(status)}>
       {status ?? "idle"}
     </Badge>
   )
@@ -82,46 +98,161 @@ interface WorkspaceShellProps {
   children: React.ReactNode
 }
 
+function getNavIcon(section: OptionsSection) {
+  switch (section) {
+    case "dashboard":
+      return "dashboard"
+    case "inbox":
+      return "inbox"
+    case "library":
+      return "library"
+    case "settings":
+      return "settings"
+    default:
+      return "dashboard"
+  }
+}
+
 export function WorkspaceShell({ section, navItems, onSelectSection, children }: WorkspaceShellProps) {
+  const testEnv = isUiTestEnv()
+  const autoCollapsed = useMediaQuery("(max-width: 1380px)", false, { getInitialValueInEffect: false }) ?? false
+  const [manualCollapsed, setManualCollapsed] = useState<boolean | null>(null)
+  const collapsed = testEnv ? false : manualCollapsed ?? autoCollapsed
+  const railWidth = collapsed ? 72 : 288
+
+  const navButtons = useMemo(
+    () =>
+      navItems.map((item) => {
+        const active = item.id === section
+
+        return (
+          <UnstyledButton
+            key={item.id}
+            type="button"
+            onClick={() => onSelectSection(item.id)}
+            aria-label={item.label}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: collapsed ? "center" : "space-between",
+              gap: 16,
+              minHeight: 40,
+              width: "100%",
+              padding: collapsed ? "10px 0" : "10px 12px",
+              borderRadius: 8,
+              background: active ? "#18181b" : "#ffffff",
+              color: active ? "#ffffff" : "#18181b",
+              border: active ? "1px solid #18181b" : "1px solid transparent",
+              transition: "background 120ms ease, color 120ms ease, border-color 120ms ease"
+            }}>
+            <Group gap={collapsed ? 0 : 16} wrap="nowrap" justify={collapsed ? "center" : "flex-start"}>
+              <AppIcon name={getNavIcon(item.id)} size={20} />
+              {!collapsed ? (
+                <Text size="sm" fw={500} c="inherit">
+                  {item.label}
+                </Text>
+              ) : null}
+            </Group>
+          </UnstyledButton>
+        )
+      }),
+    [collapsed, navItems, onSelectSection, section]
+  )
+
   return (
-    <AppShell
-      padding="xl"
-      navbar={{ width: 296, breakpoint: 0 }}
-      styles={{
-        main: {
-          background: "linear-gradient(180deg, #f4f7fb 0%, #edf2f7 100%)"
-        }
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: `${railWidth}px minmax(0, 1fr)`,
+        minHeight: "100vh",
+        background: "#fafafa"
       }}>
-      <AppShell.Navbar p="xl">
-        <Stack gap="lg" h="100%">
-          <Stack gap={6}>
-            <Title order={3}>X Bookmark Manager</Title>
-            <Text c="dimmed">A workspace shell for syncing, triaging, reviewing, and maintaining bookmark organization.</Text>
-          </Stack>
+      <aside
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 18,
+          padding: 8,
+          borderRight: "1px solid #e4e4e7",
+          background: "#ffffff"
+        }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: collapsed ? "center" : "space-between",
+            gap: 12,
+            minHeight: 40,
+            padding: collapsed ? 0 : "0 4px"
+          }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: collapsed ? "center" : "space-between",
+              gap: 12,
+              flex: 1,
+              minWidth: 0,
+              padding: collapsed ? "0" : "0 8px"
+            }}>
+            <div
+              style={{
+                display: "grid",
+                placeItems: "center",
+                width: 28,
+                height: 28,
+                borderRadius: 8,
+                background: "#18181b",
+                color: "#ffffff",
+                fontSize: 13,
+                fontWeight: 700,
+                flexShrink: 0
+              }}>
+              X
+            </div>
+            {!collapsed ? (
+              <div style={{ minWidth: 0 }}>
+                <Text fw={600} size="sm" c="#18181b">
+                  X Bookmark Manager
+                </Text>
+                <Text size="xs" c="#71717a">
+                  Workspace
+                </Text>
+              </div>
+            ) : null}
+          </div>
 
-          <nav>
-            <Stack gap="xs">
-              {navItems.map((item) => {
-                const active = item.id === section
-                return (
-                  <Button
-                    key={item.id}
-                    type="button"
-                    justify="flex-start"
-                    variant={active ? "filled" : "subtle"}
-                    color={active ? "dark" : "gray"}
-                    onClick={() => onSelectSection(item.id)}>
-                    {item.label}
-                  </Button>
-                )
-              })}
-            </Stack>
-          </nav>
-        </Stack>
-      </AppShell.Navbar>
+          {!testEnv ? (
+            <ActionIcon
+              type="button"
+              variant="subtle"
+              color="gray"
+              onClick={() => setManualCollapsed(!collapsed)}
+              aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}>
+              <AppIcon name={collapsed ? "chevron-right" : "chevron-left"} size={16} />
+            </ActionIcon>
+          ) : null}
+        </div>
 
-      <AppShell.Main>{children}</AppShell.Main>
-    </AppShell>
+        <nav
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 4
+          }}>
+          {navButtons}
+        </nav>
+      </aside>
+
+      <main
+        style={{
+          minWidth: 0,
+          padding: 16,
+          background: "#fafafa"
+        }}>
+        {children}
+      </main>
+    </div>
   )
 }
 
@@ -150,7 +281,7 @@ export function ActionCard({
       type="button"
       onClick={onClick}
       padding="lg"
-      style={{ textAlign: "left" }}>
+      style={{ textAlign: "left", background: "#ffffff" }}>
       <Stack gap="xs">
         <Title order={3}>{title}</Title>
         <Text c="dimmed">{body}</Text>

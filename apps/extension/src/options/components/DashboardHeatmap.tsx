@@ -1,9 +1,9 @@
 import React from "react"
-import { Group, Stack, Text } from "@mantine/core"
+import { Badge, Group, Stack, Text } from "@mantine/core"
 import type { DashboardHeatmapWeek } from "../lib/dashboard.ts"
 
 const WEEKDAY_LABELS = ["Mon", "", "Wed", "", "Fri", "", ""]
-const HEATMAP_LEVEL_COLORS = ["#edf2f7", "#d6e9f7", "#9bc6eb", "#4f96d0", "#046495"]
+const HEATMAP_LEVEL_COLORS = ["#f4f4f5", "#e4e4e7", "#d4d4d8", "#71717a", "#18181b"]
 
 function formatMonth(date: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -56,10 +56,10 @@ export function DashboardHeatmap({
           </Text>
         </Stack>
 
-        <Group gap={6}>
-          <Text size="xs" c="dimmed">
+        <Group gap={6} wrap="nowrap">
+          <Badge variant="light" color="gray">
             Less
-          </Text>
+          </Badge>
           {HEATMAP_LEVEL_COLORS.map((color) => (
             <div
               key={color}
@@ -67,13 +67,14 @@ export function DashboardHeatmap({
                 width: 10,
                 height: 10,
                 borderRadius: 3,
-                background: color
+                background: color,
+                border: "1px solid rgba(24,24,27,0.08)"
               }}
             />
           ))}
-          <Text size="xs" c="dimmed">
+          <Badge variant="light" color="dark">
             More
-          </Text>
+          </Badge>
         </Group>
       </Group>
 
@@ -118,7 +119,7 @@ export function DashboardHeatmap({
                       height: 14,
                       borderRadius: 4,
                       background: cell.isFuture ? "#f8fafc" : HEATMAP_LEVEL_COLORS[cell.level],
-                      border: cell.isFuture ? "1px dashed #d6dde5" : "1px solid rgba(4, 100, 149, 0.08)",
+                      border: cell.isFuture ? "1px dashed #d4d4d8" : "1px solid rgba(24, 24, 27, 0.08)",
                       cursor: canSelect ? "pointer" : "default",
                       padding: 0,
                       appearance: "none",
