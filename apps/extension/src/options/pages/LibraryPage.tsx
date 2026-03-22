@@ -309,30 +309,52 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
         : selectedLifecycle === "stale"
           ? "Previously reviewed cards whose source material changed and now need another look."
           : "Every generated card, regardless of lifecycle state."
+  const onboardingNotice =
+    workspace.onboardingStep === "review-cards"
+      ? "Start with one draft, make it trustworthy, then move directly to the next card."
+      : workspace.onboardingStep === "export-vault"
+        ? "You already have a reviewed card. The next milestone is exporting your first vault from Settings."
+        : null
 
   return (
     <ExtensionUiProvider>
-      <Stack gap="md" style={{ minHeight: 0, height: testEnv ? "auto" : "calc(100vh - 32px)" }}>
+      <Stack gap="sm" style={{ minHeight: 0, height: testEnv ? "auto" : "calc(100vh - 32px)" }}>
         <SectionHeader
           title="Library"
-          description="Review, trust, and refine knowledge cards before they leave the app and enter your vault."
+          description="Review generated cards, resolve stale ones, and tighten the final note before it leaves the app."
           actions={
-            <Paper
-              p={4}
-              radius="md"
-              withBorder
-              style={{
-                display: "inline-flex",
-                gap: 3,
-                background: "#f3f3f4"
-              }}>
-              <Button type="button" variant={view === "all" ? "white" : "subtle"} color={view === "all" ? "dark" : "gray"} onClick={() => onViewChange("all")} disabled={view === "all"}>
-                Library
-              </Button>
-              <Button type="button" variant={view === "tags" ? "white" : "subtle"} color={view === "tags" ? "dark" : "gray"} onClick={() => onViewChange("tags")} disabled={view === "tags"}>
-                By tag
-              </Button>
-            </Paper>
+            <Stack gap={8} align="end">
+              <Group gap="xs" wrap="wrap" justify="flex-end">
+                <Badge variant="light" color="dark">
+                  {workspace.knowledgeCards.length} cards
+                </Badge>
+                <Badge variant="light" color="blue">
+                  {lifecycleCounts.draft} draft
+                </Badge>
+                <Badge variant="light" color="gray">
+                  {lifecycleCounts.reviewed} reviewed
+                </Badge>
+                <Badge variant="light" color={lifecycleCounts.stale ? "red" : "gray"}>
+                  {lifecycleCounts.stale} stale
+                </Badge>
+              </Group>
+              <Paper
+                p={4}
+                radius="xl"
+                withBorder
+                style={{
+                  display: "inline-flex",
+                  gap: 3,
+                  background: "#f3f3f4"
+                }}>
+                <Button type="button" variant={view === "all" ? "white" : "subtle"} color={view === "all" ? "dark" : "gray"} onClick={() => onViewChange("all")} disabled={view === "all"}>
+                  Library
+                </Button>
+                <Button type="button" variant={view === "tags" ? "white" : "subtle"} color={view === "tags" ? "dark" : "gray"} onClick={() => onViewChange("tags")} disabled={view === "tags"}>
+                  By tag
+                </Button>
+              </Paper>
+            </Stack>
           }
         />
 
@@ -343,303 +365,309 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
           />
         ) : null}
 
-        {workspace.onboardingStep === "review-cards" ? (
-          <SurfaceCard
-            title="First review session"
-            description="Your first real milestone is reviewing one draft card until it feels trustworthy enough to export.">
-            <Text c="dimmed">Start with the draft queue. Review one card carefully, save it, and then keep momentum by moving straight to the next card.</Text>
-          </SurfaceCard>
-        ) : null}
-
-        {workspace.onboardingStep === "export-vault" ? (
-          <SurfaceCard
-            title="Review stage complete"
-            description="You now have at least one reviewed card. The next step is exporting a first vault from Settings.">
-            <Text c="dimmed">At this point, Library has done its job: the card is trustworthy enough to become part of your long-term notes system.</Text>
-          </SurfaceCard>
-        ) : null}
-
-        <SurfaceCard
-          title={lifecycleTitle}
-          description={lifecycleDescription}>
-          <Stack gap="sm">
-            <Group gap="xs" wrap="wrap">
-              <Button type="button" variant={selectedLifecycle === "all" ? "filled" : "light"} color={selectedLifecycle === "all" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("all")}>
-                All cards ({lifecycleCounts.all})
-              </Button>
-              <Button type="button" variant={selectedLifecycle === "draft" ? "filled" : "light"} color={selectedLifecycle === "draft" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("draft")}>
-                Draft queue ({lifecycleCounts.draft})
-              </Button>
-              <Button type="button" variant={selectedLifecycle === "reviewed" ? "filled" : "light"} color={selectedLifecycle === "reviewed" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("reviewed")}>
-                Reviewed library ({lifecycleCounts.reviewed})
-              </Button>
-              <Button type="button" variant={selectedLifecycle === "stale" ? "filled" : "light"} color={selectedLifecycle === "stale" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("stale")}>
-                Stale review ({lifecycleCounts.stale})
-              </Button>
-            </Group>
+        {onboardingNotice ? (
+          <Paper p="sm" radius="md" withBorder style={{ background: "#ffffff" }}>
             <Text size="sm" c="dimmed">
-              {selectedLifecycle === "draft"
-                ? `You have ${lifecycleCounts.draft} draft card${lifecycleCounts.draft === 1 ? "" : "s"} waiting for trust-building review.`
-                : selectedLifecycle === "reviewed"
-                  ? `${lifecycleCounts.reviewed} reviewed card${lifecycleCounts.reviewed === 1 ? "" : "s"} are currently clean enough to export or revisit.`
-                  : selectedLifecycle === "stale"
-                    ? `${lifecycleCounts.stale} stale card${lifecycleCounts.stale === 1 ? "" : "s"} need another pass because their source changed.`
-                    : `${lifecycleCounts.all} total card${lifecycleCounts.all === 1 ? "" : "s"} are in the system across all lifecycle states.`}
+              {onboardingNotice}
             </Text>
-          </Stack>
-        </SurfaceCard>
+          </Paper>
+        ) : null}
 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: testEnv ? "1fr" : "320px minmax(320px, 420px) minmax(0, 1fr)",
+            gridTemplateColumns: testEnv ? "1fr" : "minmax(360px, 430px) minmax(0, 1fr)",
             gap: 16,
             flex: 1,
             minHeight: 0,
             overflow: "hidden"
           }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+              height: "100%",
+              background: "#ffffff",
+              border: "1px solid #e4e4e7",
+              borderRadius: 16,
+              overflow: "hidden"
+            }}>
+            <div style={{ padding: 14, borderBottom: "1px solid #e4e4e7", background: "#ffffff" }}>
+              <Stack gap="sm">
+                <Group justify="space-between" align="center" gap="sm" wrap="wrap">
+                  <Group gap="xs" wrap="wrap">
+                    <Text fw={600} size="sm">
+                      {lifecycleTitle}
+                    </Text>
+                    <Badge variant="light" color="dark">
+                      {cardsInScope.length} visible
+                    </Badge>
+                    <Badge variant="light" color="gray">
+                      {workspace.sourceMaterials.length} sources
+                    </Badge>
+                    {view === "tags" && selectedTagId ? (
+                      <Badge variant="light" color="blue">
+                        {tagById.get(selectedTagId)?.name ?? selectedTagId}
+                      </Badge>
+                    ) : null}
+                  </Group>
+                  <Text size="xs" c="dimmed">
+                    {lifecycleDescription}
+                  </Text>
+                </Group>
+
+                <TextInput
+                  type="search"
+                  value={query}
+                  placeholder="Search cards, excerpts, themes, authors"
+                  aria-label="Search cards"
+                  onChange={(event) => setQuery(event.currentTarget.value)}
+                />
+
+                <Group gap="xs" wrap="wrap">
+                  <Button type="button" size="xs" radius="xl" variant={selectedLifecycle === "all" ? "filled" : "light"} color={selectedLifecycle === "all" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("all")}>
+                    All cards ({lifecycleCounts.all})
+                  </Button>
+                  <Button type="button" size="xs" radius="xl" variant={selectedLifecycle === "draft" ? "filled" : "light"} color={selectedLifecycle === "draft" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("draft")}>
+                    Draft queue ({lifecycleCounts.draft})
+                  </Button>
+                  <Button type="button" size="xs" radius="xl" variant={selectedLifecycle === "reviewed" ? "filled" : "light"} color={selectedLifecycle === "reviewed" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("reviewed")}>
+                    Reviewed library ({lifecycleCounts.reviewed})
+                  </Button>
+                  <Button type="button" size="xs" radius="xl" variant={selectedLifecycle === "stale" ? "filled" : "light"} color={selectedLifecycle === "stale" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("stale")}>
+                    Stale review ({lifecycleCounts.stale})
+                  </Button>
+                </Group>
+
+                {view === "tags" ? (
+                  <Stack gap="xs">
+                    <Text size="xs" fw={600} c="dimmed">
+                      Filter by tag
+                    </Text>
+                    {!workspace.tags.length ? <Text c="dimmed">No tags available yet.</Text> : null}
+                    <Group gap="xs" wrap="wrap">
+                      {workspace.tags.map((tag) => (
+                        <Button key={tag.id} type="button" size="xs" radius="xl" variant={tag.id === selectedTagId ? "filled" : "light"} color={tag.id === selectedTagId ? "dark" : "gray"} onClick={() => setSelectedTagId(tag.id)}>
+                          {tag.name} ({workspace.bookmarkTags.filter((bookmarkTag) => bookmarkTag.tagId === tag.id).length})
+                        </Button>
+                      ))}
+                    </Group>
+                  </Stack>
+                ) : null}
+              </Stack>
+            </div>
+
+            <div style={{ flex: 1, minHeight: 0, overflow: "hidden", padding: 12, background: "#fcfcfd" }}>
+              <Stack
+                gap="sm"
+                style={{
+                  minHeight: 0,
+                  height: "100%",
+                  overflowY: "auto",
+                  paddingRight: 4
+                }}>
+                {!cardsInScope.length ? <Text c="dimmed">No cards match the current mode and filters.</Text> : null}
+                {cardsInScope.map((card) => (
+                  <Card
+                    key={card.id}
+                    component="button"
+                    type="button"
+                    padding="md"
+                    onClick={() => setSelectedCardId(card.id)}
+                    style={{
+                      textAlign: "left",
+                      borderColor: card.id === selectedCardId ? "#111827" : undefined
+                    }}>
+                    <Stack gap={6}>
+                      <Group justify="space-between" align="center">
+                        <Text fw={600}>{card.title}</Text>
+                        <StatusBadge status={getCardLifecycleStatus(card)} />
+                      </Group>
+                      <Text size="sm" c="dimmed">
+                        @{card.authorHandle} · quality {card.quality.score}
+                      </Text>
+                      <Text size="sm" lineClamp={3}>
+                        {card.summary}
+                      </Text>
+                    </Stack>
+                  </Card>
+                ))}
+              </Stack>
+            </div>
+          </div>
+
           <SurfaceCard
-            title="Card scope"
-            description="Cards are the new product object. Bookmarks remain the source layer feeding them."
-            style={{ minHeight: 0, height: "100%" }}
-            bodyStyle={{ minHeight: 0, overflowY: "auto" }}>
-            <Stack gap="md">
-              <Group gap="xs" wrap="wrap">
-                <Badge variant="light" color="blue">
-                  {workspace.knowledgeCards.length} total card drafts
-                </Badge>
-                <Badge variant="light" color="gray">
-                  {workspace.sourceMaterials.length} source materials
-                </Badge>
-                <Badge variant="light" color="dark">
-                  {workspace.tags.length} tags
-                </Badge>
-              </Group>
-
-              <TextInput label="Search cards" placeholder="Search theme, summary, excerpt, author" value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
-
-              {view === "tags" ? (
-                <Stack gap="xs">
-                  <Text fw={600}>Tag browser</Text>
-                  {!workspace.tags.length ? <Text c="dimmed">No tags available yet.</Text> : null}
-                  {workspace.tags.map((tag) => (
-                    <Button key={tag.id} type="button" variant={tag.id === selectedTagId ? "filled" : "light"} color={tag.id === selectedTagId ? "dark" : "gray"} justify="flex-start" onClick={() => setSelectedTagId(tag.id)}>
-                      {tag.name} ({workspace.bookmarkTags.filter((bookmarkTag) => bookmarkTag.tagId === tag.id).length})
-                    </Button>
-                  ))}
-                </Stack>
-              ) : null}
-            </Stack>
-          </SurfaceCard>
-
-          <SurfaceCard
-            title="Cards in queue"
-            description={`${cardsInScope.length} visible card${cardsInScope.length === 1 ? "" : "s"} in the current mode.`}
+            title="Card review"
+            description={selectedCard ? "Refine the draft, validate provenance, and keep the source visible while deciding what to trust." : "Select a card from the queue to start reviewing."}
             style={{ minHeight: 0, height: "100%" }}
             bodyStyle={{ minHeight: 0, overflow: "hidden" }}>
             <Stack
               gap="sm"
               style={{
                 minHeight: 0,
+                height: "100%",
                 overflowY: "auto",
+                gap: selectedCard ? 16 : 0,
                 paddingRight: 4
               }}>
-              {!cardsInScope.length ? <Text c="dimmed">No cards match the current mode and filters.</Text> : null}
-              {cardsInScope.map((card) => (
-                <Card
-                  key={card.id}
-                  component="button"
-                  type="button"
-                  padding="md"
-                  onClick={() => setSelectedCardId(card.id)}
-                  style={{
-                    textAlign: "left",
-                    borderColor: card.id === selectedCardId ? "#111827" : undefined
-                  }}>
-                  <Stack gap={6}>
-                    <Group justify="space-between" align="center">
-                      <Text fw={600}>{card.title}</Text>
-                      <StatusBadge status={getCardLifecycleStatus(card)} />
-                    </Group>
-                    <Text size="sm" c="dimmed">
-                      @{card.authorHandle} · quality {card.quality.score}
-                    </Text>
-                    <Text size="sm" lineClamp={3}>
-                      {card.summary}
-                    </Text>
-                  </Stack>
-                </Card>
-              ))}
-            </Stack>
-          </SurfaceCard>
+              {!selectedCard ? (
+                <Text c="dimmed">Select a card draft to inspect it.</Text>
+              ) : (
+                <>
+                  <Group gap="xs" wrap="wrap">
+                    <StatusBadge status={getCardLifecycleStatus(selectedCard)} />
+                    <Badge variant="light" color={selectedCard.quality.needsReview ? "red" : "blue"}>
+                      Quality {selectedCard.quality.score}
+                    </Badge>
+                    <Badge variant="light" color="gray">
+                      {selectedCard.quality.generatorVersion}
+                    </Badge>
+                  </Group>
 
-          <SurfaceCard
-            title="Selected card"
-            description="Refine the generated card, inspect provenance, and keep the source post or note visible while making review decisions."
-            style={{ minHeight: 0, height: "100%" }}
-            bodyStyle={{ minHeight: 0, overflow: "hidden" }}>
-            {!selectedCard ? (
-              <Text c="dimmed">Select a card draft to inspect it.</Text>
-            ) : (
-              <Stack
-                gap="md"
-                style={{
-                  minHeight: 0,
-                  overflowY: "auto",
-                  paddingRight: 4
-                }}>
-                <Group gap="xs" wrap="wrap">
-                  <StatusBadge status={getCardLifecycleStatus(selectedCard)} />
-                  <Badge variant="light" color={selectedCard.quality.needsReview ? "red" : "blue"}>
-                    Quality {selectedCard.quality.score}
-                  </Badge>
-                  <Badge variant="light" color="gray">
-                    {selectedCard.quality.generatorVersion}
-                  </Badge>
-                </Group>
-
-                {selectedCard.quality.warnings.length ? (
-                  <Card padding="md" bg="red.0" withBorder>
-                    <Stack gap={4}>
-                      <Text fw={600}>Needs review</Text>
-                      {qualityIssues.length ? (
-                        <Group gap="xs" wrap="wrap">
-                          {qualityIssues.map((issue, index) => (
-                            <Badge key={`${issue.code}-${index}`} variant="light" color="red">
-                              {getQualityIssueLabel(issue.code as Parameters<typeof getQualityIssueLabel>[0])}
-                            </Badge>
-                          ))}
-                        </Group>
-                      ) : null}
-                      {selectedCard.quality.warnings.map((warning) => (
-                        <Text key={warning} size="sm">
-                          - {warning}
-                        </Text>
-                      ))}
-                    </Stack>
-                  </Card>
-                ) : null}
-
-                {workspace.commandError && (workspace.commandError.scope === "knowledge-card-save" || workspace.commandError.scope === "knowledge-card-regenerate") ? (
-                  <Card padding="md" bg="red.0" withBorder>
-                    <Stack gap={6}>
-                      <Text fw={600}>Action failed</Text>
-                      <Text size="sm">{workspace.commandError.message}</Text>
-                      <Group gap="sm">
-                        <Button type="button" variant="light" color="red" onClick={workspace.clearCommandError}>
-                          Dismiss
-                        </Button>
-                      </Group>
-                    </Stack>
-                  </Card>
-                ) : null}
-
-                <TextInput label="Title" value={draftFields.title} onChange={(event) => setDraftFields((current) => ({ ...current, title: event.currentTarget.value }))} />
-                <TextInput label="Theme" value={draftFields.theme} onChange={(event) => setDraftFields((current) => ({ ...current, theme: event.currentTarget.value }))} />
-                <Textarea label="Summary" minRows={4} value={draftFields.summary} onChange={(event) => setDraftFields((current) => ({ ...current, summary: event.currentTarget.value }))} />
-                <Textarea label="Key excerpt / code" minRows={4} value={draftFields.keyExcerpt} onChange={(event) => setDraftFields((current) => ({ ...current, keyExcerpt: event.currentTarget.value }))} />
-                <Textarea label="Applicability" minRows={3} value={draftFields.applicability} onChange={(event) => setDraftFields((current) => ({ ...current, applicability: event.currentTarget.value }))} />
-
-                <Group gap="sm">
-                  <Button type="button" color="dark" onClick={() => void handleSaveDraft()} disabled={workspace.isSavingTag}>
-                    Save draft
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="light"
-                    onClick={() => void handleRegenerateSelectedCard()}
-                    disabled={workspace.isSavingTag}>
-                    Regenerate with AI
-                  </Button>
-                </Group>
-
-                {reviewFeedback?.cardId === selectedCard.id ? (
-                  <Card padding="md" bg="blue.0" withBorder>
-                    <Stack gap={6}>
-                      <Text fw={600}>{reviewFeedback.message}</Text>
-                      <Text size="sm" c="dimmed">
-                        Use this moment to keep momentum going while the current card is still fresh in your head.
-                      </Text>
-                      <Group gap="xs" wrap="wrap">
-                        <Badge variant="light" color="blue">
-                          {draftQueueRemaining} draft remaining
-                        </Badge>
-                        <Badge variant="light" color={staleQueueRemaining ? "red" : "gray"}>
-                          {staleQueueRemaining} stale remaining
-                        </Badge>
-                      </Group>
-                      <Text size="sm" c="dimmed">
-                        {draftQueueRemaining > 0
-                          ? "Stay in review mode and clear the next draft while the context is fresh."
-                          : staleQueueRemaining > 0
-                            ? "Drafts are clear. Next best move is resolving stale cards."
-                            : "You cleared the visible queue. The next milestone is exporting a clean vault."}
-                      </Text>
-                      <Group gap="sm">
-                        {reviewFeedback.nextCardId ? (
-                          <Button
-                            type="button"
-                            variant="light"
-                            onClick={() => {
-                              setSelectedCardId(reviewFeedback.nextCardId)
-                              setReviewFeedback(null)
-                            }}>
-                            Review next card
-                          </Button>
-                        ) : null}
-                        <Button
-                          type="button"
-                          variant="subtle"
-                          onClick={() => setReviewFeedback(null)}>
-                          Stay here
-                        </Button>
-                      </Group>
-                    </Stack>
-                  </Card>
-                ) : null}
-
-                <Divider />
-
-                <Stack gap="xs">
-                  <Title order={4}>Provenance</Title>
-                  {groupedProvenance.map((group) => (
-                    <Card key={group.field} padding="sm" withBorder>
+                  {selectedCard.quality.warnings.length ? (
+                    <Card padding="md" bg="red.0" withBorder>
                       <Stack gap={4}>
-                        <Text size="sm" fw={600}>
-                          {formatProvenanceField(group.field)}
-                        </Text>
-                        <Text size="xs" c="dimmed">
-                          {group.excerpts.length} supporting snippet{group.excerpts.length === 1 ? "" : "s"}
-                        </Text>
-                        {group.excerpts.map((excerpt, index) => (
-                          <Card key={`${group.field}-${index}`} padding="xs" bg="gray.0" withBorder>
-                            <Text size="sm">{excerpt}</Text>
-                          </Card>
+                        <Text fw={600}>Needs review</Text>
+                        {qualityIssues.length ? (
+                          <Group gap="xs" wrap="wrap">
+                            {qualityIssues.map((issue, index) => (
+                              <Badge key={`${issue.code}-${index}`} variant="light" color="red">
+                                {getQualityIssueLabel(issue.code as Parameters<typeof getQualityIssueLabel>[0])}
+                              </Badge>
+                            ))}
+                          </Group>
+                        ) : null}
+                        {selectedCard.quality.warnings.map((warning) => (
+                          <Text key={warning} size="sm">
+                            - {warning}
+                          </Text>
                         ))}
                       </Stack>
                     </Card>
-                  ))}
-                </Stack>
+                  ) : null}
 
-                <Stack gap="xs">
-                  <Title order={4}>Source material</Title>
-                  <Text size="sm" c="dimmed">
-                    @{selectedCard.authorHandle} · saved {selectedCard.sourceSavedAt}
-                  </Text>
-                  <Text size="sm" style={{ whiteSpace: "pre-wrap", lineHeight: 1.65 }}>
-                    {selectedCard.sourceText}
-                  </Text>
-                  <Text size="sm">Source: {selectedCard.sourceUrl}</Text>
-                  <Group gap="xs" wrap="wrap">
-                    {selectedCard.tagIds.map((tagId) => (
-                      <Badge key={tagId} variant="light" color="dark">
-                        {tagById.get(tagId)?.name ?? tagId}
-                      </Badge>
-                    ))}
+                  {workspace.commandError && (workspace.commandError.scope === "knowledge-card-save" || workspace.commandError.scope === "knowledge-card-regenerate") ? (
+                    <Card padding="md" bg="red.0" withBorder>
+                      <Stack gap={6}>
+                        <Text fw={600}>Action failed</Text>
+                        <Text size="sm">{workspace.commandError.message}</Text>
+                        <Group gap="sm">
+                          <Button type="button" variant="light" color="red" onClick={workspace.clearCommandError}>
+                            Dismiss
+                          </Button>
+                        </Group>
+                      </Stack>
+                    </Card>
+                  ) : null}
+
+                  <TextInput label="Title" value={draftFields.title} onChange={(event) => setDraftFields((current) => ({ ...current, title: event.currentTarget.value }))} />
+                  <TextInput label="Theme" value={draftFields.theme} onChange={(event) => setDraftFields((current) => ({ ...current, theme: event.currentTarget.value }))} />
+                  <Textarea label="Summary" minRows={4} value={draftFields.summary} onChange={(event) => setDraftFields((current) => ({ ...current, summary: event.currentTarget.value }))} />
+                  <Textarea label="Key excerpt / code" minRows={4} value={draftFields.keyExcerpt} onChange={(event) => setDraftFields((current) => ({ ...current, keyExcerpt: event.currentTarget.value }))} />
+                  <Textarea label="Applicability" minRows={3} value={draftFields.applicability} onChange={(event) => setDraftFields((current) => ({ ...current, applicability: event.currentTarget.value }))} />
+
+                  <Group gap="sm">
+                    <Button type="button" color="dark" onClick={() => void handleSaveDraft()} disabled={workspace.isSavingTag}>
+                      Save draft
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="light"
+                      onClick={() => void handleRegenerateSelectedCard()}
+                      disabled={workspace.isSavingTag}>
+                      Regenerate with AI
+                    </Button>
                   </Group>
-                </Stack>
-              </Stack>
-            )}
+
+                  {reviewFeedback?.cardId === selectedCard.id ? (
+                    <Card padding="md" bg="blue.0" withBorder>
+                      <Stack gap={6}>
+                        <Text fw={600}>{reviewFeedback.message}</Text>
+                        <Text size="sm" c="dimmed">
+                          Use this moment to keep momentum going while the current card is still fresh in your head.
+                        </Text>
+                        <Group gap="xs" wrap="wrap">
+                          <Badge variant="light" color="blue">
+                            {draftQueueRemaining} draft remaining
+                          </Badge>
+                          <Badge variant="light" color={staleQueueRemaining ? "red" : "gray"}>
+                            {staleQueueRemaining} stale remaining
+                          </Badge>
+                        </Group>
+                        <Text size="sm" c="dimmed">
+                          {draftQueueRemaining > 0
+                            ? "Stay in review mode and clear the next draft while the context is fresh."
+                            : staleQueueRemaining > 0
+                              ? "Drafts are clear. Next best move is resolving stale cards."
+                              : "You cleared the visible queue. The next milestone is exporting a clean vault."}
+                        </Text>
+                        <Group gap="sm">
+                          {reviewFeedback.nextCardId ? (
+                            <Button
+                              type="button"
+                              variant="light"
+                              onClick={() => {
+                                setSelectedCardId(reviewFeedback.nextCardId)
+                                setReviewFeedback(null)
+                              }}>
+                              Review next card
+                            </Button>
+                          ) : null}
+                          <Button
+                            type="button"
+                            variant="subtle"
+                            onClick={() => setReviewFeedback(null)}>
+                            Stay here
+                          </Button>
+                        </Group>
+                      </Stack>
+                    </Card>
+                  ) : null}
+
+                  <Divider />
+
+                  <Stack gap="xs">
+                    <Title order={4}>Provenance</Title>
+                    {groupedProvenance.map((group) => (
+                      <Card key={group.field} padding="sm" withBorder>
+                        <Stack gap={4}>
+                          <Text size="sm" fw={600}>
+                            {formatProvenanceField(group.field)}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            {group.excerpts.length} supporting snippet{group.excerpts.length === 1 ? "" : "s"}
+                          </Text>
+                          {group.excerpts.map((excerpt, index) => (
+                            <Card key={`${group.field}-${index}`} padding="xs" bg="gray.0" withBorder>
+                              <Text size="sm">{excerpt}</Text>
+                            </Card>
+                          ))}
+                        </Stack>
+                      </Card>
+                    ))}
+                  </Stack>
+
+                  <Stack gap="xs">
+                    <Title order={4}>Source material</Title>
+                    <Text size="sm" c="dimmed">
+                      @{selectedCard.authorHandle} · saved {selectedCard.sourceSavedAt}
+                    </Text>
+                    <Text size="sm" style={{ whiteSpace: "pre-wrap", lineHeight: 1.65 }}>
+                      {selectedCard.sourceText}
+                    </Text>
+                    <Text size="sm">Source: {selectedCard.sourceUrl}</Text>
+                    <Group gap="xs" wrap="wrap">
+                      {selectedCard.tagIds.map((tagId) => (
+                        <Badge key={tagId} variant="light" color="dark">
+                          {tagById.get(tagId)?.name ?? tagId}
+                        </Badge>
+                      ))}
+                    </Group>
+                  </Stack>
+                </>
+              )}
+            </Stack>
           </SurfaceCard>
         </div>
       </Stack>
