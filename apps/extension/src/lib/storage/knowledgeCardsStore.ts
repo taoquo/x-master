@@ -26,14 +26,22 @@ export async function upsertKnowledgeCardDraftsForSourceMaterials(
   }
 
   const db = await getBookmarksDb()
-  const transaction = db.transaction(KNOWLEDGE_CARDS_STORE, "readwrite")
-  const store = transaction.objectStore(KNOWLEDGE_CARDS_STORE)
+  const existingTransaction = db.transaction(KNOWLEDGE_CARDS_STORE, "readonly")
+  const existingStore = existingTransaction.objectStore(KNOWLEDGE_CARDS_STORE)
+  const existingBySourceMaterialId = new Map<string, KnowledgeCardDraftRecord | undefined>()
   let createdCount = 0
   let updatedCount = 0
   let skippedCount = 0
+  const recordsToWrite: KnowledgeCardDraftRecord[] = []
 
   for (const sourceMaterial of sourceMaterials) {
-    const existing = (await requestToPromise(store.index("sourceMaterialId").get(sourceMaterial.tweetId))) as KnowledgeCardDraftRecord | undefined
+    const existing = (await requestToPromise(existingStore.index("sourceMaterialId").get(sourceMaterial.tweetId))) as KnowledgeCardDraftRecord | undefined
+    existingBySourceMaterialId.set(sourceMaterial.tweetId, existing)
+  }
+  await transactionDone(existingTransaction)
+
+  for (const sourceMaterial of sourceMaterials) {
+    const existing = existingBySourceMaterialId.get(sourceMaterial.tweetId)
     const fingerprint = getSourceMaterialFingerprint(sourceMaterial)
 
     if (existing?.sourceFingerprint === fingerprint) {
@@ -64,8 +72,7 @@ export async function upsertKnowledgeCardDraftsForSourceMaterials(
             generatedAt: existing?.generatedAt ?? nextDraft.generatedAt
           }
 
-    store.put(nextRecord)
-
+    recordsToWrite.push(nextRecord)
     if (existing) {
       updatedCount += 1
     } else {
@@ -73,7 +80,17 @@ export async function upsertKnowledgeCardDraftsForSourceMaterials(
     }
   }
 
-  await transactionDone(transaction)
+  if (recordsToWrite.length) {
+    const writeTransaction = db.transaction(KNOWLEDGE_CARDS_STORE, "readwrite")
+    const writeStore = writeTransaction.objectStore(KNOWLEDGE_CARDS_STORE)
+
+    for (const record of recordsToWrite) {
+      writeStore.put(record)
+    }
+
+    await transactionDone(writeTransaction)
+  }
+
   return { createdCount, updatedCount, skippedCount }
 }
 
@@ -98,7 +115,8 @@ export async function updateKnowledgeCardDraft(
     quality: {
       ...existing.quality,
       needsReview: false,
-      warnings: existing.quality.warnings.filter((warning) => !warning.toLowerCase().includes("review"))
+      warnings: [],
+      issues: []
     }
   }
 
@@ -116,9 +134,10 @@ export async function regenerateKnowledgeCardDraft(
   } = {}
 ) {
   const db = await getBookmarksDb()
-  const transaction = db.transaction(KNOWLEDGE_CARDS_STORE, "readwrite")
-  const store = transaction.objectStore(KNOWLEDGE_CARDS_STORE)
-  const existing = (await requestToPromise(store.index("sourceMaterialId").get(sourceMaterial.tweetId))) as KnowledgeCardDraftRecord | undefined
+  const readTransaction = db.transaction(KNOWLEDGE_CARDS_STORE, "readonly")
+  const readStore = readTransaction.objectStore(KNOWLEDGE_CARDS_STORE)
+  const existing = (await requestToPromise(readStore.index("sourceMaterialId").get(sourceMaterial.tweetId))) as KnowledgeCardDraftRecord | undefined
+  await transactionDone(readTransaction)
 
   if (!existing) {
     throw new Error("Knowledge card draft not found")
@@ -136,7 +155,9 @@ export async function regenerateKnowledgeCardDraft(
     updatedAt: new Date().toISOString()
   }
 
-  store.put(regeneratedCard)
-  await transactionDone(transaction)
+  const writeTransaction = db.transaction(KNOWLEDGE_CARDS_STORE, "readwrite")
+  const writeStore = writeTransaction.objectStore(KNOWLEDGE_CARDS_STORE)
+  writeStore.put(regeneratedCard)
+  await transactionDone(writeTransaction)
   return regeneratedCard
 }

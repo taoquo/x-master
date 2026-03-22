@@ -40,6 +40,42 @@ const response = {
                 }
               },
               {
+                entryId: "tweet-456",
+                content: {
+                  itemContent: {
+                    tweet_results: {
+                      result: {
+                        rest_id: "456",
+                        legacy: {
+                          full_text: "legacy teaser",
+                          created_at: "Tue Mar 16 00:00:00 +0000 2026",
+                          favorite_count: 5,
+                          retweet_count: 1,
+                          reply_count: 0
+                        },
+                        note_tweet: {
+                          note_tweet_results: {
+                            result: {
+                              text: "full note tweet body"
+                            }
+                          }
+                        },
+                        core: {
+                          user_results: {
+                            result: {
+                              legacy: {
+                                name: "Bob",
+                                screen_name: "bob"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
                 entryId: "cursor-bottom-1",
                 content: {
                   value: "next-cursor"
@@ -56,9 +92,13 @@ const response = {
 test("parseBookmarkEntries extracts normalized bookmark records", () => {
   const result = parseBookmarkEntries(response)
 
-  assert.equal(result.bookmarks.length, 1)
+  assert.equal(result.bookmarks.length, 2)
   assert.equal(result.bookmarks[0].tweetId, "123")
   assert.equal(result.bookmarks[0].authorHandle, "alice")
   assert.equal(result.bookmarks[0].text, "hello world")
+  assert.equal(result.bookmarks[0].sourceKind, "x-bookmark")
+  assert.equal(result.bookmarks[1].tweetId, "456")
+  assert.equal(result.bookmarks[1].text, "full note tweet body")
+  assert.equal(result.bookmarks[1].sourceKind, "x-note-tweet")
   assert.equal(result.nextCursor, "next-cursor")
 })

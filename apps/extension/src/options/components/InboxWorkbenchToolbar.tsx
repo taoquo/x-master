@@ -142,17 +142,13 @@ export function InboxWorkbenchToolbar({
 
   return (
     <Stack gap="sm">
-      <Paper p="md" radius="md" withBorder style={{ background: "#ffffff" }}>
-        <Stack gap="md">
-          <Group justify="space-between" align="start" gap="sm" wrap="wrap">
-            <Stack gap={4}>
-              <Text fw={600}>Source queue</Text>
-              <Text size="sm" c="dimmed">
-                Filter raw source material, then attach tags so the downstream card workflow stays organized.
-              </Text>
-            </Stack>
-
+      <Paper p="sm" radius="md" withBorder style={{ background: "#ffffff" }}>
+        <Stack gap="sm">
+          <Group justify="space-between" align="center" gap="sm" wrap="wrap">
             <Group gap="xs" wrap="wrap">
+              <Text fw={600} size="sm">
+                Source queue
+              </Text>
               <Badge variant="light" color="dark">
                 {resultCount} visible
               </Badge>
@@ -165,36 +161,39 @@ export function InboxWorkbenchToolbar({
                 </Badge>
               ) : null}
             </Group>
+
+            <Button type="button" variant="light" color="gray" size="sm" leftSection={<AppIcon name="filter" size={15} />} onClick={onToggleAdvancedFilters}>
+              {showAdvancedFilters ? "Hide filters" : `More filters${advancedFilterCount ? ` (${advancedFilterCount})` : ""}`}
+            </Button>
           </Group>
 
           <Group align="end" gap="sm" wrap="wrap">
-            <TextInput
-              label="Search"
-              type="search"
-              value={query}
-              placeholder="Search source material"
-              onChange={(event) => onQueryChange(event.currentTarget.value)}
-              style={{ flex: "1 1 260px", minWidth: 220 }}
-              leftSection={<AppIcon name="search" size={16} />}
-            />
+            <div style={{ display: "grid", gap: 4, flex: "1 1 280px", minWidth: 220 }}>
+              <Text size="xs" fw={600} c="dimmed">
+                Search
+              </Text>
+              <TextInput
+                type="search"
+                value={query}
+                placeholder="Search source material"
+                onChange={(event) => onQueryChange(event.currentTarget.value)}
+                leftSection={<AppIcon name="search" size={16} />}
+              />
+            </div>
 
-            <NativeSelect value={sortOrder} onChange={(event) => onSortOrderChange(event.currentTarget.value as BookmarkSortOrder)} label="Sort" style={{ minWidth: 160 }}>
+            <NativeSelect value={sortOrder} onChange={(event) => onSortOrderChange(event.currentTarget.value as BookmarkSortOrder)} label="Sort" style={{ minWidth: 152 }}>
               <option value="saved-desc">Newest saved</option>
               <option value="saved-asc">Oldest saved</option>
               <option value="created-desc">Newest on X</option>
               <option value="likes-desc">Most likes</option>
             </NativeSelect>
 
-            <NativeSelect value={timeRange} onChange={(event) => onTimeRangeChange(event.currentTarget.value as SavedTimeRange)} label="Saved time" style={{ minWidth: 148 }}>
+            <NativeSelect value={timeRange} onChange={(event) => onTimeRangeChange(event.currentTarget.value as SavedTimeRange)} label="Saved time" style={{ minWidth: 140 }}>
               <option value="all">All time</option>
               <option value="7d">Last 7 days</option>
               <option value="30d">Last 30 days</option>
               <option value="90d">Last 90 days</option>
             </NativeSelect>
-
-            <Button type="button" variant="light" color="gray" leftSection={<AppIcon name="filter" size={16} />} onClick={onToggleAdvancedFilters}>
-              {showAdvancedFilters ? "Hide filters" : `More filters${advancedFilterCount ? ` (${advancedFilterCount})` : ""}`}
-            </Button>
           </Group>
 
           <Group justify="space-between" align="center" gap="sm" wrap="wrap">
@@ -207,12 +206,12 @@ export function InboxWorkbenchToolbar({
             </Group>
 
             <Group gap="sm" wrap="wrap">
-              <Checkbox checked={onlyWithMedia} label="Only with media" onChange={(event) => onOnlyWithMediaChange(event.currentTarget.checked)} />
-              <Checkbox checked={onlyLongform} label="Only longform" onChange={(event) => onOnlyLongformChange(event.currentTarget.checked)} />
-              <Button type="button" variant="subtle" color="gray" onClick={onSelectAllVisible} disabled={!resultCount}>
+              <Checkbox size="sm" checked={onlyWithMedia} label="Only with media" onChange={(event) => onOnlyWithMediaChange(event.currentTarget.checked)} />
+              <Checkbox size="sm" checked={onlyLongform} label="Only longform" onChange={(event) => onOnlyLongformChange(event.currentTarget.checked)} />
+              <Button type="button" size="sm" variant="subtle" color="gray" onClick={onSelectAllVisible} disabled={!resultCount}>
                 Select all visible
               </Button>
-              <Button type="button" variant="subtle" color="gray" onClick={onClearFilters} disabled={!hasActiveFilters && !selectedCount}>
+              <Button type="button" size="sm" variant="subtle" color="gray" onClick={onClearFilters} disabled={!hasActiveFilters && !selectedCount}>
                 Clear filters
               </Button>
             </Group>

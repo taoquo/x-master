@@ -1,4 +1,5 @@
 import { generateKnowledgeCardDraftWithAi } from "../lib/cards/generateKnowledgeCardDraftWithAi.ts"
+import { toSourceMaterialRecord } from "../lib/sourceMaterials.ts"
 import { upsertBookmarks } from "../lib/storage/bookmarksStore.ts"
 import { upsertKnowledgeCardDraftsForSourceMaterials } from "../lib/storage/knowledgeCardsStore.ts"
 import { createSyncRun } from "../lib/storage/syncRunsStore.ts"
@@ -130,10 +131,7 @@ export async function runBookmarkSync({
 
     const { insertedCount, updatedCount } = await saveBookmarks(bookmarks as BookmarkRecord[])
     await syncKnowledgeCards(
-      (bookmarks as BookmarkRecord[]).map((bookmark) => ({
-        ...bookmark,
-        sourceKind: "x-bookmark"
-      })),
+      (bookmarks as BookmarkRecord[]).map(toSourceMaterialRecord),
       {
         generateDraft: (sourceMaterial) =>
           generateKnowledgeCardDraft({

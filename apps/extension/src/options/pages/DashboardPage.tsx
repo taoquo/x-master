@@ -41,7 +41,7 @@ function getOnboardingHero(step: OnboardingStep) {
         eyebrow: "Getting started",
         stage: "Step 1 of 4",
         title: "Pull source material into the workspace",
-        description: "Run the first sync to bring saved X threads into the source queue. The rest of the pipeline starts only after source material exists.",
+        description: "Run the first sync to bring saved X posts and notes into the source queue. The rest of the pipeline starts only after source material exists.",
         support: "Once source material arrives, the app can generate knowledge card drafts and start the review loop.",
         actionLabel: "Sync source material",
         action: "sync" as const

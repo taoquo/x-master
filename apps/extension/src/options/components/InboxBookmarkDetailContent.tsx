@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react"
-import { ActionIcon, Badge, Button, Group, Image, NativeSelect, Paper, Stack, Text } from "@mantine/core"
+import { ActionIcon, Badge, Button, Group, Image, NativeSelect, Stack, Text } from "@mantine/core"
 import type { BookmarkRecord, TagRecord } from "../../lib/types.ts"
+import { getSourceKindLabel, inferSourceKindFromBookmark } from "../../lib/sourceMaterials.ts"
 import { EmptyState } from "../../ui/components.tsx"
 import { AppIcon } from "../../ui/icons.tsx"
 
@@ -66,12 +67,13 @@ export function InboxBookmarkDetailContent({
   }, [availableTags, tags])
 
   if (!bookmark) {
-    return <EmptyState title="No source selected." description="Choose a source item from the inbox to inspect the raw thread, media, and source-level tagging actions." />
+    return <EmptyState title="No source selected." description="Choose a saved post or note from the inbox to inspect the raw content, media, and source-level tagging actions." />
   }
 
   const currentBookmark = bookmark
   const hasMedia = Array.isArray(currentBookmark.media) && currentBookmark.media.length > 0
   const subject = getSubject(currentBookmark.text)
+  const sourceKindLabel = getSourceKindLabel(inferSourceKindFromBookmark(currentBookmark))
 
   async function handleAttachTag() {
     if (!selectedAvailableTagId) {
@@ -158,7 +160,7 @@ export function InboxBookmarkDetailContent({
         </Text>
       </Group>
 
-      <Stack gap="sm" p={16} style={{ borderBottom: "1px solid #e4e4e7" }}>
+      <Stack gap="xs" p={14} style={{ borderBottom: "1px solid #e4e4e7" }}>
         <Group gap="xs" wrap="wrap">
           <Badge variant="light" color="gray">
             Saved {formatDateTime(currentBookmark.savedAt)}
@@ -167,7 +169,7 @@ export function InboxBookmarkDetailContent({
             {(currentBookmark.metrics?.likes ?? 0).toLocaleString()} likes
           </Badge>
           <Badge variant="light" color="gray">
-            {currentBookmark.text.trim().length > 280 ? "Longform" : "Standard"}
+            {sourceKindLabel}
           </Badge>
           {hasMedia ? (
             <Badge variant="light" color="blue">
@@ -180,10 +182,6 @@ export function InboxBookmarkDetailContent({
             </Badge>
           ))}
         </Group>
-
-        <Text size="sm" c="dimmed">
-          This is raw source material, not a final knowledge card. Tag and inspect it here, then review the generated card in Library.
-        </Text>
       </Stack>
 
       <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
@@ -207,51 +205,47 @@ export function InboxBookmarkDetailContent({
         </Stack>
       </div>
 
-      <Stack gap="md" p={16} style={{ borderTop: "1px solid #e4e4e7", background: "#ffffff" }}>
-        <Paper p="md" withBorder radius="md" style={{ background: "#ffffff" }}>
-          <Stack gap="sm">
-            <Text size="sm" fw={500}>
-              Add existing tag
-            </Text>
-            <Group align="end" grow>
-              <label style={{ display: "grid", gap: 6 }}>
-                <span style={{ fontSize: 14, fontWeight: 500 }}>Existing tag</span>
-                <NativeSelect
-                  value={selectedAvailableTagId}
-                  onChange={(event) => setSelectedAvailableTagId(event.currentTarget.value)}
-                  disabled={isSaving || !selectableTags.length}>
-                  <option value="">Select a tag</option>
-                  {selectableTags.map((tag) => (
-                    <option key={tag.id} value={tag.id}>
-                      {tag.name}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </label>
-              <Button type="button" color="dark" onClick={() => void handleAttachTag()} disabled={isSaving || !selectedAvailableTagId}>
-                Tag source
-              </Button>
+      <Stack gap="sm" p={14} style={{ borderTop: "1px solid #e4e4e7", background: "#ffffff" }}>
+        <Group justify="space-between" align="center" wrap="wrap">
+          <Text size="sm" fw={500}>
+            Tags
+          </Text>
+          {tags.length ? (
+            <Group gap="xs" wrap="wrap">
+              {tags.map((tag) => (
+                <Button key={tag.id} type="button" size="compact-xs" variant="subtle" color="dark" onClick={() => void onDetachTag(tag.id)} disabled={isSaving}>
+                  Remove {tag.name}
+                </Button>
+              ))}
             </Group>
-          </Stack>
-        </Paper>
+          ) : (
+            <Text size="xs" c="dimmed">
+              No tags attached
+            </Text>
+          )}
+        </Group>
 
-        {tags.length ? (
-          <Group gap="xs" wrap="wrap">
-            {tags.map((tag) => (
-              <Button key={tag.id} type="button" variant="subtle" color="dark" onClick={() => void onDetachTag(tag.id)} disabled={isSaving}>
-                Remove {tag.name}
-              </Button>
-            ))}
+        {selectableTags.length ? (
+          <Group align="end" wrap="wrap">
+            <label style={{ display: "grid", gap: 4, flex: "1 1 220px", minWidth: 180 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#71717a" }}>Add existing tag</span>
+              <NativeSelect
+                value={selectedAvailableTagId}
+                onChange={(event) => setSelectedAvailableTagId(event.currentTarget.value)}
+                disabled={isSaving}>
+                <option value="">Select a tag</option>
+                {selectableTags.map((tag) => (
+                  <option key={tag.id} value={tag.id}>
+                    {tag.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </label>
+            <Button type="button" color="dark" onClick={() => void handleAttachTag()} disabled={isSaving || !selectedAvailableTagId}>
+              Tag source
+            </Button>
           </Group>
         ) : null}
-
-        <Text size="sm" c="dimmed">
-          Tagging here organizes the source layer. Final card review and trust decisions happen in Library.
-        </Text>
-
-        <Text size="sm" c="dimmed">
-          Need a new tag? Create it in Settings, then come back here to attach it.
-        </Text>
       </Stack>
     </Stack>
   )

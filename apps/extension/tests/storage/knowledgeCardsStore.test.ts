@@ -289,3 +289,115 @@ test("regenerateKnowledgeCardDraft resets a reviewed card back to draft with reg
   assert.equal(regenerated.title, "Regenerated title")
   assert.equal(regenerated.summary, "Regenerated summary")
 })
+
+test("upsertKnowledgeCardDraftsForSourceMaterials persists async generated drafts outside the write transaction", async () => {
+  await resetBookmarksDb()
+
+  const sourceMaterial = {
+    tweetId: "tweet-6",
+    tweetUrl: "https://x.com/faye/status/tweet-6",
+    authorName: "Faye",
+    authorHandle: "faye",
+    text: "Async generated source text.",
+    createdAtOnX: "2026-03-15T00:00:00.000Z",
+    savedAt: "2026-03-15T00:01:00.000Z",
+    rawPayload: {},
+    sourceKind: "x-bookmark" as const
+  }
+
+  const result = await upsertKnowledgeCardDraftsForSourceMaterials([sourceMaterial], {
+    generateDraft: async (source) => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      return {
+        id: `card-${source.tweetId}`,
+        sourceMaterialId: source.tweetId,
+        status: "draft",
+        title: "Async title",
+        theme: "Async title",
+        summary: "Async summary",
+        keyExcerpt: "Async excerpt",
+        applicability: "Async applicability",
+        provenance: [],
+        quality: {
+          score: 84,
+          needsReview: false,
+          warnings: [],
+          generatorVersion: "async-test"
+        },
+        generatedAt: "2026-03-15T03:00:00.000Z",
+        updatedAt: "2026-03-15T03:00:00.000Z",
+        sourceFingerprint: source.contentFingerprint ?? "",
+        lastGeneratedFromModel: "async-test"
+      }
+    }
+  })
+
+  const cards = await getAllKnowledgeCardDrafts()
+
+  assert.equal(result.createdCount, 1)
+  assert.equal(cards.length, 1)
+  assert.equal(cards[0].title, "Async title")
+})
+
+test("regenerateKnowledgeCardDraft supports async generators without holding the write transaction open", async () => {
+  await resetBookmarksDb()
+
+  await upsertKnowledgeCardDraftsForSourceMaterials([
+    {
+      tweetId: "tweet-7",
+      tweetUrl: "https://x.com/gia/status/tweet-7",
+      authorName: "Gia",
+      authorHandle: "gia",
+      text: "Original source text for async regeneration.",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T00:01:00.000Z",
+      rawPayload: {},
+      sourceKind: "x-bookmark"
+    }
+  ])
+
+  const regenerated = await regenerateKnowledgeCardDraft(
+    {
+      tweetId: "tweet-7",
+      tweetUrl: "https://x.com/gia/status/tweet-7",
+      authorName: "Gia",
+      authorHandle: "gia",
+      text: "Updated async source text.",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T00:01:00.000Z",
+      rawPayload: {},
+      sourceKind: "x-bookmark"
+    },
+    {
+      generateDraft: async (source) => {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        return {
+          id: `card-${source.tweetId}`,
+          sourceMaterialId: source.tweetId,
+          status: "draft",
+          title: "Async regenerated title",
+          theme: "Async regenerated theme",
+          summary: "Async regenerated summary",
+          keyExcerpt: "Async regenerated excerpt",
+          applicability: "Async regenerated applicability",
+          provenance: [],
+          quality: {
+            score: 88,
+            needsReview: false,
+            warnings: [],
+            generatorVersion: "async-regenerated"
+          },
+          generatedAt: "2026-03-15T04:00:00.000Z",
+          updatedAt: "2026-03-15T04:00:00.000Z",
+          sourceFingerprint: source.contentFingerprint ?? "",
+          lastGeneratedFromModel: "async-regenerated"
+        }
+      }
+    }
+  )
+
+  assert.equal(regenerated.title, "Async regenerated title")
+  assert.equal(regenerated.status, "draft")
+})

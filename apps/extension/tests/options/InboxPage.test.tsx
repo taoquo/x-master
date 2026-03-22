@@ -185,15 +185,6 @@ function getButton(container: HTMLDivElement, label: string) {
   return button
 }
 
-function getInputByLabel(container: HTMLDivElement, label: string) {
-  const labels = Array.from(container.querySelectorAll("label"))
-  const match = labels.find((candidate) => candidate.textContent?.includes(label))
-  assert.ok(match)
-  const input = match.querySelector("input, select")
-  assert.ok(input)
-  return input as HTMLInputElement | HTMLSelectElement
-}
-
 function setInputValue(element: HTMLInputElement | HTMLSelectElement, value: string, dom: JSDOM) {
   const prototype = element instanceof dom.window.HTMLSelectElement ? dom.window.HTMLSelectElement.prototype : dom.window.HTMLInputElement.prototype
   const descriptor = Object.getOwnPropertyDescriptor(prototype, "value")
@@ -216,7 +207,7 @@ test("InboxPage renders the workbench layout and switches detail drawer with row
 
   assert.match(container.textContent ?? "", /Search/)
   assert.match(container.textContent ?? "", /All sources/)
-  assert.match(container.textContent ?? "", /Long threads/)
+  assert.match(container.textContent ?? "", /Notes & long posts/)
   assert.match(container.textContent ?? "", /Select all visible/)
   assert.doesNotMatch(container.textContent ?? "", /Source material/)
 

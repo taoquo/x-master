@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react"
-import { ActionIcon, Badge, Button, Card, Group, SimpleGrid, Stack, Text, Title, UnstyledButton } from "@mantine/core"
+import { ActionIcon, Badge, Card, Group, SimpleGrid, Stack, Text, Title, UnstyledButton } from "@mantine/core"
 import { useMediaQuery } from "@mantine/hooks"
 import type { OptionsSection } from "../options/lib/navigation.ts"
 import { getStatusColor } from "./theme.ts"

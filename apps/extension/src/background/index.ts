@@ -6,6 +6,7 @@ import { getLatestSyncRun } from "../lib/storage/syncRunsStore.ts"
 import { getAllBookmarkTags, getAllTags } from "../lib/storage/tagsStore.ts"
 import { LOAD_POPUP_DATA_MESSAGE, REGENERATE_CARD_MESSAGE, RESET_LOCAL_DATA_MESSAGE, RUN_SYNC_MESSAGE } from "../lib/runtime/messages.ts"
 import type { PopupData, SourceMaterialRecord } from "../lib/types.ts"
+import { toSourceMaterialRecord } from "../lib/sourceMaterials.ts"
 import { runBookmarkSync } from "./syncBookmarks.ts"
 import { generateKnowledgeCardDraftWithAi } from "../lib/cards/generateKnowledgeCardDraftWithAi.ts"
 
@@ -54,10 +55,7 @@ async function loadPopupData() {
     getLatestSyncRun()
   ])
 
-  const sourceMaterials: SourceMaterialRecord[] = bookmarks.map((bookmark) => ({
-    ...bookmark,
-    sourceKind: "x-bookmark"
-  }))
+  const sourceMaterials: SourceMaterialRecord[] = bookmarks.map(toSourceMaterialRecord)
 
   return {
     bookmarks,
@@ -111,10 +109,7 @@ const handleMessage = createBackgroundMessageHandler({
     }
 
     await regenerateKnowledgeCardDraft(
-      {
-        ...sourceMaterial,
-        sourceKind: "x-bookmark"
-      },
+      toSourceMaterialRecord(sourceMaterial),
       {
         generateDraft: (nextSourceMaterial) =>
           generateKnowledgeCardDraftWithAi({

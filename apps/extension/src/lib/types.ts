@@ -1,3 +1,5 @@
+export type SourceMaterialKind = "x-bookmark" | "x-note-tweet"
+
 export interface BookmarkRecord {
   id?: string
   tweetId: string
@@ -11,10 +13,10 @@ export interface BookmarkRecord {
   metrics?: { likes: number; retweets: number; replies: number }
   rawPayload: unknown
   updatedAt?: string
+  sourceKind?: SourceMaterialKind
 }
 
 export interface SourceMaterialRecord extends BookmarkRecord {
-  sourceKind?: "x-bookmark"
   contentFingerprint?: string
 }
 
@@ -73,11 +75,31 @@ export interface KnowledgeCardProvenanceRecord {
   charEnd?: number
 }
 
+export type KnowledgeCardQualityIssueCode =
+  | "short_source"
+  | "missing_author_metadata"
+  | "theme_evidence_missing"
+  | "summary_evidence_missing"
+  | "applicability_evidence_missing"
+  | "key_excerpt_not_verbatim"
+  | "key_excerpt_evidence_missing"
+  | "key_excerpt_not_code_focused"
+  | "ai_generation_disabled"
+  | "ai_generation_failed"
+  | "model_warning"
+
+export interface KnowledgeCardQualityIssue {
+  code: KnowledgeCardQualityIssueCode
+  message: string
+  field?: KnowledgeCardProvenanceRecord["field"]
+}
+
 export interface KnowledgeCardQualitySignal {
   score: number
   needsReview: boolean
   warnings: string[]
   generatorVersion: string
+  issues?: KnowledgeCardQualityIssue[]
 }
 
 export interface KnowledgeCardDraftRecord {

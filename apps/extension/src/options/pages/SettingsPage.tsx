@@ -195,6 +195,9 @@ export function SettingsPage() {
               <Text size="sm" c="dimmed">
                 Recommendation: use `gpt-5-mini` for the first pass. If the API key is missing or the request fails, the app falls back to the heuristic generator and marks the draft for review.
               </Text>
+              <Text size="sm" c="dimmed">
+                V1 source model: each draft is generated from one saved X post or one saved note_tweet. Thread reconstruction is explicitly out of scope in this version.
+              </Text>
               <Button type="button" color="dark" onClick={() => void handleSaveAiSettings()} disabled={isSavingAiSettings}>
                 {isSavingAiSettings ? "Saving..." : "Save AI settings"}
               </Button>
@@ -353,7 +356,7 @@ export function SettingsPage() {
                   {queries.bookmarks.length} source material item{queries.bookmarks.length === 1 ? "" : "s"}
                 </Badge>
               </Group>
-              <Text>Each draft is generated from one saved X thread today. We will keep the source layer and the card layer separate as the migration continues.</Text>
+              <Text>Each draft is generated from one saved X post or one saved note_tweet in v1. We are not reconstructing full threads yet.</Text>
               <Text c="dimmed">Current generator captures provenance and quality warnings so drafts can be reviewed before export.</Text>
             </Stack>
           </SurfaceCard>

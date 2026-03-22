@@ -6,8 +6,11 @@ function toFrontmatterValue(value: string) {
 }
 
 function sanitizeFileName(value: string) {
+  const invalidChars = new Set(["<", ">", ":", "\"", "/", "\\", "|", "?", "*"])
   return value
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, " ")
+    .split("")
+    .map((character) => (invalidChars.has(character) || character.charCodeAt(0) < 32 ? " " : character))
+    .join("")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 80) || "Untitled"
@@ -42,14 +45,26 @@ function formatCardMarkdown({
     `tags: [${sourceTagNames.map((tagName) => toFrontmatterValue(tagName)).join(", ")}]`,
     `quality_score: ${card.quality.score}`,
     `needs_review: ${card.quality.needsReview}`,
+    `quality_issue_codes: [${(card.quality.issues ?? []).map((issue) => toFrontmatterValue(issue.code)).join(", ")}]`,
     `generator: ${toFrontmatterValue(card.quality.generatorVersion)}`,
     `generated_at: ${toFrontmatterValue(card.generatedAt)}`,
     `updated_at: ${toFrontmatterValue(card.updatedAt)}`,
     "---"
   ].join("\n")
 
-  const provenance = card.provenance.length
-    ? card.provenance.map((item) => `- ${item.field}: ${item.excerpt}`).join("\n")
+  const provenanceGroups = new Map<string, string[]>()
+  for (const item of card.provenance) {
+    const current = provenanceGroups.get(item.field) ?? []
+    if (!current.includes(item.excerpt)) {
+      current.push(item.excerpt)
+    }
+    provenanceGroups.set(item.field, current)
+  }
+
+  const provenance = provenanceGroups.size
+    ? Array.from(provenanceGroups.entries())
+        .map(([field, excerpts]) => [`- ${field}:`, ...excerpts.map((excerpt) => `  - ${excerpt}`)].join("\n"))
+        .join("\n")
     : "- No provenance captured"
 
   const warnings = card.quality.warnings.length ? card.quality.warnings.map((warning) => `- ${warning}`).join("\n") : "- None"
@@ -142,7 +157,9 @@ export async function exportKnowledgeCardsAsObsidianVault({
   const cardsFolder = zip.folder("Cards")
   const sourcesFolder = zip.folder("Sources")
   const metaFolder = zip.folder("_meta")
-  const sourceById = new Map(sourceMaterials.map((sourceMaterial) => [sourceMaterial.tweetId, sourceMaterial]))
+  const exportedSourceIds = new Set(cards.map((card) => card.sourceMaterialId))
+  const exportedSourceMaterials = sourceMaterials.filter((sourceMaterial) => exportedSourceIds.has(sourceMaterial.tweetId))
+  const sourceById = new Map(exportedSourceMaterials.map((sourceMaterial) => [sourceMaterial.tweetId, sourceMaterial]))
   const tagNameById = new Map(tags.map((tag) => [tag.id, tag.name]))
   const sourceTagNamesById = new Map<string, string[]>()
 
@@ -171,7 +188,7 @@ export async function exportKnowledgeCardsAsObsidianVault({
     )
   }
 
-  for (const sourceMaterial of sourceMaterials) {
+  for (const sourceMaterial of exportedSourceMaterials) {
     const sourceTagNames = sourceTagNamesById.get(sourceMaterial.tweetId) ?? []
     const relatedCard = cards.find((card) => card.sourceMaterialId === sourceMaterial.tweetId)
     const primaryTagFolder = getPrimaryTagFolder(sourceTagNames)
@@ -184,7 +201,7 @@ export async function exportKnowledgeCardsAsObsidianVault({
     "index.md",
     buildIndexMarkdown({
       cards,
-      sourceMaterials
+      sourceMaterials: exportedSourceMaterials
     })
   )
 

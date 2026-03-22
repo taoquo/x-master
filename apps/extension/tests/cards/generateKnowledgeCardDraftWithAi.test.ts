@@ -34,10 +34,10 @@ test("generateKnowledgeCardDraftWithAi uses OpenAI structured output when config
             keyExcerpt: "```ts\\nawait runTool()\\n```",
             applicability: "Useful when building agent orchestration loops with better debugging.",
             supportingEvidence: {
-              theme: "Agent systems need explicit tool calls.",
-              summary: "Agent systems need explicit tool calls.",
-              keyExcerpt: "```ts\\nawait runTool()\\n```",
-              applicability: "This pattern helps with observability."
+              theme: ["Agent systems need explicit tool calls."],
+              summary: ["Agent systems need explicit tool calls.", "This pattern helps with observability."],
+              keyExcerpt: ["```ts\\nawait runTool()\\n```"],
+              applicability: ["This pattern helps with observability."]
             },
             quality: {
               score: 92,
@@ -49,9 +49,49 @@ test("generateKnowledgeCardDraftWithAi uses OpenAI structured output when config
   })
 
   assert.equal(card.title, "Agent observability pattern")
-  assert.equal(card.quality.generatorVersion, "openai-responses-v1:gpt-5-mini")
+  assert.equal(card.quality.generatorVersion, "openai-responses-v2:gpt-5-mini")
   assert.equal(card.quality.needsReview, false)
-  assert.equal(card.provenance.length, 4)
+  assert.equal(card.provenance.length >= 5, true)
+})
+
+test("generateKnowledgeCardDraftWithAi falls back to source-backed evidence and code excerpts when the model output is weak", async () => {
+  const card = await generateKnowledgeCardDraftWithAi({
+    sourceMaterial,
+    settings: {
+      enabled: true,
+      provider: "openai",
+      apiKey: "test-key",
+      model: "gpt-5-mini"
+    },
+    fetchImpl: async () =>
+      ({
+        ok: true,
+        json: async () => ({
+          output_text: JSON.stringify({
+            title: "Agent observability pattern",
+            theme: "Agent observability pattern",
+            summary: "Explicit tool calls make agent systems easier to debug.",
+            keyExcerpt: "Use explicit tool calls for observability",
+            applicability: "Useful when building agent orchestration loops with better debugging.",
+            supportingEvidence: {
+              theme: ["Observability pattern for agents"],
+              summary: ["Explicit tool calls support debugging."],
+              keyExcerpt: ["Use explicit tool calls for observability"],
+              applicability: ["This pattern helps with observability."]
+            },
+            quality: {
+              score: 92,
+              warnings: []
+            }
+          })
+        })
+      }) as Response
+  })
+
+  assert.match(card.keyExcerpt, /```ts/)
+  assert.equal(card.quality.needsReview, true)
+  assert.equal(card.quality.warnings.some((warning) => warning.includes("fallback evidence applied")), true)
+  assert.equal(card.quality.warnings.some((warning) => warning.includes("Key excerpt was not found verbatim")), true)
 })
 
 test("generateKnowledgeCardDraftWithAi falls back to heuristic output when the API fails", async () => {

@@ -39,6 +39,17 @@ test("exportKnowledgeCardsAsObsidianVault creates an Obsidian-style zip with car
         savedAt: "2026-03-15T00:01:00.000Z",
         rawPayload: {},
         sourceKind: "x-bookmark"
+      },
+      {
+        tweetId: "tweet-2",
+        tweetUrl: "https://x.com/bob/status/tweet-2",
+        authorName: "Bob",
+        authorHandle: "bob",
+        text: "Unrelated source material that should not leak into the export.",
+        createdAtOnX: "2026-03-15T00:00:00.000Z",
+        savedAt: "2026-03-15T00:05:00.000Z",
+        rawPayload: {},
+        sourceKind: "x-bookmark"
       }
     ],
     bookmarkTags: [{ id: "bookmark-tag-1", bookmarkId: "tweet-1", tagId: "tag-1", createdAt: "2026-03-15T00:02:00.000Z" }],
@@ -51,6 +62,7 @@ test("exportKnowledgeCardsAsObsidianVault creates an Obsidian-style zip with car
 
   assert.equal(fileNames.includes("Cards/agent/Agent observability pattern/Agent observability pattern-tweet-1.md"), true)
   assert.equal(fileNames.includes("Sources/agent/Agent observability pattern/alice-tweet-1.md"), true)
+  assert.equal(fileNames.includes("Sources/Untagged/Misc/bob-tweet-2.md"), false)
   assert.equal(fileNames.includes("_meta/index.md"), true)
 
   const cardMarkdown = await zip.file("Cards/agent/Agent observability pattern/Agent observability pattern-tweet-1.md")?.async("string")
@@ -61,5 +73,6 @@ test("exportKnowledgeCardsAsObsidianVault creates an Obsidian-style zip with car
   assert.match(cardMarkdown ?? "", /quality_score: 91/)
   assert.match(sourceMarkdown ?? "", /Agent systems need explicit tool calls/)
   assert.match(indexMarkdown ?? "", /Exported cards: 1/)
+  assert.match(indexMarkdown ?? "", /Source materials: 1/)
   assert.match(indexMarkdown ?? "", /Cards\/<Primary Tag>\/<Theme>\//)
 })

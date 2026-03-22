@@ -201,7 +201,7 @@ export function InboxPage({ initialRouteState }: { initialRouteState?: InboxRout
                 All sources
               </Button>
               <Button type="button" variant={viewMode === "longform" ? "white" : "subtle"} color={viewMode === "longform" ? "dark" : "gray"} onClick={() => setViewMode("longform")}>
-                Long threads
+                Notes & long posts
               </Button>
             </Paper>
           }
@@ -210,7 +210,7 @@ export function InboxPage({ initialRouteState }: { initialRouteState?: InboxRout
         {!workspace.bookmarks.length ? (
           <EmptyState
             title="No source material yet."
-            description="Run your first sync to pull saved X threads into the source queue. Once source material exists, you can tag it here and review generated cards in Library."
+            description="Run your first sync to pull saved X posts and note_tweets into the source queue. Once source material exists, you can tag it here and review generated cards in Library."
           />
         ) : null}
 

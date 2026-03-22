@@ -1,10 +1,55 @@
 import type { KnowledgeCardDraftRecord, KnowledgeCardProvenanceRecord, SourceMaterialRecord } from "../types.ts"
 import { getSourceMaterialFingerprint } from "./sourceFingerprint.ts"
+import { createQualityIssue, issuesToWarnings } from "./qualityIssues.ts"
 
 export const HEURISTIC_GENERATOR_VERSION = "heuristic-v1"
 
-function normalizeWhitespace(value: string) {
+export function normalizeWhitespace(value: string) {
   return value.replace(/\s+/g, " ").trim()
+}
+
+function normalizeWhitespaceWithMap(value: string) {
+  let normalized = ""
+  let mapping: number[] = []
+  let previousWasWhitespace = false
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]
+    const isWhitespace = /\s/.test(char)
+
+    if (isWhitespace) {
+      if (!normalized.length || previousWasWhitespace) {
+        previousWasWhitespace = true
+        continue
+      }
+
+      normalized += " "
+      mapping.push(index)
+      previousWasWhitespace = true
+      continue
+    }
+
+    normalized += char
+    mapping.push(index)
+    previousWasWhitespace = false
+  }
+
+  const trimmed = normalized.trim()
+  if (!trimmed) {
+    return {
+      text: "",
+      indexMap: [] as number[]
+    }
+  }
+
+  const leadingWhitespaceCount = normalized.length - normalized.trimStart().length
+  const trailingWhitespaceCount = normalized.length - normalized.trimEnd().length
+  mapping = mapping.slice(leadingWhitespaceCount, mapping.length - trailingWhitespaceCount)
+
+  return {
+    text: trimmed,
+    indexMap: mapping
+  }
 }
 
 function getSentences(text: string) {
@@ -24,21 +69,37 @@ function takeExcerpt(text: string, start: number, maxLength: number) {
 }
 
 export function buildProvenance(field: KnowledgeCardProvenanceRecord["field"], sourceText: string, excerpt: string) {
-  const index = sourceText.indexOf(excerpt)
   const normalizedExcerpt = excerpt || takeExcerpt(sourceText, 0, 140)
+  const exactIndex = sourceText.indexOf(normalizedExcerpt)
 
-  if (index < 0) {
+  if (exactIndex >= 0) {
     return {
       field,
-      excerpt: normalizedExcerpt
+      excerpt: normalizedExcerpt,
+      charStart: exactIndex,
+      charEnd: exactIndex + normalizedExcerpt.length
+    } satisfies KnowledgeCardProvenanceRecord
+  }
+
+  const normalizedSource = normalizeWhitespaceWithMap(sourceText)
+  const compactExcerpt = normalizeWhitespace(normalizedExcerpt)
+  const normalizedIndex = normalizedSource.text.indexOf(compactExcerpt)
+
+  if (normalizedIndex >= 0) {
+    const start = normalizedSource.indexMap[normalizedIndex]
+    const end = normalizedSource.indexMap[normalizedIndex + compactExcerpt.length - 1]
+
+    return {
+      field,
+      excerpt: sourceText.slice(start, end + 1),
+      charStart: start,
+      charEnd: end + 1
     } satisfies KnowledgeCardProvenanceRecord
   }
 
   return {
     field,
-    excerpt: normalizedExcerpt,
-    charStart: index,
-    charEnd: index + normalizedExcerpt.length
+    excerpt: normalizedExcerpt
   } satisfies KnowledgeCardProvenanceRecord
 }
 
@@ -93,25 +154,35 @@ function inferApplicability(sourceText: string) {
     return "Useful when building with LLM APIs, prompt pipelines, or AI-assisted product features."
   }
 
-  return "Useful as a technical reference when revisiting the core idea or implementation pattern from this thread."
+  return "Useful as a technical reference when revisiting the core idea or implementation pattern from this saved post."
 }
 
-function inferWarnings(sourceMaterial: SourceMaterialRecord, keyExcerpt: string) {
-  const warnings: string[] = []
+function inferIssues(sourceMaterial: SourceMaterialRecord, keyExcerpt: string) {
+  const issues = []
 
   if (normalizeWhitespace(sourceMaterial.text).length < 180) {
-    warnings.push("Short source material; review the draft before keeping it.")
+    issues.push(createQualityIssue({
+      code: "short_source",
+      message: "Short source material; review the draft before keeping it."
+    }))
   }
 
   if (!keyExcerpt) {
-    warnings.push("No strong code or quote excerpt found.")
+    issues.push(createQualityIssue({
+      code: "key_excerpt_not_verbatim",
+      message: "No strong code or quote excerpt found.",
+      field: "key_excerpt"
+    }))
   }
 
   if (!sourceMaterial.authorHandle.trim()) {
-    warnings.push("Missing author handle metadata.")
+    issues.push(createQualityIssue({
+      code: "missing_author_metadata",
+      message: "Missing author handle metadata."
+    }))
   }
 
-  return warnings
+  return issues
 }
 
 export function generateKnowledgeCardDraft(sourceMaterial: SourceMaterialRecord): KnowledgeCardDraftRecord {
@@ -121,7 +192,8 @@ export function generateKnowledgeCardDraft(sourceMaterial: SourceMaterialRecord)
   const summary = inferSummary(sentences, sourceMaterial)
   const keyExcerpt = inferKeyExcerpt(normalizedText)
   const applicability = inferApplicability(normalizedText)
-  const warnings = inferWarnings(sourceMaterial, keyExcerpt)
+  const issues = inferIssues(sourceMaterial, keyExcerpt)
+  const warnings = issuesToWarnings(issues)
   const generatedAt = new Date().toISOString()
 
   return {
@@ -143,7 +215,8 @@ export function generateKnowledgeCardDraft(sourceMaterial: SourceMaterialRecord)
       score: Math.max(40, 88 - warnings.length * 14),
       needsReview: warnings.length > 0,
       warnings,
-      generatorVersion: HEURISTIC_GENERATOR_VERSION
+      generatorVersion: HEURISTIC_GENERATOR_VERSION,
+      issues
     },
     generatedAt,
     updatedAt: generatedAt,

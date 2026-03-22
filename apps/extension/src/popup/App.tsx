@@ -241,7 +241,7 @@ export default function App() {
             <Text>Stale cards: {staleCount}</Text>
             <Text>Tags: {data.tags.length}</Text>
             <Text>Current sync status: {data.summary.status}</Text>
-            {!data.sourceMaterials.length ? <Text c="dimmed">Run your first sync to bring technical threads in as source material.</Text> : null}
+            {!data.sourceMaterials.length ? <Text c="dimmed">Run your first sync to bring saved X posts and notes into the workspace.</Text> : null}
             {data.sourceMaterials.length > 0 && !data.knowledgeCards.length ? <Text c="dimmed">Source material is ready. The next sync will generate your first knowledge card drafts.</Text> : null}
             {data.summary.lastSyncedAt ? <Text>Last synced: {data.summary.lastSyncedAt}</Text> : null}
           </Stack>

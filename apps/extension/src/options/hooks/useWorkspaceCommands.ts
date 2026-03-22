@@ -4,6 +4,7 @@ import { attachTagToBookmark, attachTagToBookmarks, createTag, deleteTag, detach
 import { updateKnowledgeCardDraft } from "../../lib/storage/knowledgeCardsStore.ts"
 import { regenerateKnowledgeCard, resetStoredData, runSync } from "../../lib/runtime/popupClient.ts"
 import { saveExportScope, setHasCompletedOnboarding } from "../../lib/storage/settings.ts"
+import { toSourceMaterialRecord } from "../../lib/sourceMaterials.ts"
 import type { BookmarkRecord, BookmarkTagRecord, ExportScope, KnowledgeCardDraftRecord, TagRecord } from "../../lib/types.ts"
 
 function downloadFile(filename: string, content: Blob | string, mimeType: string) {
@@ -39,6 +40,15 @@ export interface ExportSummary {
   exportedAt: string
 }
 
+export interface WorkspaceCommandError {
+  scope: "knowledge-card-save" | "knowledge-card-regenerate"
+  message: string
+}
+
+function toErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
 export function useWorkspaceCommands({ bookmarks, knowledgeCards = [], bookmarkTags = [], tags = [], exportScope = "all", refreshData }: UseWorkspaceCommandsOptions) {
   const [isSyncing, setIsSyncing] = useState(false)
   const [isSavingTag, setIsSavingTag] = useState(false)
@@ -46,6 +56,7 @@ export function useWorkspaceCommands({ bookmarks, knowledgeCards = [], bookmarkT
   const [isExporting, setIsExporting] = useState(false)
   const [lastExportSummary, setLastExportSummary] = useState<ExportSummary | null>(null)
   const [isSavingExportScope, setIsSavingExportScope] = useState(false)
+  const [commandError, setCommandError] = useState<WorkspaceCommandError | null>(null)
 
   const handleSync = useCallback(async () => {
     setIsSyncing(true)
@@ -153,10 +164,17 @@ export function useWorkspaceCommands({ bookmarks, knowledgeCards = [], bookmarkT
       cardId: string,
       updates: Pick<KnowledgeCardDraftRecord, "title" | "theme" | "summary" | "keyExcerpt" | "applicability">
     ) => {
+      setCommandError(null)
       setIsSavingTag(true)
       try {
         await updateKnowledgeCardDraft(cardId, updates)
         await refreshData()
+      } catch (error) {
+        setCommandError({
+          scope: "knowledge-card-save",
+          message: toErrorMessage(error, "Failed to save the reviewed card.")
+        })
+        throw error
       } finally {
         setIsSavingTag(false)
       }
@@ -166,10 +184,17 @@ export function useWorkspaceCommands({ bookmarks, knowledgeCards = [], bookmarkT
 
   const handleRegenerateKnowledgeCardDraft = useCallback(
     async (cardId: string) => {
+      setCommandError(null)
       setIsSavingTag(true)
       try {
         await regenerateKnowledgeCard(cardId)
         await refreshData()
+      } catch (error) {
+        setCommandError({
+          scope: "knowledge-card-regenerate",
+          message: toErrorMessage(error, "Failed to regenerate the card with AI.")
+        })
+        throw error
       } finally {
         setIsSavingTag(false)
       }
@@ -192,19 +217,20 @@ export function useWorkspaceCommands({ bookmarks, knowledgeCards = [], bookmarkT
 
         return card.status === "reviewed"
       })
+      const exportedSourceIds = new Set(cardsToExport.map((card) => card.sourceMaterialId))
+      const sourceMaterialsToExport = bookmarks
+        .filter((bookmark) => exportedSourceIds.has(bookmark.tweetId))
+        .map(toSourceMaterialRecord)
       const payload = await exportKnowledgeCardsAsObsidianVault({
         cards: cardsToExport,
-        sourceMaterials: bookmarks.map((bookmark) => ({
-          ...bookmark,
-          sourceKind: "x-bookmark" as const
-        })),
+        sourceMaterials: sourceMaterialsToExport,
         bookmarkTags,
         tags
       })
       const summary: ExportSummary = {
         fileName: "x-knowledge-cards-obsidian.zip",
         cardCount: cardsToExport.length,
-        sourceCount: bookmarks.length,
+        sourceCount: sourceMaterialsToExport.length,
         draftCount: cardsToExport.filter((card) => card.status === "draft").length,
         reviewedCount: cardsToExport.filter((card) => card.status === "reviewed" && !card.quality.needsReview).length,
         staleCount: cardsToExport.filter((card) => card.status === "reviewed" && card.quality.needsReview).length,
@@ -250,6 +276,8 @@ export function useWorkspaceCommands({ bookmarks, knowledgeCards = [], bookmarkT
     isExporting,
     isSavingExportScope,
     lastExportSummary,
+    commandError,
+    clearCommandError: () => setCommandError(null),
     handleSync,
     handleCreateTag,
     handleRenameTag,

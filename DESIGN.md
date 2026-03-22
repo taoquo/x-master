@@ -10,10 +10,21 @@ The product story is:
 
 Users should always know which stage they are in.
 
+## V1 Source Model
+
+V1 does **not** reconstruct full X threads.
+
+The ingest model is:
+
+- one saved X post
+- or one saved `note_tweet`
+
+Every generated card in v1 is derived from exactly one saved source item.
+
 ## Core Objects
 
 - `Source Material`
-  - Raw saved X threads and posts
+  - One raw saved X post or one raw saved `note_tweet`
   - Tagged and triaged in Inbox
   - Never presented as the final learning asset
 

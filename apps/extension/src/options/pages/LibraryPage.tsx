@@ -5,6 +5,7 @@ import type { LibraryLifecycleFilter, LibraryRouteState, LibraryView } from "../
 import { EmptyState, SectionHeader, StatusBadge, SurfaceCard } from "../../ui/components.tsx"
 import { ExtensionUiProvider } from "../../ui/provider.tsx"
 import { isUiTestEnv } from "../../ui/testEnv.ts"
+import { getQualityIssueLabel } from "../../lib/cards/qualityIssues.ts"
 
 function cardMatchesQuery(card: {
   title: string
@@ -45,6 +46,21 @@ function getCardLifecycleStatus(card: {
   }
 
   return card.status
+}
+
+function formatProvenanceField(field: string) {
+  switch (field) {
+    case "key_excerpt":
+      return "Key excerpt"
+    case "applicability":
+      return "Applicability"
+    case "summary":
+      return "Summary"
+    case "theme":
+      return "Theme"
+    default:
+      return field
+  }
 }
 
 interface LibraryPageProps {
@@ -142,7 +158,7 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
       keyExcerpt: string
       applicability: string
       provenance: Array<{ field: string; excerpt: string }>
-      quality: { score: number; needsReview: boolean; warnings: string[]; generatorVersion: string }
+      quality: { score: number; needsReview: boolean; warnings: string[]; generatorVersion: string; issues?: Array<{ code: string; message: string; field?: string }> }
       sourceText: string
       sourceUrl: string
       sourceSavedAt: string
@@ -180,6 +196,29 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
   }, [cardsInScope, selectedCardId])
 
   const selectedCard = useMemo(() => cardsInScope.find((card) => card.id === selectedCardId) ?? null, [cardsInScope, selectedCardId])
+  const groupedProvenance = useMemo(() => {
+    if (!selectedCard) {
+      return []
+    }
+
+    const groups = new Map<string, string[]>()
+
+    for (const item of selectedCard.provenance) {
+      const current = groups.get(item.field) ?? []
+      if (!current.includes(item.excerpt)) {
+        current.push(item.excerpt)
+      }
+      groups.set(item.field, current)
+    }
+
+    return ["theme", "summary", "key_excerpt", "applicability"]
+      .map((field) => ({
+        field,
+        excerpts: groups.get(field) ?? []
+      }))
+      .filter((group) => group.excerpts.length > 0)
+  }, [selectedCard])
+  const qualityIssues = selectedCard?.quality.issues ?? []
   const nextCardCandidate = useMemo(() => {
     if (!selectedCardId) {
       return cardsInScope[0] ?? null
@@ -228,12 +267,29 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
       return
     }
 
-    await workspace.handleUpdateKnowledgeCardDraft(selectedCard.id, draftFields)
-    setReviewFeedback({
-      cardId: selectedCard.id,
-      message: "Card saved and marked as reviewed.",
-      nextCardId: nextCardCandidate?.id
-    })
+    try {
+      await workspace.handleUpdateKnowledgeCardDraft(selectedCard.id, draftFields)
+      setReviewFeedback({
+        cardId: selectedCard.id,
+        message: "Card saved and marked as reviewed.",
+        nextCardId: nextCardCandidate?.id
+      })
+    } catch {
+      setReviewFeedback(null)
+    }
+  }
+
+  async function handleRegenerateSelectedCard() {
+    if (!selectedCard) {
+      return
+    }
+
+    try {
+      await workspace.handleRegenerateKnowledgeCardDraft(selectedCard.id)
+      setReviewFeedback(null)
+    } catch {
+      // The command hook now exposes a user-visible error state. Do not add duplicate local handling here.
+    }
   }
 
   const lifecycleTitle =
@@ -419,7 +475,7 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
 
           <SurfaceCard
             title="Selected card"
-            description="Refine the generated card, inspect provenance, and keep the source thread visible while making review decisions."
+            description="Refine the generated card, inspect provenance, and keep the source post or note visible while making review decisions."
             style={{ minHeight: 0, height: "100%" }}
             bodyStyle={{ minHeight: 0, overflow: "hidden" }}>
             {!selectedCard ? (
@@ -446,11 +502,34 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
                   <Card padding="md" bg="red.0" withBorder>
                     <Stack gap={4}>
                       <Text fw={600}>Needs review</Text>
+                      {qualityIssues.length ? (
+                        <Group gap="xs" wrap="wrap">
+                          {qualityIssues.map((issue, index) => (
+                            <Badge key={`${issue.code}-${index}`} variant="light" color="red">
+                              {getQualityIssueLabel(issue.code as Parameters<typeof getQualityIssueLabel>[0])}
+                            </Badge>
+                          ))}
+                        </Group>
+                      ) : null}
                       {selectedCard.quality.warnings.map((warning) => (
                         <Text key={warning} size="sm">
                           - {warning}
                         </Text>
                       ))}
+                    </Stack>
+                  </Card>
+                ) : null}
+
+                {workspace.commandError && (workspace.commandError.scope === "knowledge-card-save" || workspace.commandError.scope === "knowledge-card-regenerate") ? (
+                  <Card padding="md" bg="red.0" withBorder>
+                    <Stack gap={6}>
+                      <Text fw={600}>Action failed</Text>
+                      <Text size="sm">{workspace.commandError.message}</Text>
+                      <Group gap="sm">
+                        <Button type="button" variant="light" color="red" onClick={workspace.clearCommandError}>
+                          Dismiss
+                        </Button>
+                      </Group>
                     </Stack>
                   </Card>
                 ) : null}
@@ -468,7 +547,7 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
                   <Button
                     type="button"
                     variant="light"
-                    onClick={() => void workspace.handleRegenerateKnowledgeCardDraft(selectedCard.id)}
+                    onClick={() => void handleRegenerateSelectedCard()}
                     disabled={workspace.isSavingTag}>
                     Regenerate with AI
                   </Button>
@@ -523,13 +602,20 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
 
                 <Stack gap="xs">
                   <Title order={4}>Provenance</Title>
-                  {selectedCard.provenance.map((item, index) => (
-                    <Card key={`${item.field}-${index}`} padding="sm" withBorder>
+                  {groupedProvenance.map((group) => (
+                    <Card key={group.field} padding="sm" withBorder>
                       <Stack gap={4}>
                         <Text size="sm" fw={600}>
-                          {item.field}
+                          {formatProvenanceField(group.field)}
                         </Text>
-                        <Text size="sm">{item.excerpt}</Text>
+                        <Text size="xs" c="dimmed">
+                          {group.excerpts.length} supporting snippet{group.excerpts.length === 1 ? "" : "s"}
+                        </Text>
+                        {group.excerpts.map((excerpt, index) => (
+                          <Card key={`${group.field}-${index}`} padding="xs" bg="gray.0" withBorder>
+                            <Text size="sm">{excerpt}</Text>
+                          </Card>
+                        ))}
                       </Stack>
                     </Card>
                   ))}
