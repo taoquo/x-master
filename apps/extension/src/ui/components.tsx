@@ -128,10 +128,10 @@ function getNavIcon(section: OptionsSection) {
 
 export function WorkspaceShell({ section, navItems, onSelectSection, children }: WorkspaceShellProps) {
   const testEnv = isUiTestEnv()
-  const autoCollapsed = useMediaQuery("(max-width: 1380px)", false, { getInitialValueInEffect: false }) ?? false
+  const autoCollapsed = useMediaQuery("(max-width: 1180px)", false, { getInitialValueInEffect: false }) ?? false
   const [manualCollapsed, setManualCollapsed] = useState<boolean | null>(null)
   const collapsed = testEnv ? false : manualCollapsed ?? autoCollapsed
-  const railWidth = collapsed ? 72 : 288
+  const railWidth = collapsed ? 80 : 296
 
   const navButtons = useMemo(
     () =>
@@ -150,14 +150,15 @@ export function WorkspaceShell({ section, navItems, onSelectSection, children }:
               alignItems: "center",
               justifyContent: collapsed ? "center" : "space-between",
               gap: 16,
-              minHeight: 40,
+              minHeight: 48,
               width: "100%",
-              padding: collapsed ? "10px 0" : "10px 12px",
-              borderRadius: 8,
-              background: active ? "#18181b" : "#ffffff",
+              padding: collapsed ? "12px 0" : "12px 14px",
+              borderRadius: 12,
+              background: active ? "#18181b" : "#f8fafc",
               color: active ? "#ffffff" : "#18181b",
-              border: active ? "1px solid #18181b" : "1px solid transparent",
-              transition: "background 120ms ease, color 120ms ease, border-color 120ms ease"
+              border: active ? "1px solid #18181b" : "1px solid #e4e4e7",
+              boxShadow: active ? "0 10px 28px rgba(24, 24, 27, 0.12)" : undefined,
+              transition: "background 120ms ease, color 120ms ease, border-color 120ms ease, box-shadow 120ms ease"
             }}>
             <Group gap={collapsed ? 0 : 16} wrap="nowrap" justify={collapsed ? "center" : "flex-start"}>
               <AppIcon name={getNavIcon(item.id)} size={20} />
@@ -196,7 +197,7 @@ export function WorkspaceShell({ section, navItems, onSelectSection, children }:
             alignItems: "center",
             justifyContent: collapsed ? "center" : "space-between",
             gap: 12,
-            minHeight: 40,
+            minHeight: 48,
             padding: collapsed ? 0 : "0 4px"
           }}>
           <div
@@ -213,12 +214,12 @@ export function WorkspaceShell({ section, navItems, onSelectSection, children }:
               style={{
                 display: "grid",
                 placeItems: "center",
-                width: 28,
-                height: 28,
-                borderRadius: 8,
+                width: 32,
+                height: 32,
+                borderRadius: 10,
                 background: "#18181b",
                 color: "#ffffff",
-                fontSize: 13,
+                fontSize: 14,
                 fontWeight: 700,
                 flexShrink: 0
               }}>
@@ -241,6 +242,8 @@ export function WorkspaceShell({ section, navItems, onSelectSection, children }:
               type="button"
               variant="subtle"
               color="gray"
+              size={40}
+              radius="md"
               onClick={() => setManualCollapsed(!collapsed)}
               aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}>
               <AppIcon name={collapsed ? "chevron-right" : "chevron-left"} size={16} />
