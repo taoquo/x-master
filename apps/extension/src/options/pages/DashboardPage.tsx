@@ -1,17 +1,14 @@
 import React, { useMemo } from "react"
-import { Badge, Button, Group, SimpleGrid, Stack, Text, Title } from "@mantine/core"
+import { Badge, Button, Group, SimpleGrid, Stack, Text } from "@mantine/core"
 import { DashboardHeatmap } from "../components/DashboardHeatmap.tsx"
 import { useWorkspaceCommands } from "../hooks/useWorkspaceCommands.ts"
 import { useWorkspaceQueries } from "../hooks/useWorkspaceQueries.ts"
 import { buildDashboardModel } from "../lib/dashboard.ts"
-import type { InboxRouteState, LibraryRouteState } from "../lib/navigation.ts"
+import type { InboxRouteState } from "../lib/navigation.ts"
 import { MetricCard, SectionHeader, StatusBadge, SurfaceCard } from "../../ui/components.tsx"
-import type { OnboardingStep } from "../../lib/types.ts"
 
 interface DashboardPageProps {
   onOpenInbox: (routeState?: InboxRouteState) => void
-  onOpenLibrary?: (routeState?: LibraryRouteState) => void
-  onOpenSettings?: () => void
 }
 
 function formatTimestamp(value?: string) {
@@ -34,55 +31,7 @@ function formatPercent(value: number) {
   return `${value}%`
 }
 
-function getOnboardingHero(step: OnboardingStep) {
-  switch (step) {
-    case "sync-source":
-      return {
-        eyebrow: "Getting started",
-        stage: "Step 1 of 4",
-        title: "Pull source material into the workspace",
-        description: "Run the first sync to bring saved X posts and notes into the source queue. The rest of the pipeline starts only after source material exists.",
-        support: "Once source material arrives, the app can generate knowledge card drafts and start the review loop.",
-        actionLabel: "Sync source material",
-        action: "sync" as const
-      }
-    case "generate-cards":
-      return {
-        eyebrow: "Getting started",
-        stage: "Step 2 of 4",
-        title: "Enable generation and create the first draft queue",
-        description: "Source material exists, but no cards have been generated yet. Turn on AI generation, save the model settings, then sync again.",
-        support: "This is the first time the app stops being a capture tool and starts behaving like a card pipeline.",
-        actionLabel: "Open pipeline settings",
-        action: "settings" as const
-      }
-    case "review-cards":
-      return {
-        eyebrow: "Getting started",
-        stage: "Step 3 of 4",
-        title: "Review the first draft queue",
-        description: "Your first generated cards are ready. Move into Library and turn at least one draft into a reviewed card you trust.",
-        support: "That first reviewed card is the moment the workflow becomes a real knowledge asset system.",
-        actionLabel: "Review draft queue",
-        action: "library-draft" as const
-      }
-    case "export-vault":
-      return {
-        eyebrow: "Getting started",
-        stage: "Step 4 of 4",
-        title: "Export the first vault",
-        description: "You have reviewed cards now. Produce the first vault export to close the loop from source capture to reusable notes.",
-        support: "This is the step that turns the app into part of your long-term learning system instead of a temporary workspace.",
-        actionLabel: "Open export controls",
-        action: "settings" as const
-      }
-    case "done":
-    default:
-      return null
-  }
-}
-
-export function DashboardPage({ onOpenInbox, onOpenLibrary, onOpenSettings }: DashboardPageProps) {
+export function DashboardPage({ onOpenInbox }: DashboardPageProps) {
   const queries = useWorkspaceQueries()
   const commands = useWorkspaceCommands({
     bookmarks: queries.bookmarks,
@@ -104,62 +53,6 @@ export function DashboardPage({ onOpenInbox, onOpenLibrary, onOpenSettings }: Da
     [queries.bookmarkTags, queries.bookmarks, queries.knowledgeCards, queries.summary, queries.tags]
   )
 
-  const onboardingHero = getOnboardingHero(queries.onboardingStep)
-  const hero = onboardingHero ?? {
-    eyebrow: "Next best action",
-    stage: "Workflow priority",
-    title: model.recommendation.title,
-    description: model.recommendation.description,
-    support: "Choose the next queue based on where work is piling up and where trust is slipping.",
-    actionLabel: model.recommendation.actionLabel,
-    action: "recommendation" as const
-  }
-
-  const handleRecommendation = () => {
-    if (model.recommendation.action === "sync") {
-      void commands.handleSync()
-      return
-    }
-
-    if (model.recommendation.action === "settings") {
-      onOpenSettings?.()
-      return
-    }
-
-    if (model.recommendation.action === "inbox") {
-      onOpenInbox()
-      return
-    }
-
-    if (model.recommendation.action === "library-tags") {
-      onOpenLibrary?.({ view: "tags", lifecycle: "all" })
-      return
-    }
-
-    if (model.recommendation.action === "library-lifecycle") {
-      onOpenLibrary?.({ view: "all", lifecycle: model.recommendation.lifecycle ?? "all" })
-    }
-  }
-
-  const handleHeroAction = () => {
-    if (hero.action === "sync") {
-      void commands.handleSync()
-      return
-    }
-
-    if (hero.action === "settings") {
-      onOpenSettings?.()
-      return
-    }
-
-    if (hero.action === "library-draft") {
-      onOpenLibrary?.({ view: "all", lifecycle: "draft" })
-      return
-    }
-
-    handleRecommendation()
-  }
-
   return (
     <Stack gap="md">
       <SectionHeader
@@ -176,70 +69,6 @@ export function DashboardPage({ onOpenInbox, onOpenLibrary, onOpenSettings }: Da
           </>
         }
       />
-
-      <SurfaceCard
-        style={{
-          background: "linear-gradient(135deg, #111827 0%, #1f2937 65%, #0f172a 100%)",
-          color: "#ffffff"
-        }}
-        title={hero.eyebrow}
-        description="The dashboard should answer this before anything else: what should you do right now to improve the knowledge pipeline?"
-        bodyStyle={{ gap: 18 }}>
-        <Stack gap="lg">
-          <Group gap="xs" wrap="wrap">
-            <Badge variant="filled" color="blue">
-              {hero.stage}
-            </Badge>
-            <Badge variant="filled" color="blue">
-              {model.metrics.draftCount} drafts
-            </Badge>
-            <Badge variant="filled" color={model.metrics.staleCount ? "red" : "gray"}>
-              {model.metrics.staleCount} stale
-            </Badge>
-            <Badge variant="filled" color="gray">
-              {model.metrics.reviewedCount} reviewed
-            </Badge>
-            <Badge variant="filled" color="dark">
-              {model.metrics.inboxCount} source items waiting
-            </Badge>
-          </Group>
-
-          <Stack gap={8}>
-            <Text size="xs" fw={700} tt="uppercase" c="rgba(255,255,255,0.7)">
-              {hero.eyebrow}
-            </Text>
-            <Title order={1} c="#ffffff" style={{ maxWidth: 720 }}>
-              {hero.title}
-            </Title>
-            <Text c="rgba(255,255,255,0.82)" size="md" style={{ maxWidth: 760, lineHeight: 1.65 }}>
-              {hero.description}
-            </Text>
-          </Stack>
-
-          <Group justify="space-between" align="end" wrap="wrap">
-            <Stack gap={6}>
-              <Text size="sm" c="rgba(255,255,255,0.72)">
-                This workspace now behaves like a production line:
-              </Text>
-              <Text size="sm" c="rgba(255,255,255,0.88)">
-                source queue {"->"} draft queue {"->"} reviewed library {"->"} vault export
-              </Text>
-              <Text size="sm" c="rgba(255,255,255,0.72)">
-                {hero.support}
-              </Text>
-            </Stack>
-
-            <Button
-              type="button"
-              color="blue"
-              size="lg"
-              onClick={handleHeroAction}
-              disabled={hero.action === "sync" && commands.isSyncing}>
-              {hero.action === "sync" && commands.isSyncing ? "Syncing..." : hero.actionLabel}
-            </Button>
-          </Group>
-        </Stack>
-      </SurfaceCard>
 
       <SimpleGrid cols={{ base: 1, xl: 2 }} spacing="md">
         <SurfaceCard title="Pipeline snapshot" description="A quick read on the whole pipeline, from saved source material to reusable cards.">

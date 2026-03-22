@@ -177,7 +177,7 @@ test("OptionsApp defaults to Dashboard and renders the four-module navigation", 
   assert.match(container.textContent ?? "", /Pipeline snapshot/)
   assert.match(container.textContent ?? "", /Sync health/)
   assert.match(container.textContent ?? "", /Publish activity/)
-  assert.match(container.textContent ?? "", /Getting started/)
+  assert.doesNotMatch(container.textContent ?? "", /Getting started/)
   assert.doesNotMatch(container.textContent ?? "", /Triage pressure/)
   assert.doesNotMatch(container.textContent ?? "", /Recent momentum/)
   assert.doesNotMatch(container.textContent ?? "", /Sources to classify/)

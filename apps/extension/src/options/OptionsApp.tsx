@@ -20,27 +20,9 @@ export function OptionsApp() {
   const [libraryRouteState, setLibraryRouteState] = useState<LibraryRouteState | undefined>(undefined)
   const [inboxRouteState, setInboxRouteState] = useState<InboxRouteState | undefined>(undefined)
 
-  const openLibraryView = useCallback((view: LibraryView) => {
-    setLibraryView(view)
-    setLibraryRouteState(undefined)
-    setSection("library")
-  }, [])
-
-  const openLibrary = useCallback((routeState?: LibraryRouteState) => {
-    if (routeState?.view) {
-      setLibraryView(routeState.view)
-    }
-    setLibraryRouteState(routeState)
-    setSection("library")
-  }, [])
-
   const openInbox = useCallback((routeState?: InboxRouteState) => {
     setInboxRouteState(routeState)
     setSection("inbox")
-  }, [])
-
-  const openSettings = useCallback(() => {
-    setSection("settings")
   }, [])
 
   const handleSelectSection = useCallback((nextSection: OptionsSection) => {
@@ -67,9 +49,9 @@ export function OptionsApp() {
         return <SettingsPage />
       case "dashboard":
       default:
-        return <DashboardPage onOpenInbox={openInbox} onOpenLibrary={openLibrary} onOpenSettings={openSettings} />
+        return <DashboardPage onOpenInbox={openInbox} />
     }
-  }, [inboxRouteState, libraryRouteState, libraryView, openInbox, openLibrary, openLibraryView, openSettings, section])
+  }, [inboxRouteState, libraryRouteState, libraryView, openInbox, section])
 
   return (
     <ExtensionUiProvider>
