@@ -18,7 +18,7 @@ interface InboxDetailPanelProps {
 
 export function InboxDetailPanel(props: InboxDetailPanelProps) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: 0, height: "100%" }}>
       <InboxBookmarkDetailContent {...props} />
     </div>
   )

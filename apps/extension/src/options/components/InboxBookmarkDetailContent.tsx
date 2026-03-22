@@ -93,20 +93,14 @@ export function InboxBookmarkDetailContent({
   }
 
   return (
-    <Stack gap={0} h="100%" style={{ background: "#ffffff", borderRadius: 12, border: "1px solid #e4e4e7", overflow: "hidden" }}>
-      <Group justify="space-between" p={8} style={{ borderBottom: "1px solid #e4e4e7" }}>
+    <Stack gap={0} h="100%" style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e4e4e7", overflow: "hidden" }}>
+      <Group justify="space-between" p={10} style={{ borderBottom: "1px solid #e4e4e7", background: "#fcfcfd" }}>
         <Group gap={8}>
           <ActionIcon component="a" href={currentBookmark.tweetUrl} target="_blank" rel="noreferrer" variant="subtle" color="gray" radius="md" aria-label="Open on X">
             <AppIcon name="external" size={16} />
           </ActionIcon>
           <ActionIcon type="button" variant="subtle" color="gray" radius="md" aria-label="Copy link" onClick={() => void handleCopyLink()}>
             <AppIcon name="copy" size={16} />
-          </ActionIcon>
-          <ActionIcon type="button" variant="subtle" color="gray" radius="md" aria-label="Media count" disabled={!hasMedia}>
-            <AppIcon name="image" size={16} />
-          </ActionIcon>
-            <ActionIcon type="button" variant="subtle" color="gray" radius="md" aria-label="Like count" disabled={(currentBookmark.metrics?.likes ?? 0) <= 0}>
-            <AppIcon name="heart" size={16} />
           </ActionIcon>
         </Group>
 
@@ -125,57 +119,59 @@ export function InboxBookmarkDetailContent({
         </Group>
       </Group>
 
-      <Group justify="space-between" align="start" p={16} style={{ borderBottom: "1px solid #e4e4e7" }}>
-        <Group align="start" gap={16} wrap="nowrap">
-          <div
-            style={{
-              display: "grid",
-              placeItems: "center",
-              width: 42,
-              height: 42,
-              borderRadius: 999,
-              background: "#f4f4f5",
-              color: "#18181b",
-              fontWeight: 700
-            }}>
-            {currentBookmark.authorName.slice(0, 1).toUpperCase()}
-          </div>
+      <Stack gap="md" p={20} style={{ borderBottom: "1px solid #e4e4e7" }}>
+        <Group justify="space-between" align="start" wrap="wrap" gap="md">
+          <Group align="start" gap={16} wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                display: "grid",
+                placeItems: "center",
+                width: 48,
+                height: 48,
+                borderRadius: 999,
+                background: "#f4f4f5",
+                color: "#18181b",
+                fontWeight: 700
+              }}>
+              {currentBookmark.authorName.slice(0, 1).toUpperCase()}
+            </div>
 
-          <Stack gap={6}>
-            <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-              Source material
-            </Text>
-            <Text fw={600} size="sm">
-              {currentBookmark.authorName}
-            </Text>
-            <Text size="xs">{subject}</Text>
-            <Text size="xs" c="dimmed">
-              @{currentBookmark.authorHandle}
-            </Text>
-          </Stack>
+            <Stack gap={6} style={{ flex: 1, minWidth: 0 }}>
+              <Group gap="xs" wrap="wrap">
+                <Badge variant="light" color="dark">
+                  {sourceKindLabel}
+                </Badge>
+                {(currentBookmark.metrics?.likes ?? 0) > 0 ? (
+                  <Badge variant="light" color="gray">
+                    {(currentBookmark.metrics?.likes ?? 0).toLocaleString()} likes
+                  </Badge>
+                ) : null}
+                {hasMedia ? (
+                  <Badge variant="light" color="blue">
+                    {currentBookmark.media?.length} media
+                  </Badge>
+                ) : null}
+              </Group>
+              <Text fw={700} size="lg" style={{ lineHeight: 1.25 }}>
+                {subject}
+              </Text>
+              <Group gap={8} wrap="wrap">
+                <Text fw={600} size="sm">
+                  {currentBookmark.authorName}
+                </Text>
+                <Text size="sm" c="dimmed">
+                  @{currentBookmark.authorHandle}
+                </Text>
+              </Group>
+            </Stack>
+          </Group>
+
+          <Text size="xs" c="dimmed">
+            Saved {formatDateTime(currentBookmark.savedAt)}
+          </Text>
         </Group>
 
-        <Text size="xs" c="dimmed">
-          {formatDateTime(currentBookmark.savedAt)}
-        </Text>
-      </Group>
-
-      <Stack gap="xs" p={14} style={{ borderBottom: "1px solid #e4e4e7" }}>
         <Group gap="xs" wrap="wrap">
-          <Badge variant="light" color="gray">
-            Saved {formatDateTime(currentBookmark.savedAt)}
-          </Badge>
-          <Badge variant="light" color="gray">
-            {(currentBookmark.metrics?.likes ?? 0).toLocaleString()} likes
-          </Badge>
-          <Badge variant="light" color="gray">
-            {sourceKindLabel}
-          </Badge>
-          {hasMedia ? (
-            <Badge variant="light" color="blue">
-              {currentBookmark.media?.length} media
-            </Badge>
-          ) : null}
           {tags.map((tag) => (
             <Badge key={tag.id} variant="filled" color="dark">
               {tag.name}
@@ -184,14 +180,21 @@ export function InboxBookmarkDetailContent({
         </Group>
       </Stack>
 
-      <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-        <Stack gap="md" p={16}>
-          <Text size="sm" style={{ lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: "auto", background: "#fcfcfd" }}>
+        <Stack gap="lg" p={20}>
+          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+            Full source
+          </Text>
+
+          <Text size="sm" style={{ lineHeight: 1.8, whiteSpace: "pre-wrap", color: "#18181b" }}>
             {currentBookmark.text}
           </Text>
 
           {hasMedia ? (
             <Stack gap="sm">
+              <Text size="sm" fw={600}>
+                Media
+              </Text>
               {currentBookmark.media?.map((item, index) => (
                 <figure key={`${item.url}-${index}`} style={{ margin: 0 }}>
                   <Image src={item.url} alt={item.altText ?? `Bookmark media ${index + 1}`} radius="md" />
@@ -205,7 +208,7 @@ export function InboxBookmarkDetailContent({
         </Stack>
       </div>
 
-      <Stack gap="sm" p={14} style={{ borderTop: "1px solid #e4e4e7", background: "#ffffff" }}>
+      <Stack gap="sm" p={16} style={{ borderTop: "1px solid #e4e4e7", background: "#ffffff" }}>
         <Group justify="space-between" align="center" wrap="wrap">
           <Text size="sm" fw={500}>
             Tags

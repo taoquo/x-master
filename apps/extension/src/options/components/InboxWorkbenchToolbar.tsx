@@ -1,5 +1,5 @@
 import React from "react"
-import { Badge, Button, Checkbox, Group, NativeSelect, Paper, SimpleGrid, Stack, Text, TextInput } from "@mantine/core"
+import { Badge, Button, Checkbox, Group, NativeSelect, SimpleGrid, Stack, Text, TextInput } from "@mantine/core"
 import type { BookmarkSortOrder, MultiValueMatchMode, SavedTimeRange } from "../../lib/search/searchBookmarks.ts"
 import type { TagRecord } from "../../lib/types.ts"
 import { AppIcon } from "../../ui/icons.tsx"
@@ -141,8 +141,8 @@ export function InboxWorkbenchToolbar({
     : null
 
   return (
-    <Stack gap="sm">
-      <Paper p="sm" radius="md" withBorder style={{ background: "#ffffff" }}>
+    <Stack gap={0}>
+      <div style={{ padding: 14, borderBottom: "1px solid #e4e4e7", background: "#ffffff" }}>
         <Stack gap="sm">
           <Group justify="space-between" align="center" gap="sm" wrap="wrap">
             <Group gap="xs" wrap="wrap">
@@ -167,11 +167,8 @@ export function InboxWorkbenchToolbar({
             </Button>
           </Group>
 
-          <Group align="end" gap="sm" wrap="wrap">
-            <div style={{ display: "grid", gap: 4, flex: "1 1 280px", minWidth: 220 }}>
-              <Text size="xs" fw={600} c="dimmed">
-                Search
-              </Text>
+          <Group align="center" gap="sm" wrap="wrap">
+            <div style={{ flex: "1 1 280px", minWidth: 220 }}>
               <TextInput
                 type="search"
                 value={query}
@@ -181,14 +178,22 @@ export function InboxWorkbenchToolbar({
               />
             </div>
 
-            <NativeSelect value={sortOrder} onChange={(event) => onSortOrderChange(event.currentTarget.value as BookmarkSortOrder)} label="Sort" style={{ minWidth: 152 }}>
+            <NativeSelect
+              value={sortOrder}
+              onChange={(event) => onSortOrderChange(event.currentTarget.value as BookmarkSortOrder)}
+              aria-label="Sort source queue"
+              style={{ minWidth: 148 }}>
               <option value="saved-desc">Newest saved</option>
               <option value="saved-asc">Oldest saved</option>
               <option value="created-desc">Newest on X</option>
               <option value="likes-desc">Most likes</option>
             </NativeSelect>
 
-            <NativeSelect value={timeRange} onChange={(event) => onTimeRangeChange(event.currentTarget.value as SavedTimeRange)} label="Saved time" style={{ minWidth: 140 }}>
+            <NativeSelect
+              value={timeRange}
+              onChange={(event) => onTimeRangeChange(event.currentTarget.value as SavedTimeRange)}
+              aria-label="Filter by saved time"
+              style={{ minWidth: 140 }}>
               <option value="all">All time</option>
               <option value="7d">Last 7 days</option>
               <option value="30d">Last 30 days</option>
@@ -198,6 +203,24 @@ export function InboxWorkbenchToolbar({
 
           <Group justify="space-between" align="center" gap="sm" wrap="wrap">
             <Group gap="xs" wrap="wrap">
+              <Button
+                type="button"
+                size="xs"
+                radius="xl"
+                variant={onlyWithMedia ? "filled" : "light"}
+                color={onlyWithMedia ? "dark" : "gray"}
+                onClick={() => onOnlyWithMediaChange(!onlyWithMedia)}>
+                Media only
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                radius="xl"
+                variant={onlyLongform ? "filled" : "light"}
+                color={onlyLongform ? "dark" : "gray"}
+                onClick={() => onOnlyLongformChange(!onlyLongform)}>
+                Longform only
+              </Button>
               {publishedDateLabel ? (
                 <Badge variant="light" color="blue">
                   {publishedDateLabel}
@@ -205,9 +228,7 @@ export function InboxWorkbenchToolbar({
               ) : null}
             </Group>
 
-            <Group gap="sm" wrap="wrap">
-              <Checkbox size="sm" checked={onlyWithMedia} label="Only with media" onChange={(event) => onOnlyWithMediaChange(event.currentTarget.checked)} />
-              <Checkbox size="sm" checked={onlyLongform} label="Only longform" onChange={(event) => onOnlyLongformChange(event.currentTarget.checked)} />
+            <Group gap="xs" wrap="wrap">
               <Button type="button" size="sm" variant="subtle" color="gray" onClick={onSelectAllVisible} disabled={!resultCount}>
                 Select all visible
               </Button>
@@ -227,65 +248,65 @@ export function InboxWorkbenchToolbar({
               </Button>
             </Group>
           ) : null}
-
-          {showAdvancedFilters ? (
-            <Paper p="md" radius="md" withBorder style={{ background: "#fafafa" }}>
-              <Stack gap="md">
-                <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-                  <div style={{ display: "grid", gap: 8 }}>
-                    <Group justify="space-between" align="center">
-                      <Text fw={600} size="sm">
-                        Author filters
-                      </Text>
-                      {renderMatchModeControl({
-                        id: "author-match-mode",
-                        value: authorMatchMode,
-                        onChange: onAuthorMatchModeChange
-                      })}
-                    </Group>
-                    {!authorOptions.length ? <Text c="dimmed">No authors available.</Text> : null}
-                    <Group gap="sm" wrap="wrap">
-                      {authorOptions.map((author) => (
-                        <label key={author.handle} style={chipLabelStyle}>
-                          <Checkbox checked={selectedAuthorHandles.includes(author.handle)} onChange={() => onToggleAuthor(author.handle)} />
-                          <span>
-                            {author.label} ({author.count})
-                          </span>
-                        </label>
-                      ))}
-                    </Group>
-                  </div>
-
-                  <div style={{ display: "grid", gap: 8 }}>
-                    <Group justify="space-between" align="center">
-                      <Text fw={600} size="sm">
-                        Tag filters
-                      </Text>
-                      {renderMatchModeControl({
-                        id: "tag-match-mode",
-                        value: tagMatchMode,
-                        onChange: onTagMatchModeChange
-                      })}
-                    </Group>
-                    {!tags.length ? <Text c="dimmed">No tags available.</Text> : null}
-                    <Group gap="sm" wrap="wrap">
-                      {tags.map((tag) => (
-                        <label key={tag.id} style={chipLabelStyle}>
-                          <Checkbox checked={selectedTagIds.includes(tag.id)} onChange={() => onToggleTag(tag.id)} />
-                          <span>{tag.name}</span>
-                        </label>
-                      ))}
-                    </Group>
-                  </div>
-                </SimpleGrid>
-              </Stack>
-            </Paper>
-          ) : null}
         </Stack>
-      </Paper>
+      </div>
+
+      {showAdvancedFilters ? (
+        <div style={{ padding: 14, borderBottom: "1px solid #e4e4e7", background: "#fafafa" }}>
+          <Stack gap="md">
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+              <div style={{ display: "grid", gap: 8 }}>
+                <Group justify="space-between" align="center">
+                  <Text fw={600} size="sm">
+                    Author filters
+                  </Text>
+                  {renderMatchModeControl({
+                    id: "author-match-mode",
+                    value: authorMatchMode,
+                    onChange: onAuthorMatchModeChange
+                  })}
+                </Group>
+                {!authorOptions.length ? <Text c="dimmed">No authors available.</Text> : null}
+                <Group gap="sm" wrap="wrap">
+                  {authorOptions.map((author) => (
+                    <label key={author.handle} style={chipLabelStyle}>
+                      <Checkbox checked={selectedAuthorHandles.includes(author.handle)} onChange={() => onToggleAuthor(author.handle)} />
+                      <span>
+                        {author.label} ({author.count})
+                      </span>
+                    </label>
+                  ))}
+                </Group>
+              </div>
+
+              <div style={{ display: "grid", gap: 8 }}>
+                <Group justify="space-between" align="center">
+                  <Text fw={600} size="sm">
+                    Tag filters
+                  </Text>
+                  {renderMatchModeControl({
+                    id: "tag-match-mode",
+                    value: tagMatchMode,
+                    onChange: onTagMatchModeChange
+                  })}
+                </Group>
+                {!tags.length ? <Text c="dimmed">No tags available.</Text> : null}
+                <Group gap="sm" wrap="wrap">
+                  {tags.map((tag) => (
+                    <label key={tag.id} style={chipLabelStyle}>
+                      <Checkbox checked={selectedTagIds.includes(tag.id)} onChange={() => onToggleTag(tag.id)} />
+                      <span>{tag.name}</span>
+                    </label>
+                  ))}
+                </Group>
+              </div>
+            </SimpleGrid>
+          </Stack>
+        </div>
+      ) : null}
 
       {selectedCount ? (
-        <Paper p="md" radius="md" withBorder style={{ background: "#ffffff" }}>
+        <div style={{ padding: 14, borderBottom: "1px solid #e4e4e7", background: "#fcfbf8" }}>
           <Stack gap="sm">
             <Group justify="space-between" align="center" wrap="wrap">
               <Group gap="xs" wrap="wrap">
@@ -315,7 +336,7 @@ export function InboxWorkbenchToolbar({
               </Button>
             </SimpleGrid>
           </Stack>
-        </Paper>
+        </div>
       ) : null}
     </Stack>
   )

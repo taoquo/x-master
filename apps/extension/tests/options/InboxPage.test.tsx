@@ -202,14 +202,14 @@ test("InboxPage renders the workbench layout and switches detail drawer with row
   const { container, dom } = render(React.createElement(InboxPage))
 
   await waitForAssertion(() => {
-  assert.match(container.textContent ?? "", /Alice/)
+    assert.match(container.textContent ?? "", /Alice/)
   })
 
-  assert.match(container.textContent ?? "", /Search/)
+  assert.ok(container.querySelector('input[type="search"]'))
   assert.match(container.textContent ?? "", /All sources/)
   assert.match(container.textContent ?? "", /Notes & long posts/)
   assert.match(container.textContent ?? "", /Select all visible/)
-  assert.doesNotMatch(container.textContent ?? "", /Source material/)
+  assert.doesNotMatch(container.textContent ?? "", /Full source/)
 
   const bobCard = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Bob"))
   assert.ok(bobCard)
@@ -219,7 +219,7 @@ test("InboxPage renders the workbench layout and switches detail drawer with row
   })
 
   await waitForAssertion(() => {
-    assert.match(container.textContent ?? "", /Source material/)
+    assert.match(container.textContent ?? "", /Full source/)
     assert.match(container.textContent ?? "", /Bob/)
     assert.match(container.textContent ?? "", /beta note for inbox/)
   })

@@ -201,7 +201,7 @@ test("OptionsApp switches to Inbox and keeps the workbench layout", async () => 
   })
 
   assert.match(container.textContent ?? "", /raw source material/)
-  assert.match(container.textContent ?? "", /Search/)
+  assert.ok(container.querySelector('input[type="search"]'))
 })
 
 test("OptionsApp opens Library with subviews instead of a standalone Tags module", async () => {
@@ -335,6 +335,6 @@ test("Dashboard heatmap opens Inbox with a focused published date", async () => 
     await Promise.resolve()
   })
 
-  assert.match(container.textContent ?? "", /Search/)
+  assert.ok(container.querySelector('input[type="search"]'))
   assert.match(container.textContent ?? "", /Focused published date:/)
 })

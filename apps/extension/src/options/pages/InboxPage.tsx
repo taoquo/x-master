@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react"
-import { Button, Group, Paper, Stack, Text } from "@mantine/core"
+import { Badge, Button, Group, Paper, Stack, Text } from "@mantine/core"
 import { useMediaQuery } from "@mantine/hooks"
 import {
   applyBookmarkFilters,
@@ -183,27 +183,39 @@ export function InboxPage({ initialRouteState }: { initialRouteState?: InboxRout
 
   return (
     <ExtensionUiProvider>
-      <Stack gap="md" style={{ minHeight: 0, height: testEnv ? "auto" : "calc(100vh - 32px)" }}>
+      <Stack gap="sm" style={{ minHeight: 0, height: testEnv ? "auto" : "calc(100vh - 32px)" }}>
         <SectionHeader
           title="Inbox"
-          description="Process raw source material in a focused triage layout before it becomes a durable knowledge card."
+          description="Review raw source material, inspect the selected post in detail, and tag it before it lands in Library."
           actions={
-            <Paper
-              p={4}
-              radius="md"
-              withBorder
-              style={{
-                display: "inline-flex",
-                gap: 3,
-                background: "#f3f3f4"
-              }}>
-              <Button type="button" variant={viewMode === "all" ? "white" : "subtle"} color={viewMode === "all" ? "dark" : "gray"} onClick={() => setViewMode("all")}>
-                All sources
-              </Button>
-              <Button type="button" variant={viewMode === "longform" ? "white" : "subtle"} color={viewMode === "longform" ? "dark" : "gray"} onClick={() => setViewMode("longform")}>
-                Notes & long posts
-              </Button>
-            </Paper>
+            <Stack gap={8} align="end">
+              <Group gap="xs" wrap="wrap" justify="flex-end">
+                <Badge variant="light" color="dark">
+                  {inboxBookmarks.length} raw in queue
+                </Badge>
+                {selectedBookmarkIds.length ? (
+                  <Badge variant="light" color="blue">
+                    {selectedBookmarkIds.length} selected
+                  </Badge>
+                ) : null}
+              </Group>
+              <Paper
+                p={4}
+                radius="xl"
+                withBorder
+                style={{
+                  display: "inline-flex",
+                  gap: 3,
+                  background: "#f3f3f4"
+                }}>
+                <Button type="button" variant={viewMode === "all" ? "white" : "subtle"} color={viewMode === "all" ? "dark" : "gray"} onClick={() => setViewMode("all")}>
+                  All sources
+                </Button>
+                <Button type="button" variant={viewMode === "longform" ? "white" : "subtle"} color={viewMode === "longform" ? "dark" : "gray"} onClick={() => setViewMode("longform")}>
+                  Notes & long posts
+                </Button>
+              </Paper>
+            </Stack>
           }
         />
 
@@ -220,26 +232,26 @@ export function InboxPage({ initialRouteState }: { initialRouteState?: InboxRout
           </SurfaceCard>
         ) : null}
 
-        {workspace.bookmarks.length > 0 ? (
-          <SurfaceCard
-            title="Source triage desk"
-            description="Everything in Inbox is still raw source material. Organize it here, then trust and refine the generated cards in Library.">
-            <Group gap="xs" wrap="wrap">
-              <Text c="dimmed">{inboxBookmarks.length} untagged source items are waiting for their first pass.</Text>
-              <Text c="dimmed">This page is for triage and tagging, not final card editing.</Text>
-            </Group>
-          </SurfaceCard>
-        ) : null}
-
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: showDetailPane ? "minmax(360px, 460px) minmax(0, 1fr)" : "1fr",
+            gridTemplateColumns: showDetailPane ? "minmax(320px, 0.84fr) minmax(0, 1.46fr)" : "1fr",
             gap: 16,
             flex: 1,
-            minHeight: 0
+            minHeight: 0,
+            overflow: "hidden"
           }}>
-          <Stack gap="md" style={{ minHeight: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+              height: "100%",
+              background: "#ffffff",
+              border: "1px solid #e4e4e7",
+              borderRadius: 16,
+              overflow: "hidden"
+            }}>
             <InboxWorkbenchToolbar
               query={query}
               onQueryChange={setQuery}
@@ -277,14 +289,16 @@ export function InboxPage({ initialRouteState }: { initialRouteState?: InboxRout
               onClearFilters={handleClearFilters}
             />
 
-            <InboxTable
-              bookmarks={visibleBookmarks}
-              selectedBookmarkId={selectedBookmark?.tweetId}
-              selectedBookmarkIds={selectedBookmarkIds}
-              onSelectBookmark={setSelectedBookmarkId}
-              onToggleBookmarkSelection={handleToggleBookmarkSelection}
-            />
-          </Stack>
+            <div style={{ flex: 1, minHeight: 0, overflow: "hidden", padding: 12, background: "#fcfcfd" }}>
+              <InboxTable
+                bookmarks={visibleBookmarks}
+                selectedBookmarkId={selectedBookmark?.tweetId}
+                selectedBookmarkIds={selectedBookmarkIds}
+                onSelectBookmark={setSelectedBookmarkId}
+                onToggleBookmarkSelection={handleToggleBookmarkSelection}
+              />
+            </div>
+          </div>
 
           {showDetailPane ? (
             <InboxDetailPanel

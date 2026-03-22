@@ -67,7 +67,7 @@ export function InboxTable({
   onToggleBookmarkSelection
 }: InboxTableProps) {
   return (
-    <Stack gap="xs" style={{ minHeight: 0, overflow: "auto" }}>
+    <Stack gap="xs" style={{ minHeight: 0, height: "100%", overflowY: "auto", paddingRight: 4 }}>
       {!bookmarks.length ? (
         <div
           style={{
