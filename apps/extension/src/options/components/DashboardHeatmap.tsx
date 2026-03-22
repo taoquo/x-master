@@ -1,5 +1,6 @@
 import React from "react"
-import { Badge, Group, Stack, Text } from "@mantine/core"
+import { Badge, Button, Group, Stack, Text } from "@mantine/core"
+import { useMediaQuery } from "@mantine/hooks"
 import type { DashboardHeatmapWeek } from "../lib/dashboard.ts"
 
 const WEEKDAY_LABELS = ["Mon", "", "Wed", "", "Fri", "", ""]
@@ -31,6 +32,13 @@ function getMonthLabels(weeks: DashboardHeatmapWeek[]) {
   })
 }
 
+function getActiveDays(weeks: DashboardHeatmapWeek[]) {
+  return weeks
+    .flatMap((week) => week.days)
+    .filter((cell) => !cell.isFuture && cell.count > 0)
+    .sort((left, right) => right.date.localeCompare(left.date))
+}
+
 export function DashboardHeatmap({
   weeks,
   totalPublishedInWindow,
@@ -44,7 +52,9 @@ export function DashboardHeatmap({
   busiestDayDate?: string
   onSelectDate?: (date: string) => void
 }) {
+  const compactMode = useMediaQuery("(max-width: 52em)", false, { getInitialValueInEffect: false }) ?? false
   const monthLabels = getMonthLabels(weeks)
+  const activeDays = getActiveDays(weeks)
 
   return (
     <Stack gap="md">
@@ -77,6 +87,31 @@ export function DashboardHeatmap({
           </Badge>
         </Group>
       </Group>
+
+      {compactMode && activeDays.length ? (
+        <Stack gap="xs">
+          <Text size="sm" fw={600}>
+            Active days
+          </Text>
+          <div style={{ overflowX: "auto" }}>
+            <Group gap="sm" wrap="nowrap">
+              {activeDays.map((cell) => (
+                <Button
+                  key={`chip-${cell.date}`}
+                  type="button"
+                  variant="light"
+                  color="dark"
+                  data-date={cell.date}
+                  data-heatmap-chip="true"
+                  onClick={() => onSelectDate?.(cell.date)}
+                  style={{ flex: "0 0 auto" }}>
+                  {formatDay(cell.date)} · {cell.count}
+                </Button>
+              ))}
+            </Group>
+          </div>
+        </Stack>
+      ) : null}
 
       <div style={{ overflowX: "auto" }}>
         <div
@@ -112,8 +147,9 @@ export function DashboardHeatmap({
                     type="button"
                     data-date={cell.date}
                     data-count={cell.count}
+                    data-heatmap-grid="true"
                     onClick={canSelect ? () => onSelectDate?.(cell.date) : undefined}
-                    disabled={!canSelect}
+                    disabled={!canSelect || compactMode}
                     style={{
                       width: 18,
                       height: 18,
