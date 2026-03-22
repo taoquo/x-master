@@ -21,6 +21,21 @@ export const extensionTheme = createTheme({
     Button: {
       defaultProps: {
         radius: "md"
+      },
+      styles: {
+        root: {
+          minHeight: 44,
+          paddingInline: 16
+        },
+        label: {
+          fontWeight: 600
+        }
+      }
+    },
+    ActionIcon: {
+      defaultProps: {
+        radius: "md",
+        size: 44
       }
     },
     Card: {
@@ -39,11 +54,21 @@ export const extensionTheme = createTheme({
     TextInput: {
       defaultProps: {
         radius: "md"
+      },
+      styles: {
+        input: {
+          minHeight: 44
+        }
       }
     },
     NativeSelect: {
       defaultProps: {
         radius: "md"
+      },
+      styles: {
+        input: {
+          minHeight: 44
+        }
       }
     }
   }

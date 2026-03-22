@@ -82,10 +82,10 @@ export function DashboardHeatmap({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: `36px repeat(${weeks.length}, 14px)`,
+            gridTemplateColumns: `40px repeat(${weeks.length}, 18px)`,
             gap: 6,
             alignItems: "center",
-            minWidth: 36 + weeks.length * 20
+            minWidth: 40 + weeks.length * 24
           }}>
           <div />
           {monthLabels.map((label, index) => (
@@ -115,9 +115,9 @@ export function DashboardHeatmap({
                     onClick={canSelect ? () => onSelectDate?.(cell.date) : undefined}
                     disabled={!canSelect}
                     style={{
-                      width: 14,
-                      height: 14,
-                      borderRadius: 4,
+                      width: 18,
+                      height: 18,
+                      borderRadius: 6,
                       background: cell.isFuture ? "#f8fafc" : HEATMAP_LEVEL_COLORS[cell.level],
                       border: cell.isFuture ? "1px dashed #d4d4d8" : "1px solid rgba(24, 24, 27, 0.08)",
                       cursor: canSelect ? "pointer" : "default",
