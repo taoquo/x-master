@@ -17,11 +17,11 @@ export function SectionHeader({
 }) {
   return (
     <Group justify="space-between" align="center" wrap="wrap">
-      <Stack gap={4}>
-        <Text fw={700} size="xl" c="#18181b">
+      <Stack gap={6} style={{ flex: 1, minWidth: 260 }}>
+        <Text fw={750} size="1.95rem" c="#18181b" style={{ lineHeight: 1.05 }}>
           {title}
         </Text>
-        <Text size="sm" c="dimmed">
+        <Text size="md" c="#64748b" style={{ maxWidth: 760, lineHeight: 1.55 }}>
           {description}
         </Text>
       </Stack>
@@ -45,15 +45,17 @@ export function SurfaceCard({
 }) {
   return (
     <Card
-      padding="lg"
+      padding="xl"
       style={{
-        background: "#ffffff",
+        background: "linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%)",
+        borderColor: "#e2e8f0",
+        boxShadow: "0 14px 36px rgba(15, 23, 42, 0.05)",
         ...style
       }}>
       {title ? (
-        <Stack gap={4} mb="md">
+        <Stack gap={6} mb="lg">
           <Title order={3}>{title}</Title>
-          {description ? <Text c="dimmed">{description}</Text> : null}
+          {description ? <Text c="#64748b" style={{ lineHeight: 1.6 }}>{description}</Text> : null}
         </Stack>
       ) : null}
       <Stack
@@ -73,7 +75,7 @@ export function MetricCard({ label, value, hint }: { label: string; value: strin
           {label}
         </Text>
         <Title order={2}>{value}</Title>
-        <Text size="sm" c="dimmed">
+        <Text size="sm" c="#64748b" style={{ lineHeight: 1.55 }}>
           {hint}
         </Text>
       </Stack>
@@ -84,13 +86,19 @@ export function MetricCard({ label, value, hint }: { label: string; value: strin
 export function EmptyState({ title, description }: { title: string; description: string }) {
   return (
     <Card
-      padding="lg"
+      padding="xl"
       style={{
-        borderStyle: "dashed"
+        borderStyle: "dashed",
+        borderColor: "#cbd5e1",
+        background: "linear-gradient(180deg, #fbfcfe 0%, #f6f8fb 100%)"
       }}>
-      <Stack gap={6}>
-        <Text fw={600}>{title}</Text>
-        <Text c="dimmed">{description}</Text>
+      <Stack gap={8}>
+        <Text fw={700} size="lg" c="#18181b">
+          {title}
+        </Text>
+        <Text c="#64748b" style={{ maxWidth: 760, lineHeight: 1.65 }}>
+          {description}
+        </Text>
       </Stack>
     </Card>
   )
