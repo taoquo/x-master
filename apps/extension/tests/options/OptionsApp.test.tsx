@@ -253,6 +253,27 @@ test("Library review flow exposes the save action and regenerate action together
   assert.ok(findButton(container, "Regenerate with AI"))
 })
 
+test("Library review flags overlapping draft fields when AI repeats content", async () => {
+  installChromeMock()
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+
+  await act(async () => {
+    await Promise.resolve()
+  })
+
+  const libraryButton = findButton(container, "Library")
+  assert.ok(libraryButton)
+
+  await act(async () => {
+    libraryButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    await Promise.resolve()
+  })
+
+  assert.match(container.textContent ?? "", /Field overlap detected/)
+  assert.match(container.textContent ?? "", /field overlap/)
+})
+
 test("Dashboard recommendation can open Library scoped to stale cards", async () => {
   installChromeMock()
 

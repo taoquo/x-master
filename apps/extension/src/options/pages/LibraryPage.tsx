@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react"
-import { Badge, Button, Card, Divider, Group, Paper, Stack, Text, TextInput, Textarea, Title } from "@mantine/core"
+import { Badge, Button, Card, Group, Paper, SimpleGrid, Stack, Text, TextInput, Textarea } from "@mantine/core"
 import { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
 import type { LibraryLifecycleFilter, LibraryRouteState, LibraryView } from "../lib/navigation.ts"
 import { EmptyState, SectionHeader, StatusBadge, SurfaceCard } from "../../ui/components.tsx"
@@ -61,6 +61,72 @@ function formatProvenanceField(field: string) {
     default:
       return field
   }
+}
+
+type DraftFieldKey = "title" | "theme" | "summary" | "keyExcerpt" | "applicability"
+
+const DRAFT_FIELD_LABELS: Record<DraftFieldKey, string> = {
+  title: "Title",
+  theme: "Theme",
+  summary: "Summary",
+  keyExcerpt: "Key excerpt",
+  applicability: "Applicability"
+}
+
+function normalizeDraftFieldValue(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase()
+}
+
+function getDuplicateFieldGroups(fields: Record<DraftFieldKey, string>) {
+  const groups = new Map<string, DraftFieldKey[]>()
+
+  for (const [field, value] of Object.entries(fields) as Array<[DraftFieldKey, string]>) {
+    const normalized = normalizeDraftFieldValue(value)
+    if (!normalized) {
+      continue
+    }
+
+    const current = groups.get(normalized) ?? []
+    current.push(field)
+    groups.set(normalized, current)
+  }
+
+  return [...groups.values()].filter((group) => group.length > 1)
+}
+
+function formatShortDate(value: string) {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC"
+  }).format(parsed)
+}
+
+function getQueuePreview(card: {
+  title: string
+  theme: string
+  summary: string
+  keyExcerpt: string
+  sourceText: string
+}) {
+  const blocked = new Set([normalizeDraftFieldValue(card.title), normalizeDraftFieldValue(card.theme)])
+  const candidates = [card.summary, card.keyExcerpt, card.sourceText]
+
+  for (const candidate of candidates) {
+    const normalized = normalizeDraftFieldValue(candidate)
+    if (!normalized || blocked.has(normalized)) {
+      continue
+    }
+
+    return candidate
+  }
+
+  return card.summary || card.keyExcerpt || card.sourceText
 }
 
 interface LibraryPageProps {
@@ -239,6 +305,10 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
     () => cardsInScope.filter((card) => getCardLifecycleStatus(card) === "stale" && card.id !== selectedCardId).length,
     [cardsInScope, selectedCardId]
   )
+  const duplicateFieldGroups = useMemo(
+    () => getDuplicateFieldGroups(draftFields),
+    [draftFields]
+  )
 
   useEffect(() => {
     if (!selectedCard) {
@@ -365,14 +435,6 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
           />
         ) : null}
 
-        {onboardingNotice ? (
-          <Paper p="sm" radius="md" withBorder style={{ background: "#ffffff" }}>
-            <Text size="sm" c="dimmed">
-              {onboardingNotice}
-            </Text>
-          </Paper>
-        ) : null}
-
         <div
           style={{
             display: "grid",
@@ -395,11 +457,21 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
             }}>
             <div style={{ padding: 14, borderBottom: "1px solid #e4e4e7", background: "#ffffff" }}>
               <Stack gap="sm">
-                <Group justify="space-between" align="center" gap="sm" wrap="wrap">
-                  <Group gap="xs" wrap="wrap">
-                    <Text fw={600} size="sm">
-                      {lifecycleTitle}
+                <Group justify="space-between" align="flex-start" gap="sm" wrap="wrap">
+                  <Stack gap={4} style={{ flex: 1, minWidth: 220 }}>
+                    <Group gap="xs" wrap="wrap">
+                      <Text fw={700} size="md">
+                        Review queue
+                      </Text>
+                      <Badge variant="light" color="dark">
+                        {lifecycleTitle}
+                      </Badge>
+                    </Group>
+                    <Text size="sm" c="dimmed">
+                      {onboardingNotice ?? lifecycleDescription}
                     </Text>
+                  </Stack>
+                  <Group gap="xs" wrap="wrap" justify="flex-end">
                     <Badge variant="light" color="dark">
                       {cardsInScope.length} visible
                     </Badge>
@@ -412,9 +484,6 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
                       </Badge>
                     ) : null}
                   </Group>
-                  <Text size="xs" c="dimmed">
-                    {lifecycleDescription}
-                  </Text>
                 </Group>
 
                 <TextInput
@@ -425,20 +494,20 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
                   onChange={(event) => setQuery(event.currentTarget.value)}
                 />
 
-                <Group gap="xs" wrap="wrap">
-                  <Button type="button" size="xs" radius="xl" variant={selectedLifecycle === "all" ? "filled" : "light"} color={selectedLifecycle === "all" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("all")}>
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
+                  <Button type="button" justify="flex-start" radius="xl" variant={selectedLifecycle === "all" ? "filled" : "light"} color={selectedLifecycle === "all" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("all")}>
                     All cards ({lifecycleCounts.all})
                   </Button>
-                  <Button type="button" size="xs" radius="xl" variant={selectedLifecycle === "draft" ? "filled" : "light"} color={selectedLifecycle === "draft" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("draft")}>
+                  <Button type="button" justify="flex-start" radius="xl" variant={selectedLifecycle === "draft" ? "filled" : "light"} color={selectedLifecycle === "draft" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("draft")}>
                     Draft queue ({lifecycleCounts.draft})
                   </Button>
-                  <Button type="button" size="xs" radius="xl" variant={selectedLifecycle === "reviewed" ? "filled" : "light"} color={selectedLifecycle === "reviewed" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("reviewed")}>
+                  <Button type="button" justify="flex-start" radius="xl" variant={selectedLifecycle === "reviewed" ? "filled" : "light"} color={selectedLifecycle === "reviewed" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("reviewed")}>
                     Reviewed library ({lifecycleCounts.reviewed})
                   </Button>
-                  <Button type="button" size="xs" radius="xl" variant={selectedLifecycle === "stale" ? "filled" : "light"} color={selectedLifecycle === "stale" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("stale")}>
+                  <Button type="button" justify="flex-start" radius="xl" variant={selectedLifecycle === "stale" ? "filled" : "light"} color={selectedLifecycle === "stale" ? "dark" : "gray"} onClick={() => setSelectedLifecycle("stale")}>
                     Stale review ({lifecycleCounts.stale})
                   </Button>
-                </Group>
+                </SimpleGrid>
 
                 {view === "tags" ? (
                   <Stack gap="xs">
@@ -477,18 +546,47 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
                     onClick={() => setSelectedCardId(card.id)}
                     style={{
                       textAlign: "left",
-                      borderColor: card.id === selectedCardId ? "#111827" : undefined
+                      borderColor: card.id === selectedCardId ? "#111827" : "#e2e8f0",
+                      background: card.id === selectedCardId ? "#f8fafc" : "#ffffff",
+                      boxShadow: card.id === selectedCardId ? "0 12px 32px rgba(15, 23, 42, 0.08)" : "0 6px 18px rgba(15, 23, 42, 0.04)"
                     }}>
-                    <Stack gap={6}>
-                      <Group justify="space-between" align="center">
-                        <Text fw={600}>{card.title}</Text>
+                    <Stack gap={10}>
+                      <Group justify="space-between" align="flex-start" wrap="nowrap">
+                        <Stack gap={4} style={{ minWidth: 0, flex: 1 }}>
+                          <Text fw={700} lineClamp={2}>
+                            {card.title}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            @{card.authorHandle} · saved {formatShortDate(card.sourceSavedAt)}
+                          </Text>
+                        </Stack>
                         <StatusBadge status={getCardLifecycleStatus(card)} />
                       </Group>
-                      <Text size="sm" c="dimmed">
-                        @{card.authorHandle} · quality {card.quality.score}
-                      </Text>
-                      <Text size="sm" lineClamp={3}>
-                        {card.summary}
+
+                      <Group gap="xs" wrap="wrap">
+                        <Badge variant="light" color={card.quality.needsReview ? "red" : "blue"}>
+                          Quality {card.quality.score}
+                        </Badge>
+                        {getDuplicateFieldGroups({
+                          title: card.title,
+                          theme: card.theme,
+                          summary: card.summary,
+                          keyExcerpt: card.keyExcerpt,
+                          applicability: card.applicability
+                        }).length ? (
+                          <Badge variant="light" color="orange">
+                            field overlap
+                          </Badge>
+                        ) : null}
+                        {card.tagIds.length ? (
+                          <Badge variant="light" color="gray">
+                            {card.tagIds.length} tag{card.tagIds.length === 1 ? "" : "s"}
+                          </Badge>
+                        ) : null}
+                      </Group>
+
+                      <Text size="sm" c="#52606d" lineClamp={2}>
+                        {getQueuePreview(card)}
                       </Text>
                     </Stack>
                   </Card>
@@ -515,15 +613,63 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
                 <Text c="dimmed">Select a card draft to inspect it.</Text>
               ) : (
                 <>
-                  <Group gap="xs" wrap="wrap">
-                    <StatusBadge status={getCardLifecycleStatus(selectedCard)} />
-                    <Badge variant="light" color={selectedCard.quality.needsReview ? "red" : "blue"}>
-                      Quality {selectedCard.quality.score}
-                    </Badge>
-                    <Badge variant="light" color="gray">
-                      {selectedCard.quality.generatorVersion}
-                    </Badge>
-                  </Group>
+                  <Paper p="md" radius="md" withBorder style={{ background: "#f8fafc" }}>
+                    <Stack gap="sm">
+                      <Group justify="space-between" align="flex-start" wrap="wrap">
+                        <Stack gap={4} style={{ minWidth: 260, flex: 1 }}>
+                          <Text fw={700} size="lg">
+                            {selectedCard.title}
+                          </Text>
+                          <Text size="sm" c="dimmed">
+                            @{selectedCard.authorHandle} · saved {formatShortDate(selectedCard.sourceSavedAt)}
+                          </Text>
+                        </Stack>
+                        <Group gap="xs" wrap="wrap">
+                          <StatusBadge status={getCardLifecycleStatus(selectedCard)} />
+                          <Badge variant="light" color={selectedCard.quality.needsReview ? "red" : "blue"}>
+                            Quality {selectedCard.quality.score}
+                          </Badge>
+                          <Badge variant="light" color="gray">
+                            {selectedCard.quality.generatorVersion}
+                          </Badge>
+                        </Group>
+                      </Group>
+
+                      <Group gap="xs" wrap="wrap">
+                        {selectedCard.tagIds.length ? (
+                          selectedCard.tagIds.map((tagId) => (
+                            <Badge key={tagId} variant="light" color="dark">
+                              {tagById.get(tagId)?.name ?? tagId}
+                            </Badge>
+                          ))
+                        ) : (
+                          <Badge variant="light" color="gray">
+                            No source tags
+                          </Badge>
+                        )}
+                      </Group>
+                    </Stack>
+                  </Paper>
+
+                  {duplicateFieldGroups.length ? (
+                    <Paper p="md" radius="md" withBorder style={{ background: "#fff7ed", borderColor: "#fdba74" }}>
+                      <Stack gap={8}>
+                        <Text fw={700} c="#9a3412">
+                          Field overlap detected
+                        </Text>
+                        <Text size="sm" c="#9a3412">
+                          Some draft fields are repeating the same language. Tighten the title into a headline, keep summary for the gist, and reserve key excerpt for the most reusable supporting line.
+                        </Text>
+                        <Group gap="xs" wrap="wrap">
+                          {duplicateFieldGroups.map((group, index) => (
+                            <Badge key={index} variant="light" color="orange">
+                              {group.map((field) => DRAFT_FIELD_LABELS[field]).join(" + ")}
+                            </Badge>
+                          ))}
+                        </Group>
+                      </Stack>
+                    </Paper>
+                  ) : null}
 
                   {selectedCard.quality.warnings.length ? (
                     <Card padding="md" bg="red.0" withBorder>
@@ -561,24 +707,133 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
                     </Card>
                   ) : null}
 
-                  <TextInput label="Title" value={draftFields.title} onChange={(event) => setDraftFields((current) => ({ ...current, title: event.currentTarget.value }))} />
-                  <TextInput label="Theme" value={draftFields.theme} onChange={(event) => setDraftFields((current) => ({ ...current, theme: event.currentTarget.value }))} />
-                  <Textarea label="Summary" minRows={4} value={draftFields.summary} onChange={(event) => setDraftFields((current) => ({ ...current, summary: event.currentTarget.value }))} />
-                  <Textarea label="Key excerpt / code" minRows={4} value={draftFields.keyExcerpt} onChange={(event) => setDraftFields((current) => ({ ...current, keyExcerpt: event.currentTarget.value }))} />
-                  <Textarea label="Applicability" minRows={3} value={draftFields.applicability} onChange={(event) => setDraftFields((current) => ({ ...current, applicability: event.currentTarget.value }))} />
+                  <SimpleGrid cols={{ base: 1, xl: 2 }} spacing="md">
+                    <Stack gap="md">
+                      <Paper p="md" radius="md" withBorder>
+                        <Stack gap="md">
+                          <Stack gap={4}>
+                            <Text fw={700}>Draft fields</Text>
+                            <Text size="sm" c="dimmed">
+                              Give each field one job so the card reads cleanly instead of echoing the same sentence in multiple places.
+                            </Text>
+                          </Stack>
 
-                  <Group gap="sm">
-                    <Button type="button" color="dark" onClick={() => void handleSaveDraft()} disabled={workspace.isSavingTag}>
-                      Save draft
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="light"
-                      onClick={() => void handleRegenerateSelectedCard()}
-                      disabled={workspace.isSavingTag}>
-                      Regenerate with AI
-                    </Button>
-                  </Group>
+                          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                            <div>
+                              <TextInput label="Title" value={draftFields.title} onChange={(event) => setDraftFields((current) => ({ ...current, title: event.currentTarget.value }))} />
+                              <Text size="xs" c="dimmed" mt={6}>
+                                One clear headline, not the whole post.
+                              </Text>
+                            </div>
+                            <div>
+                              <TextInput label="Theme" value={draftFields.theme} onChange={(event) => setDraftFields((current) => ({ ...current, theme: event.currentTarget.value }))} />
+                              <Text size="xs" c="dimmed" mt={6}>
+                                Short concept label or angle.
+                              </Text>
+                            </div>
+                          </SimpleGrid>
+
+                          <div>
+                            <Textarea label="Summary" minRows={4} value={draftFields.summary} onChange={(event) => setDraftFields((current) => ({ ...current, summary: event.currentTarget.value }))} />
+                            <Text size="xs" c="dimmed" mt={6}>
+                              Explain what happened and why it matters.
+                            </Text>
+                          </div>
+
+                          <div>
+                            <Textarea label="Key excerpt / code" minRows={4} value={draftFields.keyExcerpt} onChange={(event) => setDraftFields((current) => ({ ...current, keyExcerpt: event.currentTarget.value }))} />
+                            <Text size="xs" c="dimmed" mt={6}>
+                              Keep only the most quotable line or most useful code fragment.
+                            </Text>
+                          </div>
+
+                          <div>
+                            <Textarea label="Applicability" minRows={3} value={draftFields.applicability} onChange={(event) => setDraftFields((current) => ({ ...current, applicability: event.currentTarget.value }))} />
+                            <Text size="xs" c="dimmed" mt={6}>
+                              Describe when this card is worth revisiting.
+                            </Text>
+                          </div>
+                        </Stack>
+                      </Paper>
+
+                      <Group gap="sm">
+                        <Button type="button" color="dark" onClick={() => void handleSaveDraft()} disabled={workspace.isSavingTag}>
+                          Save draft
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="light"
+                          onClick={() => void handleRegenerateSelectedCard()}
+                          disabled={workspace.isSavingTag}>
+                          Regenerate with AI
+                        </Button>
+                      </Group>
+                    </Stack>
+
+                    <Stack gap="md">
+                      <Paper p="md" radius="md" withBorder>
+                        <Stack gap="sm">
+                          <Text fw={700}>Review cues</Text>
+                          <Text size="sm" c="dimmed">
+                            Clean reviews usually separate headline, gist, quote, and reuse note. If two fields say the same thing, compress one and sharpen the other.
+                          </Text>
+                          <Group gap="xs" wrap="wrap">
+                            <Badge variant="light" color="gray">
+                              Title = headline
+                            </Badge>
+                            <Badge variant="light" color="gray">
+                              Theme = concept
+                            </Badge>
+                            <Badge variant="light" color="gray">
+                              Summary = gist
+                            </Badge>
+                            <Badge variant="light" color="gray">
+                              Excerpt = evidence
+                            </Badge>
+                            <Badge variant="light" color="gray">
+                              Applicability = reuse
+                            </Badge>
+                          </Group>
+                        </Stack>
+                      </Paper>
+
+                      <Paper p="md" radius="md" withBorder>
+                        <Stack gap="sm">
+                          <Text fw={700}>Provenance</Text>
+                          {groupedProvenance.map((group) => (
+                            <Card key={group.field} padding="sm" withBorder>
+                              <Stack gap={4}>
+                                <Text size="sm" fw={600}>
+                                  {formatProvenanceField(group.field)}
+                                </Text>
+                                <Text size="xs" c="dimmed">
+                                  {group.excerpts.length} supporting snippet{group.excerpts.length === 1 ? "" : "s"}
+                                </Text>
+                                {group.excerpts.map((excerpt, index) => (
+                                  <Card key={`${group.field}-${index}`} padding="xs" bg="gray.0" withBorder>
+                                    <Text size="sm">{excerpt}</Text>
+                                  </Card>
+                                ))}
+                              </Stack>
+                            </Card>
+                          ))}
+                        </Stack>
+                      </Paper>
+
+                      <Paper p="md" radius="md" withBorder>
+                        <Stack gap="sm">
+                          <Text fw={700}>Source material</Text>
+                          <Text size="sm" c="dimmed">
+                            @{selectedCard.authorHandle} · saved {selectedCard.sourceSavedAt}
+                          </Text>
+                          <Text size="sm" style={{ whiteSpace: "pre-wrap", lineHeight: 1.65 }}>
+                            {selectedCard.sourceText}
+                          </Text>
+                          <Text size="sm">Source: {selectedCard.sourceUrl}</Text>
+                        </Stack>
+                      </Paper>
+                    </Stack>
+                  </SimpleGrid>
 
                   {reviewFeedback?.cardId === selectedCard.id ? (
                     <Card padding="md" bg="blue.0" withBorder>
@@ -624,47 +879,6 @@ export function LibraryPage({ view, onViewChange, initialRouteState }: LibraryPa
                       </Stack>
                     </Card>
                   ) : null}
-
-                  <Divider />
-
-                  <Stack gap="xs">
-                    <Title order={4}>Provenance</Title>
-                    {groupedProvenance.map((group) => (
-                      <Card key={group.field} padding="sm" withBorder>
-                        <Stack gap={4}>
-                          <Text size="sm" fw={600}>
-                            {formatProvenanceField(group.field)}
-                          </Text>
-                          <Text size="xs" c="dimmed">
-                            {group.excerpts.length} supporting snippet{group.excerpts.length === 1 ? "" : "s"}
-                          </Text>
-                          {group.excerpts.map((excerpt, index) => (
-                            <Card key={`${group.field}-${index}`} padding="xs" bg="gray.0" withBorder>
-                              <Text size="sm">{excerpt}</Text>
-                            </Card>
-                          ))}
-                        </Stack>
-                      </Card>
-                    ))}
-                  </Stack>
-
-                  <Stack gap="xs">
-                    <Title order={4}>Source material</Title>
-                    <Text size="sm" c="dimmed">
-                      @{selectedCard.authorHandle} · saved {selectedCard.sourceSavedAt}
-                    </Text>
-                    <Text size="sm" style={{ whiteSpace: "pre-wrap", lineHeight: 1.65 }}>
-                      {selectedCard.sourceText}
-                    </Text>
-                    <Text size="sm">Source: {selectedCard.sourceUrl}</Text>
-                    <Group gap="xs" wrap="wrap">
-                      {selectedCard.tagIds.map((tagId) => (
-                        <Badge key={tagId} variant="light" color="dark">
-                          {tagById.get(tagId)?.name ?? tagId}
-                        </Badge>
-                      ))}
-                    </Group>
-                  </Stack>
                 </>
               )}
             </Stack>
