@@ -517,6 +517,7 @@ export function OptionsApp() {
   const [bulkListId, setBulkListId] = useState("")
   const [bulkTagId, setBulkTagId] = useState("")
   const [newListName, setNewListName] = useState("")
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
 
   const bookmarkListByBookmarkId = useMemo(
     () => new Map(workspace.bookmarkLists.map((bookmarkList) => [bookmarkList.bookmarkId, bookmarkList.listId])),
@@ -613,6 +614,86 @@ export function OptionsApp() {
   const newListId = createFieldId("lists", "new")
   const hasBulkSelection = selectedBookmarkIds.length > 0
   const lastSyncLabel = workspace.summary.lastSyncedAt ? formatTimestamp(workspace.summary.lastSyncedAt) : "Not synced yet"
+  const hasAdvancedRefinements = Boolean(selectedAuthorHandle) || Boolean(selectedTagId)
+  const hasActiveRefinements =
+    Boolean(selectedListId) ||
+    Boolean(query.trim()) ||
+    Boolean(selectedAuthorHandle) ||
+    Boolean(selectedTagId) ||
+    timeRange !== "all" ||
+    onlyWithMedia ||
+    onlyLongform
+  const activeRefinementChips = [
+    selectedListId ? { key: "list", label: `List: ${listNamesById.get(selectedListId) ?? "Unknown"}` } : null,
+    query.trim() ? { key: "query", label: `Search: ${truncateText(query.trim(), 24)}` } : null,
+    selectedAuthorHandle ? { key: "author", label: `Author: ${authorOptions.find((option) => option.value === selectedAuthorHandle)?.label ?? selectedAuthorHandle}` } : null,
+    selectedTagId ? { key: "tag", label: `Tag: ${workspace.tags.find((tag) => tag.id === selectedTagId)?.name ?? selectedTagId}` } : null,
+    timeRange !== "all"
+      ? {
+          key: "time",
+          label:
+            timeRange === "7d"
+              ? "Last 7 days"
+              : timeRange === "30d"
+                ? "Last 30 days"
+                : "Last 90 days"
+        }
+      : null,
+    onlyWithMedia ? { key: "media", label: "Has media" } : null,
+    onlyLongform ? { key: "longform", label: "Longform" } : null
+  ].filter(Boolean) as Array<{ key: string; label: string }>
+
+  function clearRefinement(key: string) {
+    if (key === "list") {
+      setSelectedListId("")
+      return
+    }
+
+    if (key === "query") {
+      setQuery("")
+      return
+    }
+
+    if (key === "author") {
+      setSelectedAuthorHandle("")
+      return
+    }
+
+    if (key === "tag") {
+      setSelectedTagId("")
+      return
+    }
+
+    if (key === "time") {
+      setTimeRange("all")
+      return
+    }
+
+    if (key === "media") {
+      setOnlyWithMedia(false)
+      return
+    }
+
+    if (key === "longform") {
+      setOnlyLongform(false)
+    }
+  }
+
+  function clearAllRefinements() {
+    setSelectedListId("")
+    setQuery("")
+    setSelectedAuthorHandle("")
+    setSelectedTagId("")
+    setTimeRange("all")
+    setOnlyWithMedia(false)
+    setOnlyLongform(false)
+  }
+
+  useEffect(() => {
+    if (hasAdvancedRefinements) {
+      setShowAdvancedFilters(true)
+    }
+  }, [hasAdvancedRefinements])
 
   return (
     <ExtensionUiProvider>
@@ -744,41 +825,56 @@ export function OptionsApp() {
                     <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
                       <div>
                         <h2 className="text-[1.35rem] font-medium tracking-[-0.03em] text-slate-900">Library</h2>
-                        <p className="mt-1 text-sm leading-6 text-slate-600">Search, filter, and review saved posts.</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-600">Search, refine, and sort saved posts from one control surface.</p>
                       </div>
-                      <div className="text-sm text-slate-600">
-                        {visibleBookmarks.length} visible
-                        {hasBulkSelection ? ` · ${selectedBookmarkIds.length} selected` : ""}
+                      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                        <span className="rounded-full border border-white/60 bg-white/30 px-3 py-1.5 backdrop-blur-xl">
+                          {visibleBookmarks.length} results
+                        </span>
+                        {hasBulkSelection ? (
+                          <span className="rounded-full border border-white/60 bg-white/30 px-3 py-1.5 backdrop-blur-xl">
+                            {selectedBookmarkIds.length} selected
+                          </span>
+                        ) : null}
                       </div>
                     </div>
 
-                    <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,0.95fr)]">
-                      <div className="relative min-w-0 xl:col-span-2">
-                        <AppIcon name="search" size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
-                        <TextInputField
-                          id={searchId}
-                          type="search"
-                          value={query}
-                          placeholder="Search bookmarks, authors, and notes"
-                          onChange={setQuery}
-                          className="min-h-[54px] pl-11 pr-4"
-                        />
-                      </div>
-                      <FieldBlock label="Sort" htmlFor={sortId}>
+                    <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px] xl:items-end">
+                      <FieldBlock label="Search" htmlFor={searchId} labelClassName="text-[11px] uppercase tracking-[0.12em] text-slate-500">
+                        <div className="relative min-w-0">
+                          <AppIcon name="search" size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                          <TextInputField
+                            id={searchId}
+                            type="search"
+                            value={query}
+                            placeholder="Search bookmarks, authors, and notes"
+                            onChange={setQuery}
+                            className="min-h-[52px] pl-11 pr-4"
+                          />
+                        </div>
+                      </FieldBlock>
+                      <FieldBlock label="Sort by" htmlFor={sortId} labelClassName="text-[11px] uppercase tracking-[0.12em] text-slate-500">
                         <SelectField
                           id={sortId}
                           value={sortOrder}
                           onChange={(value) => setSortOrder(value as BookmarkSortOrder)}
                           options={[
                             { value: "saved-desc", label: "Newest saved" },
-                            { value: "saved-asc", label: "Saved oldest" },
-                            { value: "created-desc", label: "Published newest" },
-                            { value: "likes-desc", label: "Most likes" }
+                            { value: "saved-asc", label: "Oldest saved" },
+                            { value: "created-desc", label: "Newest published" },
+                            { value: "likes-desc", label: "Most liked" }
                           ]}
                           className="min-h-[52px] py-2.5"
                         />
                       </FieldBlock>
-                      <FieldBlock label="Saved time" htmlFor={timeId}>
+                    </div>
+
+                    <div className="mt-3 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+                      <FieldBlock
+                        label="Saved time"
+                        htmlFor={timeId}
+                        className="w-full xl:w-[220px]"
+                        labelClassName="text-[11px] uppercase tracking-[0.12em] text-slate-500">
                         <SelectField
                           id={timeId}
                           value={timeRange}
@@ -792,31 +888,69 @@ export function OptionsApp() {
                           className="min-h-[52px] py-2.5"
                         />
                       </FieldBlock>
-                    </div>
-
-                    <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] xl:items-end">
-                      <FieldBlock label="Author" htmlFor={authorId}>
-                        <SelectField
-                          id={authorId}
-                          value={selectedAuthorHandle}
-                          onChange={setSelectedAuthorHandle}
-                          options={[{ value: "", label: "All authors" }, ...authorOptions]}
-                          className="min-h-[52px] py-2.5"
-                        />
-                      </FieldBlock>
-                      <FieldBlock label="Tag" htmlFor={tagId}>
-                        <SelectField
-                          id={tagId}
-                          value={selectedTagId}
-                          onChange={setSelectedTagId}
-                          options={[{ value: "", label: "All tags" }, ...workspace.tags.map((tag) => ({ value: tag.id, label: tag.name }))]}
-                          className="min-h-[52px] py-2.5"
-                        />
-                      </FieldBlock>
-                      <div className="flex flex-wrap items-center gap-2 xl:justify-end xl:pb-1">
+                      <div className="flex flex-wrap items-center gap-2 xl:pb-1">
                         <ToggleChip checked={onlyWithMedia} label="Has media" onChange={setOnlyWithMedia} />
                         <ToggleChip checked={onlyLongform} label="Longform" onChange={setOnlyLongform} />
+                        <button
+                          type="button"
+                          onClick={() => setShowAdvancedFilters((current) => !current)}
+                          className={cn("chip-button", showAdvancedFilters && "chip-button-active")}>
+                          <span>{showAdvancedFilters ? "Hide advanced filters" : "Advanced filters"}</span>
+                          {hasAdvancedRefinements ? (
+                            <span className={cn("rounded-full px-2 py-0.5 text-xs", showAdvancedFilters ? "bg-white/20 text-white" : "bg-slate-900 text-white")}>
+                              {Number(Boolean(selectedAuthorHandle)) + Number(Boolean(selectedTagId))}
+                            </span>
+                          ) : null}
+                        </button>
                       </div>
+                    </div>
+
+                    {showAdvancedFilters ? (
+                      <div className="mt-4 grid gap-3 rounded-[1.5rem] border border-white/50 bg-white/16 p-4 xl:grid-cols-2">
+                        <FieldBlock label="Author" htmlFor={authorId}>
+                          <SelectField
+                            id={authorId}
+                            value={selectedAuthorHandle}
+                            onChange={setSelectedAuthorHandle}
+                            options={[{ value: "", label: "All authors" }, ...authorOptions]}
+                            className="min-h-[52px] py-2.5"
+                          />
+                        </FieldBlock>
+                        <FieldBlock label="Tag" htmlFor={tagId}>
+                          <SelectField
+                            id={tagId}
+                            value={selectedTagId}
+                            onChange={setSelectedTagId}
+                            options={[{ value: "", label: "All tags" }, ...workspace.tags.map((tag) => ({ value: tag.id, label: tag.name }))]}
+                            className="min-h-[52px] py-2.5"
+                          />
+                        </FieldBlock>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/45 pt-4">
+                      <div className="flex flex-wrap gap-2">
+                        {hasActiveRefinements ? (
+                          activeRefinementChips.map((chip) => (
+                            <button
+                              key={chip.key}
+                              type="button"
+                              onClick={() => clearRefinement(chip.key)}
+                              className="chip-button">
+                              <span>{chip.label}</span>
+                              <AppIcon name="close" size={12} />
+                            </button>
+                          ))
+                        ) : (
+                          <span className="text-sm text-slate-500">No active filters. Add author, tag, time, or content filters.</span>
+                        )}
+                      </div>
+
+                      {hasActiveRefinements ? (
+                        <button type="button" onClick={clearAllRefinements} className="glass-button">
+                          <span>Clear all</span>
+                        </button>
+                      ) : null}
                     </div>
                   </div>
 
@@ -889,6 +1023,9 @@ export function OptionsApp() {
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm text-slate-600">Showing {visibleBookmarks.length} of {workspace.bookmarks.length}</span>
+                      {selectedListId ? (
+                        <span className="text-sm text-slate-500">Scoped to {listNamesById.get(selectedListId) ?? "selected list"}</span>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button
