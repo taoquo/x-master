@@ -7,7 +7,7 @@ import { OptionsApp } from "../../src/options/OptionsApp.tsx"
 import { upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
 import { createList, moveBookmarkToList } from "../../src/lib/storage/listsStore.ts"
-import { saveSettings } from "../../src/lib/storage/settings.ts"
+import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
 import { attachTagToBookmark, createTag } from "../../src/lib/storage/tagsStore.ts"
 import { render, settle } from "../helpers/render.tsx"
 import { installChromeRuntimeHarness } from "../helpers/runtime.ts"
@@ -47,7 +47,7 @@ function setSelectValue(
   element.dispatchEvent(new dom.Event("change", { bubbles: true }))
 }
 
-test("OptionsApp renders the single bookmark-manager workspace and filters by list", async () => {
+test("OptionsApp renders in Chinese by default and updates locale/theme preferences", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
 
@@ -80,6 +80,8 @@ test("OptionsApp renders the single bookmark-manager workspace and filters by li
   await attachTagToBookmark({ bookmarkId: "tweet-2", tagId: tag.id })
   await saveSettings({
     schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "system",
     lastSyncSummary: {
       status: "success",
       fetchedCount: 2,
@@ -94,9 +96,32 @@ test("OptionsApp renders the single bookmark-manager workspace and filters by li
   const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
+  assert.match(container.textContent ?? "", /书签/)
+  assert.match(container.textContent ?? "", /列表/)
+  assert.match(container.textContent ?? "", /详情/)
+  assert.match(container.textContent ?? "", /偏好设置/)
+
+  const localeSelect = findInputByLabel(container, "语言") as HTMLSelectElement
+  await act(async () => {
+    setSelectValue(localeSelect, "en", dom.window)
+  })
+  await settle()
+
   assert.match(container.textContent ?? "", /Bookmarks/)
   assert.match(container.textContent ?? "", /Lists/)
   assert.match(container.textContent ?? "", /Details/)
+  assert.match(container.textContent ?? "", /Preferences/)
+
+  const themeSelect = findInputByLabel(container, "Theme") as HTMLSelectElement
+  await act(async () => {
+    setSelectValue(themeSelect, "dark", dom.window)
+  })
+  await settle()
+
+  const settings = await getSettings()
+  assert.equal(settings.locale, "en")
+  assert.equal(settings.themePreference, "dark")
+  assert.equal(dom.window.document.documentElement.dataset.theme, "dark")
 
   const researchButton = findListButton(container, researchList.id)
   assert.ok(researchButton)
@@ -143,6 +168,8 @@ test("OptionsApp supports bulk list moves and tag creation on the inspector", as
   const importantTag = await createTag({ name: "Important" })
   await saveSettings({
     schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
     lastSyncSummary: {
       status: "idle",
       fetchedCount: 0,

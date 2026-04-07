@@ -92,14 +92,14 @@ export function EmptyState({ title, description }: { title: string; description:
   )
 }
 
-export function StatusBadge({ status }: { status?: string }) {
+export function StatusBadge({ status, label }: { status?: string; label?: string }) {
   return (
     <span
       className={cn(
         "inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-medium capitalize tracking-[0.04em] backdrop-blur-lg",
         getStatusClasses(status)
       )}>
-      {status ?? "idle"}
+      {label ?? status ?? "idle"}
     </span>
   )
 }

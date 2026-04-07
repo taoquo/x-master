@@ -6,6 +6,7 @@ import {
   saveClassificationRules,
   saveSettings
 } from "../../src/lib/storage/settings.ts"
+import { createEmptySyncSummary } from "../../src/lib/types.ts"
 
 function installChromeStorageMock() {
   let storedValue: unknown
@@ -35,6 +36,8 @@ test("getSettings returns bookmark-manager defaults", async () => {
   const settings = await getSettings()
 
   assert.equal(settings.schemaVersion, 3)
+  assert.equal(settings.locale, "zh-CN")
+  assert.equal(settings.themePreference, "system")
   assert.equal(settings.lastSyncSummary.status, "idle")
   assert.deepEqual(settings.classificationRules, [])
 })
@@ -87,9 +90,28 @@ test("getSettings migrates legacy stored fields into the reduced settings shape"
   const settings = await getSettings()
 
   assert.equal(settings.schemaVersion, 3)
+  assert.equal(settings.locale, "zh-CN")
+  assert.equal(settings.themePreference, "system")
   assert.equal(settings.lastSyncSummary.status, "success")
   assert.equal(settings.lastSyncSummary.lastSyncedAt, "2026-03-16T00:00:00.000Z")
   assert.deepEqual(settings.classificationRules, [])
+})
+
+test("saveSettings persists locale and theme preferences", async () => {
+  installChromeStorageMock()
+
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "dark",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const settings = await getSettings()
+
+  assert.equal(settings.locale, "en")
+  assert.equal(settings.themePreference, "dark")
 })
 
 test("removeTagFromClassificationRules strips deleted tag ids from every rule", async () => {
@@ -97,6 +119,8 @@ test("removeTagFromClassificationRules strips deleted tag ids from every rule", 
 
   await saveSettings({
     schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "system",
     lastSyncSummary: {
       status: "idle",
       fetchedCount: 0,

@@ -119,6 +119,8 @@ test("settings writes used by search-related UI still compile against reduced se
 
   await saveSettings({
     schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "system",
     lastSyncSummary: {
       status: "success",
       fetchedCount: 5,

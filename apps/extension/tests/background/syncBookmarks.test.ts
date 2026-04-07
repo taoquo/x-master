@@ -72,6 +72,8 @@ test("runBookmarkSync stores fetched bookmarks, assigns inbox, and applies match
     },
     getSettings: async () => ({
       schemaVersion: 3,
+      locale: "zh-CN",
+      themePreference: "system",
       lastSyncSummary: createEmptySyncSummary(),
       classificationRules: [
         {
@@ -113,6 +115,8 @@ test("runBookmarkSync stores fetched bookmarks, assigns inbox, and applies match
 test("runBookmarkSync default summary persistence updates saved settings", async () => {
   let savedSettings: ExtensionSettings = {
     schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
     classificationRules: []
   }
@@ -153,6 +157,8 @@ test("runBookmarkSync does not delete bookmarks that are already stored locally"
     createSyncRun: async () => {},
     getSettings: async () => ({
       schemaVersion: 3,
+      locale: "zh-CN",
+      themePreference: "system",
       lastSyncSummary: createEmptySyncSummary(),
       classificationRules: []
     }),

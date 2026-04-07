@@ -4,7 +4,7 @@ import React from "react"
 import { act } from "react"
 import { SyncPanel } from "../../src/popup/components/SyncPanel.tsx"
 import { ExtensionUiProvider } from "../../src/ui/provider.tsx"
-import { render } from "../helpers/render.tsx"
+import { render, settle } from "../helpers/render.tsx"
 
 test("SyncPanel renders sync summary and triggers manual sync", async () => {
   let clicked = 0
@@ -32,7 +32,9 @@ test("SyncPanel renders sync summary and triggers manual sync", async () => {
 
   const button = container.querySelector("button")
   assert.ok(button)
-  assert.match(container.textContent ?? "", /success/i)
+  await settle()
+
+  assert.match(container.textContent ?? "", /成功/)
   assert.match(container.textContent ?? "", /5/)
   assert.match(container.textContent ?? "", /none/)
 

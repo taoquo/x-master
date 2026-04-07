@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react"
 import type {
   BookmarkRecord,
   BookmarkTagRecord,
+  Locale,
   ListRecord,
   TagRecord
 } from "../lib/types.ts"
@@ -13,16 +14,17 @@ import {
 import { INBOX_LIST_ID } from "../lib/storage/listsStore.ts"
 import { useWorkspaceData } from "./hooks/useWorkspaceData.ts"
 import { EmptyState, StatusBadge, SurfaceCard } from "../ui/components.tsx"
-import { ExtensionUiProvider } from "../ui/provider.tsx"
+import { ExtensionUiProvider, useExtensionUi } from "../ui/provider.tsx"
 import { AppIcon } from "../ui/icons.tsx"
+import { localeOptions, themeOptions } from "../ui/i18n.ts"
 
 function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ")
 }
 
-function formatTimestamp(value?: string) {
+function formatTimestamp(value: string | undefined, locale: Locale) {
   if (!value) {
-    return "Not synced yet"
+    return locale === "zh-CN" ? "尚未同步" : "Not synced yet"
   }
 
   const parsed = new Date(value)
@@ -30,13 +32,199 @@ function formatTimestamp(value?: string) {
     return value
   }
 
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit"
   }).format(parsed)
 }
+
+function getOptionsCopy(locale: Locale) {
+  if (locale === "zh-CN") {
+    return {
+      workspaceBadge: "书签工作区",
+      pageTitle: "书签",
+      pageDescription: "在列表、标签和最近同步之间搜索、排序并整理已保存内容。",
+      lastSync: "上次同步",
+      syncNow: "立即同步",
+      syncing: "同步中...",
+      totalBookmarks: "总书签数",
+      totalBookmarksHint: "当前本地库存。",
+      unclassified: "未分类",
+      unclassifiedHint: "仍在等待标签覆盖。",
+      preferencesTitle: "偏好设置",
+      preferencesDescription: "调整整个扩展的语言和主题外观。",
+      languageLabel: "语言",
+      themeLabel: "主题",
+      listsTitle: "列表",
+      allBookmarks: "全部书签",
+      newList: "新建列表",
+      newListDescription: "仅支持平铺分组，暂不提供嵌套文件夹。",
+      createList: "创建列表",
+      libraryTitle: "资料库",
+      libraryDescription: "在一个工作面板里搜索、筛选并整理已保存内容。",
+      search: "搜索",
+      searchPlaceholder: "搜索书签、作者和备注",
+      sortBy: "排序方式",
+      newestSaved: "最近保存",
+      oldestSaved: "最早保存",
+      newestPublished: "最近发布",
+      mostLiked: "最多喜欢",
+      savedTime: "保存时间",
+      anyTime: "任意时间",
+      last7Days: "最近 7 天",
+      last30Days: "最近 30 天",
+      last90Days: "最近 90 天",
+      hasMedia: "包含媒体",
+      longform: "长文",
+      advancedFilters: "高级筛选",
+      hideAdvancedFilters: "收起高级筛选",
+      author: "作者",
+      allAuthors: "所有作者",
+      tag: "标签",
+      allTags: "所有标签",
+      noActiveFilters: "当前没有启用筛选，可添加作者、标签、时间或内容条件。",
+      clearAll: "清除全部",
+      clearSelection: "清除选择",
+      moveSelectedTo: "将选中项移动到",
+      chooseList: "选择列表",
+      moveSelected: "移动选中项",
+      tagSelectedWith: "为选中项添加标签",
+      chooseTag: "选择标签",
+      applyTag: "应用标签",
+      selectVisible: "选中当前可见项",
+      noBookmarksTitle: "当前筛选条件下没有匹配的书签",
+      noBookmarksDescription: "调整搜索或筛选条件，或者再次同步以补充资料库。",
+      detailsTitle: "详情",
+      detailsDescription: "查看书签上下文并完成归档操作。",
+      noBookmarkSelectedTitle: "尚未选择书签",
+      noBookmarkSelectedDescription: "从中间的卡片列表中选择一条书签，查看详情、列表归属和标签。",
+      openOnX: "在 X 中打开",
+      tagsTitle: "标签",
+      noTagsYet: "还没有标签。",
+      attachExistingTag: "附加已有标签",
+      selectTag: "选择标签",
+      addTag: "添加标签",
+      assignmentTitle: "归档",
+      bookmarkFocus: "书签内容",
+      primaryList: "主列表",
+      createTagLabel: "创建标签",
+      createTagDescription: "一步创建新标签并附加到当前书签。",
+      create: "创建",
+      tagLibrary: "标签库",
+      noTagsCreated: "还没有创建任何标签。",
+      results: "结果",
+      selected: "已选择",
+      inbox: "收件箱",
+      loadingStateDescription: "正在从扩展运行时加载本地状态。",
+      scopedTo: "当前范围",
+      listPrefix: "列表",
+      searchPrefix: "搜索",
+      authorPrefix: "作者",
+      tagPrefix: "标签",
+      showing: "显示",
+      of: "/",
+      deleteLabel: "删除",
+      selectBookmark: "选择",
+      currentLocalInventory: "当前本地库存。",
+      waitingForTags: "仍在等待标签覆盖。",
+      selectedCount: "已选"
+    }
+  }
+
+  return {
+    workspaceBadge: "Bookmark workspace",
+    pageTitle: "Bookmarks",
+    pageDescription: "Search, sort, and file saved posts across lists, tags, and recent syncs.",
+    lastSync: "Last sync",
+    syncNow: "Sync now",
+    syncing: "Syncing...",
+    totalBookmarks: "Total bookmarks",
+    totalBookmarksHint: "Current local inventory.",
+    unclassified: "Unclassified",
+    unclassifiedHint: "Still waiting for tag coverage.",
+    preferencesTitle: "Preferences",
+    preferencesDescription: "Control language and appearance across the extension.",
+    languageLabel: "Language",
+    themeLabel: "Theme",
+    listsTitle: "Lists",
+    allBookmarks: "All bookmarks",
+    newList: "New list",
+    newListDescription: "Flat groups only. Nested folders are intentionally removed.",
+    createList: "Create list",
+    libraryTitle: "Library",
+    libraryDescription: "Search, refine, and sort saved posts from one control surface.",
+    search: "Search",
+    searchPlaceholder: "Search bookmarks, authors, and notes",
+    sortBy: "Sort by",
+    newestSaved: "Newest saved",
+    oldestSaved: "Oldest saved",
+    newestPublished: "Newest published",
+    mostLiked: "Most liked",
+    savedTime: "Saved time",
+    anyTime: "Any time",
+    last7Days: "Last 7 days",
+    last30Days: "Last 30 days",
+    last90Days: "Last 90 days",
+    hasMedia: "Has media",
+    longform: "Longform",
+    advancedFilters: "Advanced filters",
+    hideAdvancedFilters: "Hide advanced filters",
+    author: "Author",
+    allAuthors: "All authors",
+    tag: "Tag",
+    allTags: "All tags",
+    noActiveFilters: "No active filters. Add author, tag, time, or content filters.",
+    clearAll: "Clear all",
+    clearSelection: "Clear selection",
+    moveSelectedTo: "Move selected to",
+    chooseList: "Choose list",
+    moveSelected: "Move selected",
+    tagSelectedWith: "Tag selected with",
+    chooseTag: "Choose tag",
+    applyTag: "Apply tag",
+    selectVisible: "Select visible",
+    noBookmarksTitle: "No bookmarks match the current filters",
+    noBookmarksDescription: "Adjust search, change filter chips, or run another sync to refill the library.",
+    detailsTitle: "Details",
+    detailsDescription: "Refined bookmark context and filing controls.",
+    noBookmarkSelectedTitle: "No bookmark selected",
+    noBookmarkSelectedDescription: "Choose a bookmark card from the gallery to inspect its details, list assignment, and tags.",
+    openOnX: "Open on X",
+    tagsTitle: "Tags",
+    noTagsYet: "No tags yet.",
+    attachExistingTag: "Attach existing tag",
+    selectTag: "Select a tag",
+    addTag: "Add tag",
+    assignmentTitle: "Assignment",
+    bookmarkFocus: "Bookmark focus",
+    primaryList: "Primary list",
+    createTagLabel: "Create tag",
+    createTagDescription: "Create a new tag and attach it to this bookmark in one move.",
+    create: "Create",
+    tagLibrary: "Tag library",
+    noTagsCreated: "No tags created yet.",
+    results: "results",
+    selected: "selected",
+    inbox: "Inbox",
+    loadingStateDescription: "Loading local state from the extension runtime.",
+    scopedTo: "Scoped to",
+    listPrefix: "List",
+    searchPrefix: "Search",
+    authorPrefix: "Author",
+    tagPrefix: "Tag",
+    showing: "Showing",
+    of: "of",
+    deleteLabel: "Delete",
+    selectBookmark: "Select",
+    currentLocalInventory: "Current local inventory.",
+    waitingForTags: "Still waiting for tag coverage.",
+    selectedCount: "selected"
+  }
+}
+
+type OptionsCopy = ReturnType<typeof getOptionsCopy>
 
 function truncateText(value: string, maxLength = 120) {
   if (value.length <= maxLength) {
@@ -75,15 +263,66 @@ function BackgroundScene() {
   )
 }
 
-function LoadingPanel({ title }: { title: string }) {
+function LoadingPanel({ title, description }: { title: string; description: string }) {
   return (
-    <SurfaceCard title={title} description="Loading local state from the extension runtime.">
+    <SurfaceCard title={title} description={description}>
       <div className="space-y-4">
         <div className="h-12 animate-pulse rounded-2xl bg-white/55" />
         <div className="h-12 animate-pulse rounded-2xl bg-white/55" />
         <div className="h-48 animate-pulse rounded-[2rem] bg-white/55" />
       </div>
     </SurfaceCard>
+  )
+}
+
+function PreferencesPanel({
+  locale,
+  themePreference,
+  setLocale,
+  setThemePreference,
+  copy
+}: {
+  locale: Locale
+  themePreference: "system" | "light" | "dark"
+  setLocale: (locale: Locale) => Promise<void>
+  setThemePreference: (themePreference: "system" | "light" | "dark") => Promise<void>
+  copy: OptionsCopy
+}) {
+  const localeFieldId = createFieldId("preferences-tip", "locale")
+  const themeFieldId = createFieldId("preferences-tip", "theme")
+
+  return (
+    <div className="grid gap-5">
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/70 bg-white/55 text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+          <AppIcon name="info" size={16} />
+        </span>
+        <div className="min-w-0">
+          <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">{copy.preferencesTitle}</div>
+          <p className="mt-2 max-w-[30ch] text-sm leading-6 text-slate-600">{copy.preferencesDescription}</p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FieldBlock label={copy.languageLabel} htmlFor={localeFieldId}>
+          <SelectField
+            id={localeFieldId}
+            value={locale}
+            onChange={(value) => void setLocale(value as Locale)}
+            options={localeOptions.map((option) => ({ value: option.value, label: option.label[locale] }))}
+          />
+        </FieldBlock>
+
+        <FieldBlock label={copy.themeLabel} htmlFor={themeFieldId}>
+          <SelectField
+            id={themeFieldId}
+            value={themePreference}
+            onChange={(value) => void setThemePreference(value as typeof themePreference)}
+            options={themeOptions.map((option) => ({ value: option.value, label: option.label[locale] }))}
+          />
+        </FieldBlock>
+      </div>
+    </div>
   )
 }
 
@@ -174,14 +413,18 @@ function TextInputField({
 function ToggleChip({
   checked,
   label,
-  onChange
+  onChange,
+  className,
+  activeClassName
 }: {
   checked: boolean
   label: string
   onChange: (checked: boolean) => void
+  className?: string
+  activeClassName?: string
 }) {
   return (
-    <label className={cn("chip-button", checked && "chip-button-active")}>
+    <label className={cn("chip-button", className, checked && (activeClassName ?? "chip-button-active"))}>
       <input
         type="checkbox"
         checked={checked}
@@ -242,6 +485,8 @@ function BookmarkCard({
   currentTagNames,
   selected,
   checked,
+  locale,
+  copy,
   onSelect,
   onToggle
 }: {
@@ -251,6 +496,8 @@ function BookmarkCard({
   currentTagNames: string[]
   selected: boolean
   checked: boolean
+  locale: Locale
+  copy: OptionsCopy
   onSelect: () => void
   onToggle: () => void
 }) {
@@ -266,7 +513,7 @@ function BookmarkCard({
       <div className="absolute right-4 top-4 z-10">
         <input
           type="checkbox"
-          aria-label={`Select ${bookmark.authorHandle}`}
+          aria-label={`${copy.selectBookmark} ${bookmark.authorHandle}`}
           checked={checked}
           onChange={(event) => {
             event.stopPropagation()
@@ -290,13 +537,13 @@ function BookmarkCard({
               <div className="truncate text-sm text-slate-600">@{bookmark.authorHandle}</div>
             </div>
             <div className="shrink-0 rounded-full bg-white/65 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.08em] text-slate-600">
-              {formatTimestamp(bookmark.savedAt)}
+              {formatTimestamp(bookmark.savedAt, locale)}
             </div>
           </div>
           <p className="mt-2 text-[0.95rem] leading-6 text-slate-900/92">{truncateText(bookmark.text, 108)}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <span className="chip-button !cursor-default !px-3 !py-1.5">{currentListName}</span>
-            {bookmark.media?.length ? <span className="chip-button !cursor-default !px-3 !py-1.5">Has media</span> : null}
+            {bookmark.media?.length ? <span className="chip-button !cursor-default !px-3 !py-1.5">{copy.hasMedia}</span> : null}
             {currentTagNames.slice(0, 2).map((tagName) => (
               <span key={tagName} className="chip-button !cursor-default !px-3 !py-1.5">
                 {tagName}
@@ -316,6 +563,8 @@ function BookmarkInspector({
   bookmarkTags,
   currentListId,
   isSavingTags,
+  locale,
+  copy,
   onMoveToList,
   onAttachTag,
   onDetachTag,
@@ -328,6 +577,8 @@ function BookmarkInspector({
   bookmarkTags: BookmarkTagRecord[]
   currentListId: string
   isSavingTags: boolean
+  locale: Locale
+  copy: OptionsCopy
   onMoveToList: (listId: string) => Promise<void>
   onAttachTag: (tagId: string) => Promise<void>
   onDetachTag: (tagId: string) => Promise<void>
@@ -353,8 +604,8 @@ function BookmarkInspector({
   if (!bookmark) {
     return (
       <EmptyState
-        title="No bookmark selected"
-        description="Choose a bookmark card from the gallery to inspect its details, list assignment, and tags."
+        title={copy.noBookmarkSelectedTitle}
+        description={copy.noBookmarkSelectedDescription}
       />
     )
   }
@@ -369,8 +620,8 @@ function BookmarkInspector({
 
   return (
     <SurfaceCard
-      title="Details"
-      description="Refined bookmark context and filing controls."
+      title={copy.detailsTitle}
+      description={copy.detailsDescription}
       className="bg-white/42 xl:sticky xl:top-6 xl:max-h-[calc(100dvh-3rem)]">
       <div ref={inspectorScrollRef} className="scroll-shell flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
         <div className="flex items-start gap-4">
@@ -386,18 +637,18 @@ function BookmarkInspector({
         <p className="mt-5 text-[1.05rem] leading-7 text-slate-900/86">{truncateText(bookmark.text, 180)}</p>
 
         <div className="mt-4 text-sm text-slate-600">
-          {formatTimestamp(bookmark.createdAtOnX)}
+          {formatTimestamp(bookmark.createdAtOnX, locale)}
         </div>
 
         <button type="button" className="glass-button mt-6 justify-center" onClick={() => window.open(bookmark.tweetUrl, "_blank", "noopener,noreferrer")}>
           <AppIcon name="external" size={16} />
-          <span>Open on X</span>
+          <span>{copy.openOnX}</span>
         </button>
 
         <div className="mt-7 border-t border-slate-200/60 pt-6">
-          <h3 className="font-medium text-slate-900">Tags</h3>
+          <h3 className="font-medium text-slate-900">{copy.tagsTitle}</h3>
           <div data-testid="current-tags" className="mt-4 flex flex-wrap gap-2">
-            {!currentTags.length ? <span className="text-sm text-slate-600">No tags yet.</span> : null}
+            {!currentTags.length ? <span className="text-sm text-slate-600">{copy.noTagsYet}</span> : null}
             {currentTags.map((tag) => (
               <button
                 key={tag.id}
@@ -411,14 +662,14 @@ function BookmarkInspector({
           </div>
 
           <div className="mt-6 grid gap-4">
-            <FieldBlock label="Attach existing tag" htmlFor={attachSelectId}>
+            <FieldBlock label={copy.attachExistingTag} htmlFor={attachSelectId}>
               <SelectField
                 id={attachSelectId}
                 dataTestId="attach-tag-select"
                 value={selectedTagId}
                 onChange={setSelectedTagId}
                 options={[
-                  { value: "", label: "Select a tag" },
+                  { value: "", label: copy.selectTag },
                   ...availableTagOptions.map((tag) => ({ value: tag.id, label: tag.name }))
                 ]}
               />
@@ -429,15 +680,15 @@ function BookmarkInspector({
               disabled={isSavingTags || !selectedTagId}
               className="glass-button justify-center disabled:cursor-not-allowed disabled:opacity-60">
               <AppIcon name="tag" size={16} />
-              <span>Add tag</span>
+              <span>{copy.addTag}</span>
             </button>
           </div>
         </div>
 
         <div className="mt-7 border-t border-slate-200/60 pt-6">
-          <h3 className="font-medium text-slate-900">Assignment</h3>
+          <h3 className="font-medium text-slate-900">{copy.assignmentTitle}</h3>
           <div className="mt-4 grid gap-4">
-            <FieldBlock label="Bookmark focus" htmlFor={focusId}>
+            <FieldBlock label={copy.bookmarkFocus} htmlFor={focusId}>
               <TextInputField
                 id={focusId}
                 value={truncateText(bookmark.text, 90)}
@@ -446,7 +697,7 @@ function BookmarkInspector({
               />
             </FieldBlock>
 
-            <FieldBlock label="Primary list" htmlFor={listSelectId}>
+            <FieldBlock label={copy.primaryList} htmlFor={listSelectId}>
               <SelectField
                 id={listSelectId}
                 value={currentListId}
@@ -456,9 +707,9 @@ function BookmarkInspector({
             </FieldBlock>
 
             <FieldBlock
-              label="Create tag"
+              label={copy.createTagLabel}
               htmlFor={createTagId}
-              description="Create a new tag and attach it to this bookmark in one move.">
+              description={copy.createTagDescription}>
               <TextInputField
                 id={createTagId}
                 value={newTagName}
@@ -476,15 +727,15 @@ function BookmarkInspector({
               disabled={isSavingTags || !newTagName.trim()}
               className="primary-button justify-center disabled:cursor-not-allowed disabled:opacity-60">
               <AppIcon name="sparkle" size={16} />
-              <span>Create</span>
+              <span>{copy.create}</span>
             </button>
           </div>
         </div>
 
         <div className="mt-7 border-t border-slate-200/60 pt-6">
-          <h3 className="font-medium text-slate-900">Tag library</h3>
+          <h3 className="font-medium text-slate-900">{copy.tagLibrary}</h3>
           <div className="mt-4 flex flex-wrap gap-2">
-            {!tags.length ? <span className="text-sm text-slate-600">No tags created yet.</span> : null}
+            {!tags.length ? <span className="text-sm text-slate-600">{copy.noTagsCreated}</span> : null}
             {tags.map((tag) => (
               <button
                 key={tag.id}
@@ -502,8 +753,10 @@ function BookmarkInspector({
   )
 }
 
-export function OptionsApp() {
+function OptionsScreen() {
   const workspace = useWorkspaceData()
+  const { locale, themePreference, setLocale, setThemePreference } = useExtensionUi()
+  const copy = getOptionsCopy(locale)
   const [selectedListId, setSelectedListId] = useState("")
   const [query, setQuery] = useState("")
   const [selectedAuthorHandle, setSelectedAuthorHandle] = useState("")
@@ -613,7 +866,7 @@ export function OptionsApp() {
   const bulkTagIdField = createFieldId("actions", "tag")
   const newListId = createFieldId("lists", "new")
   const hasBulkSelection = selectedBookmarkIds.length > 0
-  const lastSyncLabel = workspace.summary.lastSyncedAt ? formatTimestamp(workspace.summary.lastSyncedAt) : "Not synced yet"
+  const lastSyncLabel = formatTimestamp(workspace.summary.lastSyncedAt, locale)
   const hasAdvancedRefinements = Boolean(selectedAuthorHandle) || Boolean(selectedTagId)
   const hasActiveRefinements =
     Boolean(selectedListId) ||
@@ -624,23 +877,33 @@ export function OptionsApp() {
     onlyWithMedia ||
     onlyLongform
   const activeRefinementChips = [
-    selectedListId ? { key: "list", label: `List: ${listNamesById.get(selectedListId) ?? "Unknown"}` } : null,
-    query.trim() ? { key: "query", label: `Search: ${truncateText(query.trim(), 24)}` } : null,
-    selectedAuthorHandle ? { key: "author", label: `Author: ${authorOptions.find((option) => option.value === selectedAuthorHandle)?.label ?? selectedAuthorHandle}` } : null,
-    selectedTagId ? { key: "tag", label: `Tag: ${workspace.tags.find((tag) => tag.id === selectedTagId)?.name ?? selectedTagId}` } : null,
+    selectedListId ? { key: "list", label: `${copy.listPrefix}: ${listNamesById.get(selectedListId) ?? copy.inbox}` } : null,
+    query.trim() ? { key: "query", label: `${copy.searchPrefix}: ${truncateText(query.trim(), 24)}` } : null,
+    selectedAuthorHandle
+      ? {
+          key: "author",
+          label: `${copy.authorPrefix}: ${authorOptions.find((option) => option.value === selectedAuthorHandle)?.label ?? selectedAuthorHandle}`
+        }
+      : null,
+    selectedTagId
+      ? {
+          key: "tag",
+          label: `${copy.tagPrefix}: ${workspace.tags.find((tag) => tag.id === selectedTagId)?.name ?? selectedTagId}`
+        }
+      : null,
     timeRange !== "all"
       ? {
           key: "time",
           label:
             timeRange === "7d"
-              ? "Last 7 days"
+              ? copy.last7Days
               : timeRange === "30d"
-                ? "Last 30 days"
-                : "Last 90 days"
+                ? copy.last30Days
+                : copy.last90Days
         }
       : null,
-    onlyWithMedia ? { key: "media", label: "Has media" } : null,
-    onlyLongform ? { key: "longform", label: "Longform" } : null
+    onlyWithMedia ? { key: "media", label: copy.hasMedia } : null,
+    onlyLongform ? { key: "longform", label: copy.longform } : null
   ].filter(Boolean) as Array<{ key: string; label: string }>
 
   function clearRefinement(key: string) {
@@ -696,37 +959,38 @@ export function OptionsApp() {
   }, [hasAdvancedRefinements])
 
   return (
-    <ExtensionUiProvider>
+    <>
       <BackgroundScene />
       <main className="min-h-[100dvh] px-4 py-6 md:px-8 lg:px-10">
         <div className="mx-auto max-w-[1400px]">
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-end">
-            <section className="space-y-5">
-              <div className="inline-flex items-center rounded-full border border-white/65 bg-white/35 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-600 backdrop-blur-xl">
-                Bookmark workspace
-              </div>
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_380px] xl:items-stretch">
+            <section className="glass-panel relative overflow-hidden p-6 md:p-8 lg:min-h-[300px] lg:p-10">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_82%_18%,rgba(255,255,255,0.56),transparent_28%),linear-gradient(135deg,rgba(255,255,255,0.14),transparent_62%)]" />
+              <div className="relative flex h-full flex-col justify-between gap-8">
                 <div className="min-w-0">
-                  <h1 className="text-[clamp(2.8rem,6vw,5.1rem)] font-sans font-semibold leading-[0.92] tracking-[-0.07em] text-slate-950">
-                    Bookmarks
+                  <div className="inline-flex items-center rounded-full border border-white/65 bg-white/35 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-600 backdrop-blur-xl">
+                    {copy.workspaceBadge}
+                  </div>
+                  <h1 className="mt-5 max-w-[8ch] text-[clamp(3.2rem,6vw,5.4rem)] font-sans font-semibold leading-[0.9] tracking-[-0.08em] text-slate-950">
+                    {copy.pageTitle}
                   </h1>
-                  <p className="mt-3 max-w-[36ch] text-base leading-7 text-slate-700/82 md:text-lg">
-                    Search, sort, and file saved posts across lists, tags, and recent syncs.
+                  <p className="mt-4 max-w-[34ch] text-base leading-7 text-slate-700/82 md:text-lg">
+                    {copy.pageDescription}
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3 border-t border-white/45 pt-5">
                   <StatusBadge status={workspace.summary.status} />
                   <div className="rounded-full border border-white/65 bg-white/35 px-4 py-2 text-sm text-slate-600 backdrop-blur-xl">
-                    Last sync {lastSyncLabel}
+                    {copy.lastSync} {lastSyncLabel}
                   </div>
                   <button
                     type="button"
                     onClick={() => void workspace.handleSync()}
                     disabled={workspace.isSyncing}
-                    className="primary-button disabled:cursor-not-allowed disabled:opacity-60">
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-900/90 bg-slate-950 px-5 py-3 text-sm font-medium text-white shadow-[0_18px_44px_-26px_rgba(15,23,42,0.45)] transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-slate-800 active:translate-y-[1px] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-60">
                     <AppIcon name="sync" size={16} />
-                    <span>{workspace.isSyncing ? "Syncing..." : "Sync now"}</span>
+                    <span>{workspace.isSyncing ? copy.syncing : copy.syncNow}</span>
                   </button>
                 </div>
               </div>
@@ -735,30 +999,39 @@ export function OptionsApp() {
             <section className="glass-panel overflow-hidden p-0">
               <div className="grid divide-y divide-white/40 md:grid-cols-2 md:divide-x md:divide-y-0">
                 <div className="p-5 md:p-6">
-                  <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Total bookmarks</p>
+                  <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">{copy.totalBookmarks}</p>
                   <div className="mt-3 text-[3.4rem] leading-none tracking-[-0.08em] text-slate-800">{workspace.stats.totalBookmarks}</div>
-                  <p className="mt-3 max-w-[16ch] text-sm leading-6 text-slate-600">Current local inventory.</p>
+                  <p className="mt-3 max-w-[16ch] text-sm leading-6 text-slate-600">{copy.totalBookmarksHint}</p>
                 </div>
                 <div className="p-5 md:p-6">
-                  <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Unclassified</p>
+                  <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">{copy.unclassified}</p>
                   <div className="mt-3 text-[3.4rem] leading-none tracking-[-0.08em] text-slate-800">{workspace.stats.unclassifiedCount}</div>
-                  <p className="mt-3 max-w-[16ch] text-sm leading-6 text-slate-600">Still waiting for tag coverage.</p>
+                  <p className="mt-3 max-w-[16ch] text-sm leading-6 text-slate-600">{copy.unclassifiedHint}</p>
                 </div>
+              </div>
+              <div className="border-t border-white/45 p-5 md:p-6">
+                <PreferencesPanel
+                  locale={locale}
+                  themePreference={themePreference}
+                  setLocale={setLocale}
+                  setThemePreference={setThemePreference}
+                  copy={copy}
+                />
               </div>
             </section>
           </div>
 
-          <div className="mt-8 grid gap-6 xl:grid-cols-[232px_minmax(0,1fr)_340px] xl:items-start 2xl:grid-cols-[248px_minmax(0,1fr)_360px]">
+          <div className="mt-10 grid gap-6 xl:grid-cols-[232px_minmax(0,1fr)_340px] xl:items-start 2xl:grid-cols-[248px_minmax(0,1fr)_360px]">
             {workspace.isLoading && !workspace.bookmarks.length ? (
               <>
-                <LoadingPanel title="Lists" />
-                <LoadingPanel title="Bookmarks" />
-                <LoadingPanel title="Details" />
+                <LoadingPanel title={copy.listsTitle} description={copy.loadingStateDescription} />
+                <LoadingPanel title={copy.pageTitle} description={copy.loadingStateDescription} />
+                <LoadingPanel title={copy.detailsTitle} description={copy.loadingStateDescription} />
               </>
             ) : (
               <>
                 <SurfaceCard
-                  title="Lists"
+                  title={copy.listsTitle}
                   className="min-h-[420px] xl:sticky xl:top-6 xl:max-h-[calc(100dvh-3rem)]"
                   bodyClassName="scroll-shell min-h-0 overflow-y-auto pr-1">
                   <div className="space-y-3">
@@ -767,9 +1040,9 @@ export function OptionsApp() {
                       data-list-button="all"
                       onClick={() => setSelectedListId("")}
                       className={cn("flex w-full items-center justify-between rounded-full px-4 py-3 text-left transition duration-300",
-                        selectedListId === "" ? "bg-sky-500 text-white shadow-soft" : "bg-white/45 text-slate-900 hover:bg-white/65"
+                        selectedListId === "" ? "bg-slate-950 text-white shadow-soft" : "bg-white/45 text-slate-900 hover:bg-white/65"
                       )}>
-                      <span>All bookmarks</span>
+                      <span>{copy.allBookmarks}</span>
                       <span className="font-mono">{workspace.stats.totalBookmarks}</span>
                     </button>
                     {workspace.stats.listCounts.map((list) => {
@@ -790,7 +1063,7 @@ export function OptionsApp() {
                           {list.listId !== INBOX_LIST_ID ? (
                             <button
                               type="button"
-                              aria-label={`Delete ${list.name}`}
+                              aria-label={`${copy.deleteLabel} ${list.name}`}
                               onClick={() => void workspace.handleDeleteList(list.listId)}
                               className="chip-button">
                               <AppIcon name="trash" size={14} />
@@ -802,7 +1075,7 @@ export function OptionsApp() {
                   </div>
 
                   <div className="mt-8 space-y-4">
-                    <FieldBlock label="New list" htmlFor={newListId} description="Flat groups only. Nested folders are intentionally removed.">
+                    <FieldBlock label={copy.newList} htmlFor={newListId} description={copy.newListDescription}>
                       <TextInputField id={newListId} value={newListName} placeholder="Research" onChange={setNewListName} />
                     </FieldBlock>
                     <button
@@ -815,170 +1088,187 @@ export function OptionsApp() {
                       disabled={workspace.isSavingLists || !newListName.trim()}
                       className="glass-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
                       <AppIcon name="bookmark" size={16} />
-                      <span>Create list</span>
+                      <span>{copy.createList}</span>
                     </button>
                   </div>
                 </SurfaceCard>
 
                 <section className="min-h-[420px]">
                   <div className="glass-panel p-5 md:p-6">
-                    <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-                      <div>
-                        <h2 className="text-[1.35rem] font-medium tracking-[-0.03em] text-slate-900">Library</h2>
-                        <p className="mt-1 text-sm leading-6 text-slate-600">Search, refine, and sort saved posts from one control surface.</p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                        <span className="rounded-full border border-white/60 bg-white/30 px-3 py-1.5 backdrop-blur-xl">
-                          {visibleBookmarks.length} results
-                        </span>
-                        {hasBulkSelection ? (
-                          <span className="rounded-full border border-white/60 bg-white/30 px-3 py-1.5 backdrop-blur-xl">
-                            {selectedBookmarkIds.length} selected
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px] xl:items-end">
-                      <FieldBlock label="Search" htmlFor={searchId} labelClassName="text-[11px] uppercase tracking-[0.12em] text-slate-500">
-                        <div className="relative min-w-0">
-                          <AppIcon name="search" size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
-                          <TextInputField
-                            id={searchId}
-                            type="search"
-                            value={query}
-                            placeholder="Search bookmarks, authors, and notes"
-                            onChange={setQuery}
-                            className="min-h-[52px] pl-11 pr-4"
-                          />
+                    <div className="flex flex-col gap-5">
+                      <div className="flex flex-col gap-4 border-b border-white/45 pb-5 lg:flex-row lg:items-end lg:justify-between">
+                        <div className="min-w-0">
+                          <h2 className="text-[1.35rem] font-medium tracking-[-0.03em] text-slate-900">{copy.libraryTitle}</h2>
+                          <p className="mt-1 max-w-[34rem] text-sm leading-6 text-slate-600">{copy.libraryDescription}</p>
                         </div>
-                      </FieldBlock>
-                      <FieldBlock label="Sort by" htmlFor={sortId} labelClassName="text-[11px] uppercase tracking-[0.12em] text-slate-500">
-                        <SelectField
-                          id={sortId}
-                          value={sortOrder}
-                          onChange={(value) => setSortOrder(value as BookmarkSortOrder)}
-                          options={[
-                            { value: "saved-desc", label: "Newest saved" },
-                            { value: "saved-asc", label: "Oldest saved" },
-                            { value: "created-desc", label: "Newest published" },
-                            { value: "likes-desc", label: "Most liked" }
-                          ]}
-                          className="min-h-[52px] py-2.5"
-                        />
-                      </FieldBlock>
-                    </div>
-
-                    <div className="mt-3 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-                      <FieldBlock
-                        label="Saved time"
-                        htmlFor={timeId}
-                        className="w-full xl:w-[220px]"
-                        labelClassName="text-[11px] uppercase tracking-[0.12em] text-slate-500">
-                        <SelectField
-                          id={timeId}
-                          value={timeRange}
-                          onChange={(value) => setTimeRange(value as SavedTimeRange)}
-                          options={[
-                            { value: "all", label: "Any time" },
-                            { value: "7d", label: "Last 7 days" },
-                            { value: "30d", label: "Last 30 days" },
-                            { value: "90d", label: "Last 90 days" }
-                          ]}
-                          className="min-h-[52px] py-2.5"
-                        />
-                      </FieldBlock>
-                      <div className="flex flex-wrap items-center gap-2 xl:pb-1">
-                        <ToggleChip checked={onlyWithMedia} label="Has media" onChange={setOnlyWithMedia} />
-                        <ToggleChip checked={onlyLongform} label="Longform" onChange={setOnlyLongform} />
-                        <button
-                          type="button"
-                          onClick={() => setShowAdvancedFilters((current) => !current)}
-                          className={cn("chip-button", showAdvancedFilters && "chip-button-active")}>
-                          <span>{showAdvancedFilters ? "Hide advanced filters" : "Advanced filters"}</span>
-                          {hasAdvancedRefinements ? (
-                            <span className={cn("rounded-full px-2 py-0.5 text-xs", showAdvancedFilters ? "bg-white/20 text-white" : "bg-slate-900 text-white")}>
-                              {Number(Boolean(selectedAuthorHandle)) + Number(Boolean(selectedTagId))}
+                        <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                          <span className="rounded-full border border-white/60 bg-white/30 px-3 py-1.5 backdrop-blur-xl">
+                            {visibleBookmarks.length} {copy.results}
+                          </span>
+                          {hasBulkSelection ? (
+                            <span className="rounded-full border border-white/60 bg-white/30 px-3 py-1.5 backdrop-blur-xl">
+                              {selectedBookmarkIds.length} {copy.selected}
                             </span>
                           ) : null}
-                        </button>
+                        </div>
                       </div>
-                    </div>
 
-                    {showAdvancedFilters ? (
-                      <div className="mt-4 grid gap-3 rounded-[1.5rem] border border-white/50 bg-white/16 p-4 xl:grid-cols-2">
-                        <FieldBlock label="Author" htmlFor={authorId}>
+                      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.7fr)_220px_220px]">
+                        <FieldBlock label={copy.search} htmlFor={searchId} labelClassName="text-[11px] uppercase tracking-[0.12em] text-slate-500">
+                          <div className="relative min-w-0">
+                            <AppIcon name="search" size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                            <TextInputField
+                              id={searchId}
+                              type="search"
+                              value={query}
+                              placeholder={copy.searchPlaceholder}
+                              onChange={setQuery}
+                              className="min-h-[50px] rounded-[1.2rem] pl-11 pr-4"
+                            />
+                          </div>
+                        </FieldBlock>
+                        <FieldBlock label={copy.sortBy} htmlFor={sortId} labelClassName="text-[11px] uppercase tracking-[0.12em] text-slate-500">
                           <SelectField
-                            id={authorId}
-                            value={selectedAuthorHandle}
-                            onChange={setSelectedAuthorHandle}
-                            options={[{ value: "", label: "All authors" }, ...authorOptions]}
-                            className="min-h-[52px] py-2.5"
+                            id={sortId}
+                            value={sortOrder}
+                            onChange={(value) => setSortOrder(value as BookmarkSortOrder)}
+                            options={[
+                              { value: "saved-desc", label: copy.newestSaved },
+                              { value: "saved-asc", label: copy.oldestSaved },
+                              { value: "created-desc", label: copy.newestPublished },
+                              { value: "likes-desc", label: copy.mostLiked }
+                            ]}
+                            className="min-h-[50px] rounded-[1.2rem] py-2.5"
                           />
                         </FieldBlock>
-                        <FieldBlock label="Tag" htmlFor={tagId}>
+                        <FieldBlock label={copy.savedTime} htmlFor={timeId} labelClassName="text-[11px] uppercase tracking-[0.12em] text-slate-500">
                           <SelectField
-                            id={tagId}
-                            value={selectedTagId}
-                            onChange={setSelectedTagId}
-                            options={[{ value: "", label: "All tags" }, ...workspace.tags.map((tag) => ({ value: tag.id, label: tag.name }))]}
-                            className="min-h-[52px] py-2.5"
+                            id={timeId}
+                            value={timeRange}
+                            onChange={(value) => setTimeRange(value as SavedTimeRange)}
+                            options={[
+                              { value: "all", label: copy.anyTime },
+                              { value: "7d", label: copy.last7Days },
+                              { value: "30d", label: copy.last30Days },
+                              { value: "90d", label: copy.last90Days }
+                            ]}
+                            className="min-h-[50px] rounded-[1.2rem] py-2.5"
                           />
                         </FieldBlock>
                       </div>
-                    ) : null}
 
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/45 pt-4">
-                      <div className="flex flex-wrap gap-2">
-                        {hasActiveRefinements ? (
-                          activeRefinementChips.map((chip) => (
+                      <div className="grid gap-4 border-t border-white/45 pt-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <ToggleChip
+                            checked={onlyWithMedia}
+                            label={copy.hasMedia}
+                            onChange={setOnlyWithMedia}
+                            className="!px-3.5 !py-2 text-sm"
+                          />
+                          <ToggleChip
+                            checked={onlyLongform}
+                            label={copy.longform}
+                            onChange={setOnlyLongform}
+                            className="!px-3.5 !py-2 text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowAdvancedFilters((current) => !current)}
+                            className={cn("chip-button !px-3.5 !py-2 text-sm", showAdvancedFilters && "chip-button-active")}>
+                            <span>{showAdvancedFilters ? copy.hideAdvancedFilters : copy.advancedFilters}</span>
+                            {hasAdvancedRefinements ? (
+                              <span className={cn("rounded-full px-2 py-0.5 text-xs", showAdvancedFilters ? "bg-white/20 text-white" : "bg-slate-900 text-white")}>
+                                {Number(Boolean(selectedAuthorHandle)) + Number(Boolean(selectedTagId))}
+                              </span>
+                            ) : null}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedBookmarkIds(visibleBookmarks.map((bookmark) => bookmark.tweetId))}
+                            disabled={!visibleBookmarks.length}
+                            className="chip-button !px-3.5 !py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60">
+                            <span>{copy.selectVisible}</span>
+                          </button>
+                        </div>
+
+                        {showAdvancedFilters ? (
+                          <div className="grid gap-3 rounded-[1.5rem] border border-white/50 bg-white/16 p-4 md:grid-cols-2">
+                            <FieldBlock label={copy.author} htmlFor={authorId}>
+                              <SelectField
+                                id={authorId}
+                                value={selectedAuthorHandle}
+                                onChange={setSelectedAuthorHandle}
+                                options={[{ value: "", label: copy.allAuthors }, ...authorOptions]}
+                                className="min-h-[50px] rounded-[1.2rem] py-2.5"
+                              />
+                            </FieldBlock>
+                            <FieldBlock label={copy.tag} htmlFor={tagId}>
+                              <SelectField
+                                id={tagId}
+                                value={selectedTagId}
+                                onChange={setSelectedTagId}
+                                options={[{ value: "", label: copy.allTags }, ...workspace.tags.map((tag) => ({ value: tag.id, label: tag.name }))]}
+                                className="min-h-[50px] rounded-[1.2rem] py-2.5"
+                              />
+                            </FieldBlock>
+                          </div>
+                        ) : null}
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {hasActiveRefinements ? (
+                            activeRefinementChips.map((chip) => (
+                              <button
+                                key={chip.key}
+                                type="button"
+                                onClick={() => clearRefinement(chip.key)}
+                                className="chip-button !px-3 !py-1.5 !text-xs">
+                                <span>{chip.label}</span>
+                                <AppIcon name="close" size={12} />
+                              </button>
+                            ))
+                          ) : (
+                            <span className="text-sm text-slate-500">{copy.noActiveFilters}</span>
+                          )}
+
+                          {hasActiveRefinements ? (
                             <button
-                              key={chip.key}
                               type="button"
-                              onClick={() => clearRefinement(chip.key)}
-                              className="chip-button">
-                              <span>{chip.label}</span>
-                              <AppIcon name="close" size={12} />
+                              onClick={clearAllRefinements}
+                              className="ml-auto inline-flex min-h-[40px] items-center justify-center rounded-full border border-white/60 bg-white/30 px-4 text-sm font-medium text-slate-700 backdrop-blur-xl transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-white/45 active:translate-y-[1px]">
+                              <span>{copy.clearAll}</span>
                             </button>
-                          ))
-                        ) : (
-                          <span className="text-sm text-slate-500">No active filters. Add author, tag, time, or content filters.</span>
-                        )}
+                          ) : null}
+                        </div>
                       </div>
-
-                      {hasActiveRefinements ? (
-                        <button type="button" onClick={clearAllRefinements} className="glass-button">
-                          <span>Clear all</span>
-                        </button>
-                      ) : null}
                     </div>
                   </div>
 
                   {hasBulkSelection ? (
-                    <div className="glass-panel mt-4 p-4 md:p-5">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="glass-panel mt-4 overflow-hidden p-0">
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/45 px-4 py-3 md:px-5">
                         <div>
-                          <div className="text-sm font-medium text-slate-900">{selectedBookmarkIds.length} bookmarks selected</div>
-                          <p className="mt-1 text-sm text-slate-600">Apply list and tag changes in one pass.</p>
+                          <div className="text-sm font-medium text-slate-900">{selectedBookmarkIds.length} {copy.selectedCount}</div>
+                          <p className="mt-0.5 text-sm text-slate-600">{locale === "zh-CN" ? "一次性应用列表和标签变更。" : "Apply list and tag changes in one pass."}</p>
                         </div>
                         <button
                           type="button"
                           onClick={() => setSelectedBookmarkIds([])}
-                          className="glass-button">
-                          <span>Clear selection</span>
+                          className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-white/60 bg-white/30 px-4 text-sm font-medium text-slate-700 backdrop-blur-xl transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-white/45 active:translate-y-[1px]">
+                          <span>{copy.clearSelection}</span>
                         </button>
                       </div>
 
-                      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto]">
-                        <FieldBlock label="Move selected to" htmlFor={moveId}>
+                      <div className="grid gap-3 p-4 md:p-5 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto]">
+                        <FieldBlock label={copy.moveSelectedTo} htmlFor={moveId}>
                           <SelectField
                             id={moveId}
                             value={bulkListId}
                             onChange={setBulkListId}
                             options={[
-                              { value: "", label: "Choose list" },
+                              { value: "", label: copy.chooseList },
                               ...workspace.lists.map((list) => ({ value: list.id, label: list.name }))
                             ]}
+                            className="min-h-[50px] rounded-[1.2rem]"
                           />
                         </FieldBlock>
                         <button
@@ -990,18 +1280,19 @@ export function OptionsApp() {
                             })
                           }
                           disabled={workspace.isSavingLists || !bulkListId || !hasBulkSelection}
-                          className="glass-button justify-center self-end disabled:cursor-not-allowed disabled:opacity-60">
-                          <span>Move selected</span>
+                          className="inline-flex min-h-[50px] items-center justify-center rounded-full border border-slate-900/90 bg-slate-950 px-5 text-sm font-medium text-white shadow-[0_18px_44px_-26px_rgba(15,23,42,0.45)] transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-slate-800 active:translate-y-[1px] active:scale-[0.985] self-end disabled:cursor-not-allowed disabled:opacity-60">
+                          <span>{copy.moveSelected}</span>
                         </button>
-                        <FieldBlock label="Tag selected with" htmlFor={bulkTagIdField}>
+                        <FieldBlock label={copy.tagSelectedWith} htmlFor={bulkTagIdField}>
                           <SelectField
                             id={bulkTagIdField}
                             value={bulkTagId}
                             onChange={setBulkTagId}
                             options={[
-                              { value: "", label: "Choose tag" },
+                              { value: "", label: copy.chooseTag },
                               ...workspace.tags.map((tag) => ({ value: tag.id, label: tag.name }))
                             ]}
+                            className="min-h-[50px] rounded-[1.2rem]"
                           />
                         </FieldBlock>
                         <button
@@ -1013,8 +1304,8 @@ export function OptionsApp() {
                             })
                           }
                           disabled={workspace.isSavingTags || !bulkTagId || !hasBulkSelection}
-                          className="glass-button justify-center self-end disabled:cursor-not-allowed disabled:opacity-60">
-                          <span>Apply tag</span>
+                          className="inline-flex min-h-[50px] items-center justify-center rounded-full border border-white/60 bg-white/30 px-5 text-sm font-medium text-slate-700 backdrop-blur-xl transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-white/45 active:translate-y-[1px] self-end disabled:cursor-not-allowed disabled:opacity-60">
+                          <span>{copy.applyTag}</span>
                         </button>
                       </div>
                     </div>
@@ -1022,19 +1313,10 @@ export function OptionsApp() {
 
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm text-slate-600">Showing {visibleBookmarks.length} of {workspace.bookmarks.length}</span>
+                      <span className="text-sm text-slate-600">{copy.showing} {visibleBookmarks.length} {copy.of} {workspace.bookmarks.length}</span>
                       {selectedListId ? (
-                        <span className="text-sm text-slate-500">Scoped to {listNamesById.get(selectedListId) ?? "selected list"}</span>
+                        <span className="text-sm text-slate-500">{copy.scopedTo} {listNamesById.get(selectedListId) ?? copy.listsTitle}</span>
                       ) : null}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedBookmarkIds(visibleBookmarks.map((bookmark) => bookmark.tweetId))}
-                        disabled={!visibleBookmarks.length}
-                        className="glass-button disabled:cursor-not-allowed disabled:opacity-60">
-                        <span>Select visible</span>
-                      </button>
                     </div>
                   </div>
 
@@ -1042,7 +1324,7 @@ export function OptionsApp() {
                     <div className="scroll-shell mt-4 grid max-h-[780px] content-start gap-4 overflow-y-auto pb-1 pr-1 sm:grid-cols-2 2xl:grid-cols-3">
                       {visibleBookmarks.map((bookmark, index) => {
                         const currentTagNames = tagNamesByBookmarkId.get(bookmark.tweetId) ?? []
-                        const currentListName = listNamesById.get(getListIdByBookmarkId(bookmark.tweetId, bookmarkListByBookmarkId)) ?? "Inbox"
+                        const currentListName = listNamesById.get(getListIdByBookmarkId(bookmark.tweetId, bookmarkListByBookmarkId)) ?? copy.inbox
                         const isSelected = selectedBookmarkId === bookmark.tweetId
                         const isChecked = selectedBookmarkIds.includes(bookmark.tweetId)
 
@@ -1055,6 +1337,8 @@ export function OptionsApp() {
                             currentTagNames={currentTagNames}
                             selected={isSelected}
                             checked={isChecked}
+                            locale={locale}
+                            copy={copy}
                             onSelect={() => setSelectedBookmarkId(bookmark.tweetId)}
                             onToggle={() =>
                               setSelectedBookmarkIds((current) =>
@@ -1070,8 +1354,8 @@ export function OptionsApp() {
                   ) : (
                     <div className="mt-4">
                       <EmptyState
-                        title="No bookmarks match the current filters"
-                        description="Adjust search, change filter chips, or run another sync to refill the library."
+                        title={copy.noBookmarksTitle}
+                        description={copy.noBookmarksDescription}
                       />
                     </div>
                   )}
@@ -1084,6 +1368,8 @@ export function OptionsApp() {
                   bookmarkTags={workspace.bookmarkTags}
                   currentListId={selectedBookmark ? getListIdByBookmarkId(selectedBookmark.tweetId, bookmarkListByBookmarkId) : INBOX_LIST_ID}
                   isSavingTags={workspace.isSavingTags}
+                  locale={locale}
+                  copy={copy}
                   onMoveToList={async (listId) => {
                     if (!selectedBookmark) {
                       return
@@ -1120,6 +1406,14 @@ export function OptionsApp() {
           </div>
         </div>
       </main>
+    </>
+  )
+}
+
+export function OptionsApp() {
+  return (
+    <ExtensionUiProvider>
+      <OptionsScreen />
     </ExtensionUiProvider>
   )
 }

@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react"
 import { loadWorkspaceData, runSync } from "../lib/runtime/popupClient.ts"
-import type { WorkspaceData } from "../lib/types.ts"
+import type { Locale, WorkspaceData } from "../lib/types.ts"
 import { createEmptySyncSummary } from "../lib/types.ts"
 import { createEmptyWorkspaceStats } from "../lib/workspace/stats.ts"
-import { ExtensionUiProvider } from "../ui/provider.tsx"
+import { ExtensionUiProvider, useExtensionUi } from "../ui/provider.tsx"
 import { AppIcon } from "../ui/icons.tsx"
 import { StatusBadge, SurfaceCard } from "../ui/components.tsx"
 import { SyncPanel } from "./components/SyncPanel.tsx"
@@ -28,7 +28,45 @@ function openManager() {
   }
 }
 
-export default function App() {
+function getPopupAppCopy(locale: Locale) {
+  if (locale === "zh-CN") {
+    return {
+      workspaceSnapshot: "工作区快照",
+      workspaceDescription: "快速查看还有哪些内容等待整理。",
+      appDescription: "更轻量的桌面胶囊，用于搜索、归档和手动同步。",
+      totalBookmarks: "总书签数",
+      unclassified: "未分类",
+      openManager: "打开管理器",
+      status: {
+        idle: "空闲",
+        running: "进行中",
+        success: "成功",
+        partial_success: "部分成功",
+        error: "错误"
+      }
+    }
+  }
+
+  return {
+    workspaceSnapshot: "Workspace snapshot",
+    workspaceDescription: "A compact read on what still needs filing.",
+    appDescription: "A lighter desktop capsule for search, filing, and manual sync.",
+    totalBookmarks: "Total bookmarks",
+    unclassified: "Unclassified",
+    openManager: "Open manager",
+    status: {
+      idle: "idle",
+      running: "running",
+      success: "success",
+      partial_success: "partial success",
+      error: "error"
+    }
+  }
+}
+
+function PopupScreen() {
+  const { locale } = useExtensionUi()
+  const copy = getPopupAppCopy(locale)
   const [data, setData] = useState<WorkspaceData>(createEmptyWorkspaceData())
   const [isSyncing, setIsSyncing] = useState(false)
 
@@ -53,9 +91,8 @@ export default function App() {
   }
 
   return (
-    <ExtensionUiProvider>
-      <main className="min-h-[100dvh] w-[366px] max-w-full space-y-4 bg-[radial-gradient(circle_at_top_left,rgba(233,213,162,0.34),transparent_25%),radial-gradient(circle_at_top_right,rgba(172,230,226,0.34),transparent_25%),linear-gradient(180deg,#f7f2e9_0%,#eaf0ec_58%,#f7f2e9_100%)] p-4">
-        <SurfaceCard title="Workspace snapshot" description="A compact read on what still needs filing." className="bg-white/42">
+    <main className="popup-shell min-h-[100dvh] w-[366px] max-w-full space-y-4 p-4">
+      <SurfaceCard title={copy.workspaceSnapshot} description={copy.workspaceDescription} className="bg-white/42">
           <div className="space-y-5">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -63,21 +100,21 @@ export default function App() {
                   X Bookmark Manager
                 </h1>
                 <p className="mt-3 max-w-[22ch] text-base leading-7 text-slate-800/82">
-                  A lighter desktop capsule for search, filing, and manual sync.
+                  {copy.appDescription}
                 </p>
               </div>
-              <StatusBadge status={data.summary.status} />
+              <StatusBadge status={data.summary.status} label={copy.status[data.summary.status]} />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="glass-panel rounded-[1.7rem] p-4">
-                <div className="text-[11px] uppercase tracking-[0.08em] text-slate-700/72">Total bookmarks</div>
+                <div className="text-[11px] uppercase tracking-[0.08em] text-slate-700/72">{copy.totalBookmarks}</div>
                 <div className="mt-3 font-sans text-[2.8rem] leading-none tracking-[-0.08em] text-slate-700">
                   {data.stats.totalBookmarks}
                 </div>
               </div>
               <div className="glass-panel rounded-[1.7rem] p-4">
-                <div className="text-[11px] uppercase tracking-[0.08em] text-slate-700/72">Unclassified</div>
+                <div className="text-[11px] uppercase tracking-[0.08em] text-slate-700/72">{copy.unclassified}</div>
                 <div className="mt-3 font-sans text-[2.8rem] leading-none tracking-[-0.08em] text-slate-700">
                   {data.stats.unclassifiedCount}
                 </div>
@@ -86,13 +123,20 @@ export default function App() {
 
             <button type="button" onClick={openManager} className="glass-button w-full justify-center">
               <AppIcon name="external" size={16} />
-              <span>Open manager</span>
+              <span>{copy.openManager}</span>
             </button>
           </div>
-        </SurfaceCard>
+      </SurfaceCard>
 
-        <SyncPanel summary={data.summary} isSyncing={isSyncing} onSync={handleSync} />
-      </main>
+      <SyncPanel summary={data.summary} isSyncing={isSyncing} onSync={handleSync} />
+    </main>
+  )
+}
+
+export default function App() {
+  return (
+    <ExtensionUiProvider>
+      <PopupScreen />
     </ExtensionUiProvider>
   )
 }

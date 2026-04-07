@@ -15,8 +15,20 @@ function installDom() {
   return dom
 }
 
-test("mountPopup renders the simplified popup shell into the root container", async () => {
+function installChromeStorageMock(storedValue?: unknown) {
+  ;(globalThis as typeof globalThis & { chrome: any }).chrome = {
+    storage: {
+      local: {
+        get: async () => ({ settings: storedValue }),
+        set: async () => {}
+      }
+    }
+  }
+}
+
+test("mountPopup renders Chinese popup copy and the default light theme", async () => {
   const dom = installDom()
+  installChromeStorageMock()
   const rootElement = dom.window.document.getElementById("root")
   assert.ok(rootElement)
 
@@ -27,6 +39,36 @@ test("mountPopup renders the simplified popup shell into the root container", as
   await settle()
 
   assert.match(dom.window.document.body.textContent ?? "", /X Bookmark Manager/)
+  assert.match(dom.window.document.body.textContent ?? "", /工作区快照/)
+  assert.match(dom.window.document.body.textContent ?? "", /立即同步/)
+  assert.equal(dom.window.document.documentElement.dataset.theme, "light")
+})
+
+test("mountPopup renders stored english copy and dark theme preference", async () => {
+  const dom = installDom()
+  installChromeStorageMock({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "dark",
+    lastSyncSummary: {
+      status: "idle",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 0
+    },
+    classificationRules: []
+  })
+  const rootElement = dom.window.document.getElementById("root")
+  assert.ok(rootElement)
+
+  act(() => {
+    mountPopup(rootElement)
+  })
+
+  await settle()
+
   assert.match(dom.window.document.body.textContent ?? "", /Workspace snapshot/)
   assert.match(dom.window.document.body.textContent ?? "", /Sync now/)
+  assert.equal(dom.window.document.documentElement.dataset.theme, "dark")
 })

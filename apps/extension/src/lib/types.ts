@@ -89,6 +89,10 @@ export interface AuthorStat {
   count: number
 }
 
+export type Locale = "zh-CN" | "en"
+
+export type ThemePreference = "system" | "light" | "dark"
+
 export interface WorkspaceStats {
   totalBookmarks: number
   inboxCount: number
@@ -100,6 +104,8 @@ export interface WorkspaceStats {
 
 export interface ExtensionSettings {
   schemaVersion: number
+  locale: Locale
+  themePreference: ThemePreference
   lastSyncSummary: SyncSummary
   classificationRules: ClassificationRule[]
 }

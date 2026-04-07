@@ -1,7 +1,26 @@
-import { createEmptySyncSummary, type ClassificationRule, type ExtensionSettings, type SyncSummary } from "../types.ts"
+import {
+  createEmptySyncSummary,
+  type ClassificationRule,
+  type ExtensionSettings,
+  type Locale,
+  type SyncSummary,
+  type ThemePreference
+} from "../types.ts"
 
 const SETTINGS_STORAGE_KEY = "settings"
 const SETTINGS_SCHEMA_VERSION = 3
+const DEFAULT_LOCALE: Locale = "zh-CN"
+const DEFAULT_THEME_PREFERENCE: ThemePreference = "system"
+
+function normalizeLocale(locale: unknown): Locale {
+  return locale === "en" || locale === "zh-CN" ? locale : DEFAULT_LOCALE
+}
+
+function normalizeThemePreference(themePreference: unknown): ThemePreference {
+  return themePreference === "light" || themePreference === "dark" || themePreference === "system"
+    ? themePreference
+    : DEFAULT_THEME_PREFERENCE
+}
 
 function normalizeRule(rule: Partial<ClassificationRule> | undefined, index: number): ClassificationRule {
   return {
@@ -21,6 +40,8 @@ function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): Ex
 
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
+    locale: normalizeLocale(settings?.locale),
+    themePreference: normalizeThemePreference(settings?.themePreference),
     lastSyncSummary: {
       ...defaults.lastSyncSummary,
       ...settings?.lastSyncSummary
@@ -34,6 +55,8 @@ function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): Ex
 export function createDefaultSettings(): ExtensionSettings {
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
+    locale: DEFAULT_LOCALE,
+    themePreference: DEFAULT_THEME_PREFERENCE,
     lastSyncSummary: createEmptySyncSummary(),
     classificationRules: []
   }
