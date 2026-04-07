@@ -1,13 +1,16 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import "fake-indexeddb/auto"
 import { runBookmarkSync } from "../../src/background/syncBookmarks.ts"
-import type { KnowledgeCardDraftRecord } from "../../src/lib/types.ts"
-import type { ExtensionSettings } from "../../src/lib/types.ts"
+import { getAllBookmarks, upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
+import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
+import { createEmptySyncSummary, type ExtensionSettings } from "../../src/lib/types.ts"
 
-test("runBookmarkSync stores fetched bookmarks locally and returns sync stats", async () => {
+test("runBookmarkSync stores fetched bookmarks, assigns inbox, and applies matching rules", async () => {
   const recordedSummaries: Array<{ status: string; errorSummary?: string }> = []
   const recordedSyncRuns: Array<{ id: string; status: string; finishedAt?: string }> = []
-  const recordedCardSyncs: Array<number> = []
+  const recordedInboxAssignments: string[][] = []
+  const recordedTagAssignments: Array<{ bookmarkId: string; tagId: string }> = []
 
   const result = await runBookmarkSync({
     getXCookieHeader: async () => "auth_token=abc; ct0=token123",
@@ -28,9 +31,19 @@ test("runBookmarkSync stores fetched bookmarks locally and returns sync stats", 
             tweetUrl: "https://x.com/a/status/123",
             authorName: "Alice",
             authorHandle: "alice",
-            text: "hello",
+            text: "hello agents",
             createdAtOnX: "2026-03-15T00:00:00.000Z",
             savedAt: "2026-03-15T01:00:00.000Z",
+            rawPayload: {}
+          },
+          {
+            tweetId: "124",
+            tweetUrl: "https://x.com/b/status/124",
+            authorName: "Bob",
+            authorHandle: "bob",
+            text: "plain note",
+            createdAtOnX: "2026-03-15T00:00:00.000Z",
+            savedAt: "2026-03-15T01:05:00.000Z",
             rawPayload: {}
           }
         ],
@@ -39,30 +52,39 @@ test("runBookmarkSync stores fetched bookmarks locally and returns sync stats", 
       }
     },
     upsertBookmarks: async (bookmarks) => {
-      assert.equal(bookmarks.length, 1)
-      return { insertedCount: 1, updatedCount: 0 }
+      assert.equal(bookmarks.length, 2)
+      return { insertedCount: 2, updatedCount: 0 }
     },
-    syncKnowledgeCards: async (sourceMaterials) => {
-      recordedCardSyncs.push(sourceMaterials.length)
-      return { createdCount: 1, updatedCount: 0 }
+    assignBookmarksToInboxIfMissing: async (bookmarkIds) => {
+      recordedInboxAssignments.push(bookmarkIds)
+    },
+    getAllTags: async () => [
+      {
+        id: "tag-ai",
+        name: "AI",
+        createdAt: "2026-03-15T00:00:00.000Z"
+      }
+    ],
+    getAllBookmarkTags: async () => [],
+    attachBookmarkTags: async (relations) => {
+      recordedTagAssignments.push(...relations)
+      return relations.length
     },
     getSettings: async () => ({
-      schemaVersion: 2,
-      hasCompletedOnboarding: false,
-      lastSyncSummary: {
-        status: "idle",
-        fetchedCount: 0,
-        insertedCount: 0,
-        updatedCount: 0,
-        failedCount: 0
-      },
-      aiGeneration: {
-        enabled: true,
-        provider: "openai",
-        apiKey: "sk-test",
-        model: "gpt-5-mini"
-      },
-      exportScope: "all"
+      schemaVersion: 3,
+      lastSyncSummary: createEmptySyncSummary(),
+      classificationRules: [
+        {
+          id: "rule-1",
+          name: "AI tag",
+          enabled: true,
+          authorHandles: ["alice"],
+          keywords: ["hello"],
+          requireMedia: false,
+          requireLongform: false,
+          targetTagIds: ["tag-ai"]
+        }
+      ]
     }),
     createSyncRun: async (syncRun) => {
       recordedSyncRuns.push({
@@ -76,48 +98,28 @@ test("runBookmarkSync stores fetched bookmarks locally and returns sync stats", 
     }
   })
 
-  assert.equal(result.fetchedCount, 1)
-  assert.equal(result.insertedCount, 1)
+  assert.equal(result.fetchedCount, 2)
+  assert.equal(result.insertedCount, 2)
   assert.equal(result.updatedCount, 0)
   assert.equal(result.failedCount, 0)
-  assert.deepEqual(recordedCardSyncs, [1])
-  assert.deepEqual(
-    recordedSummaries.map((summary) => summary.status),
-    ["running", "success"]
-  )
-  assert.deepEqual(
-    recordedSyncRuns.map((syncRun) => syncRun.status),
-    ["running", "success"]
-  )
+  assert.deepEqual(recordedInboxAssignments, [["123", "124"]])
+  assert.deepEqual(recordedTagAssignments, [{ bookmarkId: "123", tagId: "tag-ai" }])
+  assert.deepEqual(recordedSummaries.map((summary) => summary.status), ["running", "success"])
+  assert.deepEqual(recordedSyncRuns.map((syncRun) => syncRun.status), ["running", "success"])
   assert.equal(recordedSyncRuns[0]?.id, recordedSyncRuns[1]?.id)
-  assert.equal(Boolean(recordedSyncRuns[0]?.finishedAt), false)
   assert.match(String(recordedSyncRuns[1]?.finishedAt), /^\d{4}-\d{2}-\d{2}T/)
 })
 
 test("runBookmarkSync default summary persistence updates saved settings", async () => {
   let savedSettings: ExtensionSettings = {
-    schemaVersion: 1,
-    hasCompletedOnboarding: false,
-    lastSyncSummary: {
-      status: "idle" as const,
-      fetchedCount: 0,
-      insertedCount: 0,
-      updatedCount: 0,
-      failedCount: 0
-    },
-    aiGeneration: {
-      enabled: false,
-      provider: "openai",
-      apiKey: "",
-      model: "gpt-5-mini"
-    },
-    exportScope: "all"
+    schemaVersion: 3,
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
   }
 
   await runBookmarkSync({
     getXCookieHeader: async () => "auth_token=abc; ct0=token123",
     fetchAllBookmarks: async () => ({ bookmarks: [], failedCount: 0 }),
-    upsertBookmarks: async () => ({ insertedCount: 0, updatedCount: 0 }),
     createSyncRun: async () => {},
     getSettings: async () => savedSettings,
     saveSettings: async (nextSettings) => {
@@ -129,76 +131,37 @@ test("runBookmarkSync default summary persistence updates saved settings", async
   assert.equal(savedSettings.lastSyncSummary.fetchedCount, 0)
 })
 
-test("runBookmarkSync passes ai settings into card generation when enabled", async () => {
-  const capturedModels: string[] = []
+test("runBookmarkSync does not delete bookmarks that are already stored locally", async () => {
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "existing-1",
+      tweetUrl: "https://x.com/alice/status/existing-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "keep me",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T00:01:00.000Z",
+      rawPayload: {}
+    }
+  ])
 
   await runBookmarkSync({
     getXCookieHeader: async () => "auth_token=abc; ct0=token123",
-    fetchAllBookmarks: async () => ({
-      bookmarks: [
-        {
-          tweetId: "123",
-          tweetUrl: "https://x.com/a/status/123",
-          authorName: "Alice",
-          authorHandle: "alice",
-          text: "hello",
-          createdAtOnX: "2026-03-15T00:00:00.000Z",
-          savedAt: "2026-03-15T01:00:00.000Z",
-          rawPayload: {}
-        }
-      ],
-      failedCount: 0
-    }),
-    upsertBookmarks: async () => ({ insertedCount: 1, updatedCount: 0 }),
-    syncKnowledgeCards: async (sourceMaterials, options) => {
-      const generated = await options?.generateDraft?.(sourceMaterials[0])
-      capturedModels.push((generated as KnowledgeCardDraftRecord).quality.generatorVersion)
-      return { createdCount: 1, updatedCount: 0 }
-    },
-    generateKnowledgeCardDraft: async ({ sourceMaterial, settings }) => ({
-      id: `card-${sourceMaterial.tweetId}`,
-      sourceMaterialId: sourceMaterial.tweetId,
-      status: "draft",
-      title: "AI card",
-      theme: "AI card",
-      summary: "AI card",
-      keyExcerpt: "AI card",
-      applicability: "AI card",
-      provenance: [],
-      quality: {
-        score: 90,
-        needsReview: false,
-        warnings: [],
-        generatorVersion: `openai:${settings.model}`
-      },
-      generatedAt: "2026-03-15T01:00:00.000Z",
-      updatedAt: "2026-03-15T01:00:00.000Z",
-      sourceFingerprint: "fingerprint",
-      lastGeneratedFromModel: settings.model
-    }),
+    fetchAllBookmarks: async () => ({ bookmarks: [], failedCount: 0 }),
     createSyncRun: async () => {},
     getSettings: async () => ({
-      schemaVersion: 2,
-      hasCompletedOnboarding: false,
-      lastSyncSummary: {
-        status: "idle",
-        fetchedCount: 0,
-        insertedCount: 0,
-        updatedCount: 0,
-        failedCount: 0
-      },
-      aiGeneration: {
-        enabled: true,
-        provider: "openai",
-        apiKey: "sk-test",
-        model: "gpt-5-mini"
-      },
-      exportScope: "all"
+      schemaVersion: 3,
+      lastSyncSummary: createEmptySyncSummary(),
+      classificationRules: []
     }),
     saveSettings: async () => {}
   })
 
-  assert.deepEqual(capturedModels, ["openai:gpt-5-mini"])
+  const bookmarks = await getAllBookmarks()
+  assert.equal(bookmarks.length, 1)
+  assert.equal(bookmarks[0].tweetId, "existing-1")
 })
 
 test("runBookmarkSync persists an error summary and rethrows when sync fails", async () => {
@@ -227,15 +190,9 @@ test("runBookmarkSync persists an error summary and rethrows when sync fails", a
     /X API error 401: unauthorized response body/
   )
 
-  assert.deepEqual(
-    recordedSummaries.map((summary) => summary.status),
-    ["running", "error"]
-  )
+  assert.deepEqual(recordedSummaries.map((summary) => summary.status), ["running", "error"])
   assert.equal(recordedSummaries[1].errorSummary, "X API error 401: unauthorized response body")
-  assert.deepEqual(
-    recordedSyncRuns.map((syncRun) => syncRun.status),
-    ["running", "error"]
-  )
+  assert.deepEqual(recordedSyncRuns.map((syncRun) => syncRun.status), ["running", "error"])
   assert.equal(recordedSyncRuns[0]?.id, recordedSyncRuns[1]?.id)
   assert.equal(recordedSyncRuns[1]?.errorSummary, "X API error 401: unauthorized response body")
   assert.match(String(recordedSyncRuns[1]?.finishedAt), /^\d{4}-\d{2}-\d{2}T/)

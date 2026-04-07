@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process"
 import { build, context } from "esbuild"
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
@@ -29,7 +30,7 @@ async function writeStaticFiles() {
         name,
         version,
         permissions: ["cookies", "storage"],
-        host_permissions: ["https://x.com/*", "https://api.openai.com/*"],
+        host_permissions: ["https://x.com/*"],
         action: {
           default_title: name
         },
@@ -55,7 +56,7 @@ async function writeStaticFiles() {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${name} Workspace</title>
-    <link rel="stylesheet" href="./options.css" />
+    <link rel="stylesheet" href="./extension.css" />
   </head>
   <body>
     <div id="root"></div>
@@ -73,7 +74,7 @@ async function writeStaticFiles() {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${name}</title>
-    <link rel="stylesheet" href="./popup.css" />
+    <link rel="stylesheet" href="./extension.css" />
   </head>
   <body>
     <div id="root"></div>
@@ -82,6 +83,56 @@ async function writeStaticFiles() {
 </html>
 `
   )
+}
+
+function resolveTailwindBin() {
+  return process.platform === "win32" ? "tailwindcss.cmd" : "tailwindcss"
+}
+
+function runTailwindBuild({ watch = false } = {}) {
+  const args = [
+    "-c",
+    path.join(appDir, "tailwind.config.cjs"),
+    "-i",
+    path.join(appDir, "src", "styles", "extension.css"),
+    "-o",
+    path.join(outDir, "extension.css")
+  ]
+
+  if (watch) {
+    args.push("--watch")
+  } else {
+    args.push("--minify")
+  }
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(resolveTailwindBin(), args, {
+      cwd: appDir,
+      stdio: watch ? "inherit" : ["ignore", "pipe", "pipe"]
+    })
+
+    if (watch) {
+      child.on("error", reject)
+      resolve(child)
+      return
+    }
+
+    let stderr = ""
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString()
+    })
+
+    child.on("error", reject)
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve(child)
+        return
+      }
+
+      reject(new Error(stderr || `Tailwind build failed with code ${code}`))
+    })
+  })
 }
 
 function createBuildOptions(entryPoint, outfile, format) {
@@ -122,6 +173,7 @@ async function buildExtension() {
   )
 
   if (watchMode) {
+    await runTailwindBuild({ watch: true })
     const contexts = await Promise.all([context(optionsPageOptions), context(backgroundOptions), context(popupOptions)])
     await Promise.all(contexts.map((buildContext) => buildContext.watch()))
     await writeStaticFiles()
@@ -130,7 +182,7 @@ async function buildExtension() {
     return
   }
 
-  await Promise.all([build(optionsPageOptions), build(backgroundOptions), build(popupOptions)])
+  await Promise.all([build(optionsPageOptions), build(backgroundOptions), build(popupOptions), runTailwindBuild()])
   await writeStaticFiles()
   console.log(`Built extension to ${outDir}`)
 }

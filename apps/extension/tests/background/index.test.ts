@@ -1,24 +1,17 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { createBackgroundMessageHandler, openOrFocusOptionsPage, OPTIONS_PAGE_PATH } from "../../src/background/index.ts"
-import { LOAD_POPUP_DATA_MESSAGE, REGENERATE_CARD_MESSAGE, RESET_LOCAL_DATA_MESSAGE, RUN_SYNC_MESSAGE } from "../../src/lib/runtime/messages.ts"
+import { LOAD_WORKSPACE_DATA_MESSAGE, RESET_LOCAL_DATA_MESSAGE, RUN_SYNC_MESSAGE } from "../../src/lib/runtime/messages.ts"
 
-test("background message handler loads popup data", async () => {
+test("background message handler loads workspace data", async () => {
   const handler = createBackgroundMessageHandler({
-    loadPopupData: async () => ({
+    loadWorkspaceData: async () => ({
       bookmarks: [],
-      sourceMaterials: [],
-      knowledgeCards: [],
+      lists: [],
+      bookmarkLists: [],
       tags: [],
       bookmarkTags: [],
-      aiGeneration: {
-        enabled: false,
-        provider: "openai",
-        apiKey: "",
-        model: "gpt-5-mini"
-      },
-      exportScope: "all",
-      hasCompletedOnboarding: false,
+      classificationRules: [],
       latestSyncRun: null,
       summary: {
         status: "idle",
@@ -26,6 +19,14 @@ test("background message handler loads popup data", async () => {
         insertedCount: 0,
         updatedCount: 0,
         failedCount: 0
+      },
+      stats: {
+        totalBookmarks: 0,
+        inboxCount: 0,
+        unclassifiedCount: 0,
+        listCounts: [],
+        tagCounts: [],
+        topAuthors: []
       }
     }),
     resetData: async () => ({ success: true }),
@@ -34,35 +35,29 @@ test("background message handler loads popup data", async () => {
       insertedCount: 1,
       updatedCount: 0,
       failedCount: 0
-    }),
-    regenerateCard: async () => ({ success: true })
+    })
   })
 
-  const response = (await handler({ type: LOAD_POPUP_DATA_MESSAGE })) as {
+  const response = (await handler({ type: LOAD_WORKSPACE_DATA_MESSAGE })) as {
     bookmarks: unknown[]
     summary: { status: string }
+    stats: { totalBookmarks: number }
   }
 
   assert.equal(response.summary.status, "idle")
   assert.equal(response.bookmarks.length, 0)
+  assert.equal(response.stats.totalBookmarks, 0)
 })
 
 test("background message handler runs sync", async () => {
   const handler = createBackgroundMessageHandler({
-    loadPopupData: async () => ({
+    loadWorkspaceData: async () => ({
       bookmarks: [],
-      sourceMaterials: [],
-      knowledgeCards: [],
+      lists: [],
+      bookmarkLists: [],
       tags: [],
       bookmarkTags: [],
-      aiGeneration: {
-        enabled: false,
-        provider: "openai",
-        apiKey: "",
-        model: "gpt-5-mini"
-      },
-      exportScope: "all",
-      hasCompletedOnboarding: false,
+      classificationRules: [],
       latestSyncRun: null,
       summary: {
         status: "idle",
@@ -70,6 +65,14 @@ test("background message handler runs sync", async () => {
         insertedCount: 0,
         updatedCount: 0,
         failedCount: 0
+      },
+      stats: {
+        totalBookmarks: 0,
+        inboxCount: 0,
+        unclassifiedCount: 0,
+        listCounts: [],
+        tagCounts: [],
+        topAuthors: []
       }
     }),
     resetData: async () => ({ success: true }),
@@ -78,8 +81,7 @@ test("background message handler runs sync", async () => {
       insertedCount: 1,
       updatedCount: 0,
       failedCount: 0
-    }),
-    regenerateCard: async () => ({ success: true })
+    })
   })
 
   const response = (await handler({ type: RUN_SYNC_MESSAGE })) as {
@@ -93,20 +95,13 @@ test("background message handler runs sync", async () => {
 
 test("background message handler resets local data", async () => {
   const handler = createBackgroundMessageHandler({
-    loadPopupData: async () => ({
+    loadWorkspaceData: async () => ({
       bookmarks: [],
-      sourceMaterials: [],
-      knowledgeCards: [],
+      lists: [],
+      bookmarkLists: [],
       tags: [],
       bookmarkTags: [],
-      aiGeneration: {
-        enabled: false,
-        provider: "openai",
-        apiKey: "",
-        model: "gpt-5-mini"
-      },
-      exportScope: "all",
-      hasCompletedOnboarding: false,
+      classificationRules: [],
       latestSyncRun: null,
       summary: {
         status: "idle",
@@ -114,6 +109,14 @@ test("background message handler resets local data", async () => {
         insertedCount: 0,
         updatedCount: 0,
         failedCount: 0
+      },
+      stats: {
+        totalBookmarks: 0,
+        inboxCount: 0,
+        unclassifiedCount: 0,
+        listCounts: [],
+        tagCounts: [],
+        topAuthors: []
       }
     }),
     resetData: async () => ({ success: true }),
@@ -122,58 +125,11 @@ test("background message handler resets local data", async () => {
       insertedCount: 1,
       updatedCount: 0,
       failedCount: 0
-    }),
-    regenerateCard: async () => ({ success: true })
+    })
   })
 
   const response = (await handler({ type: RESET_LOCAL_DATA_MESSAGE })) as { success: boolean }
 
-  assert.equal(response.success, true)
-})
-
-test("background message handler regenerates a single knowledge card draft", async () => {
-  let receivedCardId: string | null = null
-
-  const handler = createBackgroundMessageHandler({
-    loadPopupData: async () => ({
-      bookmarks: [],
-      sourceMaterials: [],
-      knowledgeCards: [],
-      tags: [],
-      bookmarkTags: [],
-      aiGeneration: {
-        enabled: false,
-        provider: "openai",
-        apiKey: "",
-        model: "gpt-5-mini"
-      },
-      exportScope: "all",
-      hasCompletedOnboarding: false,
-      latestSyncRun: null,
-      summary: {
-        status: "idle",
-        fetchedCount: 0,
-        insertedCount: 0,
-        updatedCount: 0,
-        failedCount: 0
-      }
-    }),
-    resetData: async () => ({ success: true }),
-    runSync: async () => ({
-      fetchedCount: 1,
-      insertedCount: 1,
-      updatedCount: 0,
-      failedCount: 0
-    }),
-    regenerateCard: async (cardId) => {
-      receivedCardId = cardId
-      return { success: true }
-    }
-  })
-
-  const response = (await handler({ type: REGENERATE_CARD_MESSAGE, cardId: "card-1" })) as { success: boolean }
-
-  assert.equal(receivedCardId, "card-1")
   assert.equal(response.success, true)
 })
 

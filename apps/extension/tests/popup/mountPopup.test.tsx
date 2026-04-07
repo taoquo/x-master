@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import { JSDOM } from "jsdom"
 import { act } from "react"
 import { mountPopup } from "../../src/popup/mountPopup.tsx"
+import { settle } from "../helpers/render.tsx"
 
 function installDom() {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>")
@@ -14,26 +15,18 @@ function installDom() {
   return dom
 }
 
-async function settle() {
-  await act(async () => {
-    await Promise.resolve()
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    await Promise.resolve()
-  })
-}
-
-test("mountPopup renders the popup shell into the root container", async () => {
+test("mountPopup renders the simplified popup shell into the root container", async () => {
   const dom = installDom()
-  const container = dom.window.document.getElementById("root")
-  assert.ok(container)
+  const rootElement = dom.window.document.getElementById("root")
+  assert.ok(rootElement)
 
   act(() => {
-    mountPopup(container)
+    mountPopup(rootElement)
   })
 
   await settle()
 
-  assert.match(container.textContent ?? "", /X Knowledge Cards/)
-  assert.match(container.textContent ?? "", /Run the first sync/)
-  assert.match(container.textContent ?? "", /Sync now/)
+  assert.match(dom.window.document.body.textContent ?? "", /X Bookmark Manager/)
+  assert.match(dom.window.document.body.textContent ?? "", /Workspace snapshot/)
+  assert.match(dom.window.document.body.textContent ?? "", /Sync now/)
 })

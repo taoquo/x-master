@@ -1,47 +1,54 @@
-import { createEmptySyncSummary, type ExtensionSettings, type SyncSummary } from "../types.ts"
+import { createEmptySyncSummary, type ClassificationRule, type ExtensionSettings, type SyncSummary } from "../types.ts"
 
 const SETTINGS_STORAGE_KEY = "settings"
+const SETTINGS_SCHEMA_VERSION = 3
+
+function normalizeRule(rule: Partial<ClassificationRule> | undefined, index: number): ClassificationRule {
+  return {
+    id: String(rule?.id ?? `rule-${index + 1}`),
+    name: String(rule?.name ?? "").trim(),
+    enabled: rule?.enabled ?? true,
+    authorHandles: Array.isArray(rule?.authorHandles) ? rule.authorHandles.map(String) : [],
+    keywords: Array.isArray(rule?.keywords) ? rule.keywords.map(String) : [],
+    requireMedia: Boolean(rule?.requireMedia),
+    requireLongform: Boolean(rule?.requireLongform),
+    targetTagIds: Array.isArray(rule?.targetTagIds) ? rule.targetTagIds.map(String) : []
+  }
+}
+
+function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): ExtensionSettings {
+  const defaults = createDefaultSettings()
+
+  return {
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
+    lastSyncSummary: {
+      ...defaults.lastSyncSummary,
+      ...settings?.lastSyncSummary
+    },
+    classificationRules: Array.isArray(settings?.classificationRules)
+      ? settings.classificationRules.map((rule, index) => normalizeRule(rule, index))
+      : defaults.classificationRules
+  }
+}
 
 export function createDefaultSettings(): ExtensionSettings {
   return {
-    schemaVersion: 2,
-    hasCompletedOnboarding: false,
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
     lastSyncSummary: createEmptySyncSummary(),
-    aiGeneration: {
-      enabled: false,
-      provider: "openai",
-      apiKey: "",
-      model: "gpt-5-mini"
-    },
-    exportScope: "all"
+    classificationRules: []
   }
 }
 
 export async function getSettings(): Promise<ExtensionSettings> {
-  const defaults = createDefaultSettings()
-
   if (typeof chrome === "undefined" || !chrome.storage?.local?.get) {
-    return defaults
+    return createDefaultSettings()
   }
 
   const stored = (await chrome.storage.local.get(SETTINGS_STORAGE_KEY))[SETTINGS_STORAGE_KEY] as
-    | ExtensionSettings
+    | Partial<ExtensionSettings>
     | undefined
 
-  return stored
-    ? {
-        ...defaults,
-        ...stored,
-        aiGeneration: {
-          ...defaults.aiGeneration,
-          ...stored.aiGeneration
-        },
-        lastSyncSummary: {
-          ...defaults.lastSyncSummary,
-          ...stored.lastSyncSummary
-        }
-      }
-    : defaults
+  return normalizeSettings(stored)
 }
 
 export async function saveSettings(settings: ExtensionSettings) {
@@ -49,41 +56,38 @@ export async function saveSettings(settings: ExtensionSettings) {
     return
   }
 
-  await chrome.storage.local.set({ [SETTINGS_STORAGE_KEY]: settings })
+  await chrome.storage.local.set({
+    [SETTINGS_STORAGE_KEY]: normalizeSettings(settings)
+  })
 }
 
 export async function saveLastSyncSummary(summary: SyncSummary) {
   const settings = await getSettings()
   await saveSettings({
     ...settings,
-    lastSyncSummary: summary
-  })
-}
-
-export async function saveAiGenerationSettings(settings: ExtensionSettings["aiGeneration"]) {
-  const currentSettings = await getSettings()
-  await saveSettings({
-    ...currentSettings,
-    aiGeneration: {
-      ...currentSettings.aiGeneration,
-      ...settings
+    lastSyncSummary: {
+      ...settings.lastSyncSummary,
+      ...summary
     }
   })
 }
 
-export async function saveExportScope(exportScope: ExtensionSettings["exportScope"]) {
-  const currentSettings = await getSettings()
+export async function saveClassificationRules(classificationRules: ClassificationRule[]) {
+  const settings = await getSettings()
   await saveSettings({
-    ...currentSettings,
-    exportScope
+    ...settings,
+    classificationRules: classificationRules.map((rule, index) => normalizeRule(rule, index))
   })
 }
 
-export async function setHasCompletedOnboarding(hasCompletedOnboarding: boolean) {
-  const currentSettings = await getSettings()
+export async function removeTagFromClassificationRules(tagId: string) {
+  const settings = await getSettings()
   await saveSettings({
-    ...currentSettings,
-    hasCompletedOnboarding
+    ...settings,
+    classificationRules: settings.classificationRules.map((rule) => ({
+      ...rule,
+      targetTagIds: rule.targetTagIds.filter((currentTagId) => currentTagId !== tagId)
+    }))
   })
 }
 

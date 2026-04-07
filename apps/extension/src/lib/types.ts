@@ -1,5 +1,3 @@
-export type SourceMaterialKind = "x-bookmark" | "x-note-tweet"
-
 export interface BookmarkRecord {
   id?: string
   tweetId: string
@@ -13,11 +11,6 @@ export interface BookmarkRecord {
   metrics?: { likes: number; retweets: number; replies: number }
   rawPayload: unknown
   updatedAt?: string
-  sourceKind?: SourceMaterialKind
-}
-
-export interface SourceMaterialRecord extends BookmarkRecord {
-  contentFingerprint?: string
 }
 
 export interface TagRecord {
@@ -33,17 +26,27 @@ export interface BookmarkTagRecord {
   createdAt: string
 }
 
-export interface FolderRecord {
+export interface ListRecord {
   id: string
   name: string
-  parentId?: string
   createdAt: string
 }
 
-export interface BookmarkFolderRecord {
+export interface BookmarkListRecord {
   bookmarkId: string
-  folderId: string
+  listId: string
   updatedAt: string
+}
+
+export interface ClassificationRule {
+  id: string
+  name: string
+  enabled: boolean
+  authorHandles: string[]
+  keywords: string[]
+  requireMedia: boolean
+  requireLongform: boolean
+  targetTagIds: string[]
 }
 
 export interface SyncRunRecord {
@@ -68,86 +71,49 @@ export interface SyncSummary {
   errorSummary?: string
 }
 
-export interface KnowledgeCardProvenanceRecord {
-  field: "theme" | "summary" | "key_excerpt" | "applicability"
-  excerpt: string
-  charStart?: number
-  charEnd?: number
+export interface ListStat {
+  listId: string
+  name: string
+  count: number
 }
 
-export type KnowledgeCardQualityIssueCode =
-  | "short_source"
-  | "missing_author_metadata"
-  | "theme_evidence_missing"
-  | "summary_evidence_missing"
-  | "applicability_evidence_missing"
-  | "key_excerpt_not_verbatim"
-  | "key_excerpt_evidence_missing"
-  | "key_excerpt_not_code_focused"
-  | "ai_generation_disabled"
-  | "ai_generation_failed"
-  | "model_warning"
-
-export interface KnowledgeCardQualityIssue {
-  code: KnowledgeCardQualityIssueCode
-  message: string
-  field?: KnowledgeCardProvenanceRecord["field"]
+export interface TagStat {
+  tagId: string
+  name: string
+  count: number
 }
 
-export interface KnowledgeCardQualitySignal {
-  score: number
-  needsReview: boolean
-  warnings: string[]
-  generatorVersion: string
-  issues?: KnowledgeCardQualityIssue[]
+export interface AuthorStat {
+  authorHandle: string
+  authorName: string
+  count: number
 }
 
-export interface KnowledgeCardDraftRecord {
-  id: string
-  sourceMaterialId: string
-  status: "draft" | "reviewed"
-  title: string
-  theme: string
-  summary: string
-  keyExcerpt: string
-  applicability: string
-  provenance: KnowledgeCardProvenanceRecord[]
-  quality: KnowledgeCardQualitySignal
-  generatedAt: string
-  updatedAt: string
-  sourceFingerprint: string
-  lastGeneratedFromModel?: string
+export interface WorkspaceStats {
+  totalBookmarks: number
+  inboxCount: number
+  unclassifiedCount: number
+  listCounts: ListStat[]
+  tagCounts: TagStat[]
+  topAuthors: AuthorStat[]
 }
-
-export interface AiGenerationSettings {
-  enabled: boolean
-  provider: "openai"
-  apiKey: string
-  model: string
-}
-
-export type ExportScope = "all" | "reviewed" | "reviewed-and-stale"
-export type OnboardingStep = "sync-source" | "generate-cards" | "review-cards" | "export-vault" | "done"
 
 export interface ExtensionSettings {
   schemaVersion: number
   lastSyncSummary: SyncSummary
-  hasCompletedOnboarding: boolean
-  aiGeneration: AiGenerationSettings
-  exportScope: ExportScope
+  classificationRules: ClassificationRule[]
 }
 
-export interface PopupData {
+export interface WorkspaceData {
   bookmarks: BookmarkRecord[]
-  sourceMaterials: SourceMaterialRecord[]
-  knowledgeCards: KnowledgeCardDraftRecord[]
+  lists: ListRecord[]
+  bookmarkLists: BookmarkListRecord[]
   tags: TagRecord[]
   bookmarkTags: BookmarkTagRecord[]
-  aiGeneration: AiGenerationSettings
-  exportScope: ExportScope
-  hasCompletedOnboarding: boolean
+  classificationRules: ClassificationRule[]
   summary: SyncSummary
   latestSyncRun: SyncRunRecord | null
+  stats: WorkspaceStats
 }
 
 export function createEmptySyncSummary(): SyncSummary {

@@ -1,4 +1,4 @@
-import type { BookmarkRecord, BookmarkTagRecord } from "../types.ts"
+import type { BookmarkListRecord, BookmarkRecord, BookmarkTagRecord } from "../types.ts"
 import { getAllBookmarks } from "../storage/bookmarksStore.ts"
 
 export type BookmarkSortOrder = "saved-desc" | "saved-asc" | "created-desc" | "likes-desc"
@@ -7,7 +7,8 @@ export type SavedTimeRange = "all" | "7d" | "30d" | "90d"
 
 export interface BookmarkFilterOptions {
   query: string
-  selectedPublishedDate?: string
+  bookmarkLists: BookmarkListRecord[]
+  selectedListId?: string
   bookmarkTags: BookmarkTagRecord[]
   selectedAuthorHandles: string[]
   authorMatchMode: MultiValueMatchMode
@@ -27,24 +28,6 @@ function normalizeValue(value: string) {
 function toTimestamp(value?: string) {
   const timestamp = value ? Date.parse(value) : Number.NaN
   return Number.isNaN(timestamp) ? 0 : timestamp
-}
-
-function toDateKey(value?: string) {
-  if (!value) {
-    return ""
-  }
-
-  const directMatch = value.match(/^\d{4}-\d{2}-\d{2}/)
-  if (directMatch) {
-    return directMatch[0]
-  }
-
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) {
-    return ""
-  }
-
-  return parsed.toISOString().slice(0, 10)
 }
 
 export function filterBookmarks(bookmarks: BookmarkRecord[], query: string) {
@@ -79,6 +62,19 @@ function matchesMultiValueFilter(values: Set<string>, selectedValues: string[], 
   }
 
   return selectedValues.every((selectedValue) => values.has(selectedValue))
+}
+
+export function filterBookmarksByList(
+  bookmarks: BookmarkRecord[],
+  bookmarkLists: BookmarkListRecord[],
+  selectedListId?: string
+) {
+  if (!selectedListId) {
+    return bookmarks
+  }
+
+  const listIdByBookmarkId = new Map(bookmarkLists.map((bookmarkList) => [bookmarkList.bookmarkId, bookmarkList.listId]))
+  return bookmarks.filter((bookmark) => listIdByBookmarkId.get(bookmark.tweetId) === selectedListId)
 }
 
 export function filterBookmarksByAuthors(
@@ -137,16 +133,6 @@ export function filterBookmarksBySavedTime(
   return bookmarks.filter((bookmark) => toTimestamp(bookmark.savedAt) >= threshold)
 }
 
-export function filterBookmarksByPublishedDate(bookmarks: BookmarkRecord[], selectedPublishedDate?: string) {
-  const dateKey = toDateKey(selectedPublishedDate)
-
-  if (!dateKey) {
-    return bookmarks
-  }
-
-  return bookmarks.filter((bookmark) => toDateKey(bookmark.createdAtOnX) === dateKey)
-}
-
 export function filterBookmarksByFlags(
   bookmarks: BookmarkRecord[],
   {
@@ -193,22 +179,23 @@ export function sortBookmarks(bookmarks: BookmarkRecord[], sortOrder: BookmarkSo
 export function applyBookmarkFilters(bookmarks: BookmarkRecord[], options: BookmarkFilterOptions) {
   return sortBookmarks(
     filterBookmarksByFlags(
-      filterBookmarksByPublishedDate(
-        filterBookmarksBySavedTime(
-          filterBookmarksByTags(
-            filterBookmarksByAuthors(
+      filterBookmarksBySavedTime(
+        filterBookmarksByTags(
+          filterBookmarksByAuthors(
+            filterBookmarksByList(
               filterBookmarks(bookmarks, options.query),
-              options.selectedAuthorHandles,
-              options.authorMatchMode
+              options.bookmarkLists,
+              options.selectedListId
             ),
-            options.bookmarkTags,
-            options.selectedTagIds,
-            options.tagMatchMode
+            options.selectedAuthorHandles,
+            options.authorMatchMode
           ),
-          options.timeRange,
-          options.currentTime
+          options.bookmarkTags,
+          options.selectedTagIds,
+          options.tagMatchMode
         ),
-        options.selectedPublishedDate
+        options.timeRange,
+        options.currentTime
       ),
       {
         onlyWithMedia: options.onlyWithMedia,
