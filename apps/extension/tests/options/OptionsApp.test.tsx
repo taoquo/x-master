@@ -34,6 +34,10 @@ function getBookmarkCards(container: HTMLDivElement) {
   return Array.from(container.querySelectorAll("[data-bookmark-card]"))
 }
 
+function findByTestId(container: HTMLDivElement, testId: string) {
+  return container.querySelector(`[data-testid="${testId}"]`)
+}
+
 function setSelectValue(
   element: HTMLSelectElement,
   value: string,
@@ -234,4 +238,95 @@ test("OptionsApp supports bulk list moves and tag creation on the inspector", as
   assert.doesNotMatch(currentTags.textContent ?? "", /No tags yet/)
   assert.match(currentTags.textContent ?? "", /Important/)
 
+})
+
+test("OptionsApp renders a unified workspace with a collapsed list composer", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-1",
+      tweetUrl: "https://x.com/alice/status/tweet-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Agents workflow notes",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T01:00:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  await createList({ name: "Research" })
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: {
+      status: "idle",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 0
+    },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  assert.ok(findByTestId(container, "library-workspace"))
+  assert.ok(findByTestId(container, "lists-sidebar"))
+  assert.ok(findByTestId(container, "workspace-toolbar"))
+  assert.equal(findByTestId(container, "new-list-name"), null)
+
+  const toggleComposerButton = findByTestId(container, "toggle-list-composer") as HTMLButtonElement | null
+  assert.ok(toggleComposerButton)
+
+  await act(async () => {
+    toggleComposerButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.ok(findByTestId(container, "new-list-name"))
+})
+
+test("OptionsApp renders a compact overview strip above the workspace", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-1",
+      tweetUrl: "https://x.com/alice/status/tweet-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Agents workflow notes",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T01:00:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "system",
+    lastSyncSummary: {
+      status: "success",
+      fetchedCount: 1,
+      insertedCount: 1,
+      updatedCount: 0,
+      failedCount: 0,
+      lastSyncedAt: "2026-03-15T03:00:00.000Z"
+    },
+    classificationRules: []
+  })
+
+  const { container } = render(React.createElement(OptionsApp))
+  await settle()
+
+  assert.ok(findByTestId(container, "workspace-overview"))
+  assert.ok(findByTestId(container, "workspace-summary-strip"))
+  assert.ok(findByTestId(container, "workspace-preferences-inline"))
 })

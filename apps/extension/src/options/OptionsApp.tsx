@@ -292,18 +292,18 @@ function PreferencesPanel({
   const themeFieldId = createFieldId("preferences-tip", "theme")
 
   return (
-    <div className="grid gap-5">
+    <div data-testid="workspace-preferences-inline" className="grid gap-4">
       <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/70 bg-white/55 text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
-          <AppIcon name="info" size={16} />
+        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[1rem] border border-white/65 bg-white/36 text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+          <AppIcon name="info" size={15} />
         </span>
         <div className="min-w-0">
-          <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">{copy.preferencesTitle}</div>
-          <p className="mt-2 max-w-[30ch] text-sm leading-6 text-slate-600">{copy.preferencesDescription}</p>
+          <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{copy.preferencesTitle}</div>
+          <p className="mt-1 text-sm leading-6 text-slate-600">{copy.preferencesDescription}</p>
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         <FieldBlock label={copy.languageLabel} htmlFor={localeFieldId}>
           <SelectField
             id={localeFieldId}
@@ -389,7 +389,8 @@ function TextInputField({
   onChange,
   placeholder,
   type = "text",
-  className
+  className,
+  dataTestId
 }: {
   id: string
   value: string
@@ -397,10 +398,12 @@ function TextInputField({
   placeholder?: string
   type?: string
   className?: string
+  dataTestId?: string
 }) {
   return (
     <input
       id={id}
+      data-testid={dataTestId}
       type={type}
       value={value}
       placeholder={placeholder}
@@ -770,6 +773,7 @@ function OptionsScreen() {
   const [bulkListId, setBulkListId] = useState("")
   const [bulkTagId, setBulkTagId] = useState("")
   const [newListName, setNewListName] = useState("")
+  const [showListComposer, setShowListComposer] = useState(false)
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
 
   const bookmarkListByBookmarkId = useMemo(
@@ -869,15 +873,14 @@ function OptionsScreen() {
   const lastSyncLabel = formatTimestamp(workspace.summary.lastSyncedAt, locale)
   const hasAdvancedRefinements = Boolean(selectedAuthorHandle) || Boolean(selectedTagId)
   const hasActiveRefinements =
-    Boolean(selectedListId) ||
     Boolean(query.trim()) ||
     Boolean(selectedAuthorHandle) ||
     Boolean(selectedTagId) ||
     timeRange !== "all" ||
     onlyWithMedia ||
     onlyLongform
+  const currentScopeLabel = selectedListId ? listNamesById.get(selectedListId) ?? copy.inbox : copy.allBookmarks
   const activeRefinementChips = [
-    selectedListId ? { key: "list", label: `${copy.listPrefix}: ${listNamesById.get(selectedListId) ?? copy.inbox}` } : null,
     query.trim() ? { key: "query", label: `${copy.searchPrefix}: ${truncateText(query.trim(), 24)}` } : null,
     selectedAuthorHandle
       ? {
@@ -907,11 +910,6 @@ function OptionsScreen() {
   ].filter(Boolean) as Array<{ key: string; label: string }>
 
   function clearRefinement(key: string) {
-    if (key === "list") {
-      setSelectedListId("")
-      return
-    }
-
     if (key === "query") {
       setQuery("")
       return
@@ -943,7 +941,6 @@ function OptionsScreen() {
   }
 
   function clearAllRefinements() {
-    setSelectedListId("")
     setQuery("")
     setSelectedAuthorHandle("")
     setSelectedTagId("")
@@ -963,53 +960,52 @@ function OptionsScreen() {
       <BackgroundScene />
       <main className="min-h-[100dvh] px-4 py-6 md:px-8 lg:px-10">
         <div className="mx-auto max-w-[1400px]">
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_380px] xl:items-stretch">
-            <section className="glass-panel relative overflow-hidden p-6 md:p-8 lg:min-h-[300px] lg:p-10">
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_82%_18%,rgba(255,255,255,0.56),transparent_28%),linear-gradient(135deg,rgba(255,255,255,0.14),transparent_62%)]" />
-              <div className="relative flex h-full flex-col justify-between gap-8">
-                <div className="min-w-0">
-                  <div className="inline-flex items-center rounded-full border border-white/65 bg-white/35 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-600 backdrop-blur-xl">
-                    {copy.workspaceBadge}
-                  </div>
-                  <h1 className="mt-5 max-w-[8ch] text-[clamp(3.2rem,6vw,5.4rem)] font-sans font-semibold leading-[0.9] tracking-[-0.08em] text-slate-950">
+          <section data-testid="workspace-overview" className="glass-panel relative overflow-hidden p-5 md:p-6 lg:p-7">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_82%_18%,rgba(255,255,255,0.48),transparent_24%),linear-gradient(135deg,rgba(255,255,255,0.1),transparent_62%)]" />
+            <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.7fr)_minmax(320px,0.8fr)] xl:items-start">
+              <div className="min-w-0">
+                <div className="inline-flex items-center rounded-full border border-white/65 bg-white/32 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-600 backdrop-blur-xl">
+                  {copy.workspaceBadge}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <h1 className="text-[clamp(2.5rem,4vw,3.9rem)] font-sans font-semibold leading-[0.92] tracking-[-0.07em] text-slate-950">
                     {copy.pageTitle}
                   </h1>
-                  <p className="mt-4 max-w-[34ch] text-base leading-7 text-slate-700/82 md:text-lg">
-                    {copy.pageDescription}
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3 border-t border-white/45 pt-5">
                   <StatusBadge status={workspace.summary.status} />
-                  <div className="rounded-full border border-white/65 bg-white/35 px-4 py-2 text-sm text-slate-600 backdrop-blur-xl">
+                </div>
+                <p className="mt-3 max-w-[30ch] text-sm leading-6 text-slate-700/82 md:text-[0.95rem]">
+                  {copy.pageDescription}
+                </p>
+
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <div className="rounded-full border border-white/65 bg-white/32 px-4 py-2 text-sm text-slate-600 backdrop-blur-xl">
                     {copy.lastSync} {lastSyncLabel}
                   </div>
                   <button
                     type="button"
                     onClick={() => void workspace.handleSync()}
                     disabled={workspace.isSyncing}
-                    className="inline-flex items-center gap-2 rounded-full border border-slate-900/90 bg-slate-950 px-5 py-3 text-sm font-medium text-white shadow-[0_18px_44px_-26px_rgba(15,23,42,0.45)] transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-slate-800 active:translate-y-[1px] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-60">
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-900/90 bg-slate-950 px-4 py-2.5 text-sm font-medium text-white shadow-[0_18px_44px_-26px_rgba(15,23,42,0.45)] transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-slate-800 active:translate-y-[1px] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-60">
                     <AppIcon name="sync" size={16} />
                     <span>{workspace.isSyncing ? copy.syncing : copy.syncNow}</span>
                   </button>
                 </div>
               </div>
-            </section>
 
-            <section className="glass-panel overflow-hidden p-0">
-              <div className="grid divide-y divide-white/40 md:grid-cols-2 md:divide-x md:divide-y-0">
-                <div className="p-5 md:p-6">
-                  <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">{copy.totalBookmarks}</p>
-                  <div className="mt-3 text-[3.4rem] leading-none tracking-[-0.08em] text-slate-800">{workspace.stats.totalBookmarks}</div>
-                  <p className="mt-3 max-w-[16ch] text-sm leading-6 text-slate-600">{copy.totalBookmarksHint}</p>
+              <div data-testid="workspace-summary-strip" className="grid overflow-hidden rounded-[1.8rem] border border-white/55 bg-white/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] md:grid-cols-2">
+                <div className="p-4 md:p-5">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">{copy.totalBookmarks}</p>
+                  <div className="mt-2 text-[2.9rem] leading-none tracking-[-0.08em] text-slate-800">{workspace.stats.totalBookmarks}</div>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{copy.totalBookmarksHint}</p>
                 </div>
-                <div className="p-5 md:p-6">
-                  <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">{copy.unclassified}</p>
-                  <div className="mt-3 text-[3.4rem] leading-none tracking-[-0.08em] text-slate-800">{workspace.stats.unclassifiedCount}</div>
-                  <p className="mt-3 max-w-[16ch] text-sm leading-6 text-slate-600">{copy.unclassifiedHint}</p>
+                <div className="border-t border-white/45 p-4 md:border-l md:border-t-0 md:p-5">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">{copy.unclassified}</p>
+                  <div className="mt-2 text-[2.9rem] leading-none tracking-[-0.08em] text-slate-800">{workspace.stats.unclassifiedCount}</div>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{copy.unclassifiedHint}</p>
                 </div>
               </div>
-              <div className="border-t border-white/45 p-5 md:p-6">
+
+              <div className="rounded-[1.8rem] border border-white/55 bg-white/18 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] md:p-5">
                 <PreferencesPanel
                   locale={locale}
                   themePreference={themePreference}
@@ -1018,347 +1014,389 @@ function OptionsScreen() {
                   copy={copy}
                 />
               </div>
-            </section>
-          </div>
+            </div>
+          </section>
 
-          <div className="mt-10 grid gap-6 xl:grid-cols-[232px_minmax(0,1fr)_340px] xl:items-start 2xl:grid-cols-[248px_minmax(0,1fr)_360px]">
+          <div className="mt-6 grid gap-6 xl:grid-cols-[232px_minmax(0,1fr)_340px] xl:items-start 2xl:grid-cols-[248px_minmax(0,1fr)_360px]">
             {workspace.isLoading && !workspace.bookmarks.length ? (
               <>
-                <LoadingPanel title={copy.listsTitle} description={copy.loadingStateDescription} />
-                <LoadingPanel title={copy.pageTitle} description={copy.loadingStateDescription} />
+                <LoadingPanel title={copy.libraryTitle} description={copy.loadingStateDescription} />
                 <LoadingPanel title={copy.detailsTitle} description={copy.loadingStateDescription} />
               </>
             ) : (
               <>
-                <SurfaceCard
-                  title={copy.listsTitle}
-                  className="min-h-[420px] xl:sticky xl:top-6 xl:max-h-[calc(100dvh-3rem)]"
-                  bodyClassName="scroll-shell min-h-0 overflow-y-auto pr-1">
-                  <div className="space-y-3">
-                    <button
-                      type="button"
-                      data-list-button="all"
-                      onClick={() => setSelectedListId("")}
-                      className={cn("flex w-full items-center justify-between rounded-full px-4 py-3 text-left transition duration-300",
-                        selectedListId === "" ? "bg-slate-950 text-white shadow-soft" : "bg-white/45 text-slate-900 hover:bg-white/65"
-                      )}>
-                      <span>{copy.allBookmarks}</span>
-                      <span className="font-mono">{workspace.stats.totalBookmarks}</span>
-                    </button>
-                    {workspace.stats.listCounts.map((list) => {
-                      const isSelected = selectedListId === list.listId
-                      return (
-                        <div key={list.listId} className="flex items-center gap-2">
+                <section data-testid="library-workspace" className="glass-panel min-h-[420px] overflow-hidden p-0 xl:col-span-2">
+                  <div className="grid min-h-[420px] xl:grid-cols-[220px_minmax(0,1fr)] 2xl:grid-cols-[232px_minmax(0,1fr)]">
+                    <aside
+                      data-testid="lists-sidebar"
+                      className="flex min-h-0 flex-col border-b border-white/45 bg-white/16 xl:border-b-0 xl:border-r">
+                      <div className="border-b border-white/45 px-5 py-5 md:px-6">
+                        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{copy.listsTitle}</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">
+                          {locale === "zh-CN" ? "切换工作范围。" : "Switch the active scope."}
+                        </p>
+                      </div>
+
+                      <div className="scroll-shell min-h-0 flex-1 px-4 py-4 md:px-5">
+                        <div className="space-y-1.5">
                           <button
                             type="button"
-                            data-list-button={list.listId}
-                            onClick={() => setSelectedListId(list.listId)}
+                            data-list-button="all"
+                            onClick={() => setSelectedListId("")}
                             className={cn(
-                              "flex w-full items-center justify-between rounded-full px-4 py-3 text-left transition duration-300",
-                              isSelected ? "bg-slate-900 text-white shadow-soft" : "bg-white/45 text-slate-900 hover:bg-white/65"
+                              "flex w-full items-center justify-between rounded-[1.1rem] px-3.5 py-2.5 text-left text-sm transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+                              selectedListId === ""
+                                ? "bg-slate-950 text-white shadow-soft"
+                                : "text-slate-700 hover:bg-white/50 hover:text-slate-950"
                             )}>
-                            <span>{list.name}</span>
-                            <span className="font-mono">{list.count}</span>
+                            <span>{copy.allBookmarks}</span>
+                            <span className="font-mono text-[12px]">{workspace.stats.totalBookmarks}</span>
                           </button>
-                          {list.listId !== INBOX_LIST_ID ? (
+                          {workspace.stats.listCounts.map((list) => {
+                            const isSelected = selectedListId === list.listId
+                            return (
+                              <div key={list.listId} className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  data-list-button={list.listId}
+                                  onClick={() => setSelectedListId(list.listId)}
+                                  className={cn(
+                                    "flex w-full items-center justify-between rounded-[1.1rem] px-3.5 py-2.5 text-left text-sm transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+                                    isSelected
+                                      ? "bg-slate-950 text-white shadow-soft"
+                                      : "text-slate-700 hover:bg-white/50 hover:text-slate-950"
+                                  )}>
+                                  <span className="truncate">{list.name}</span>
+                                  <span className="font-mono text-[12px]">{list.count}</span>
+                                </button>
+                                {list.listId !== INBOX_LIST_ID ? (
+                                  <button
+                                    type="button"
+                                    aria-label={`${copy.deleteLabel} ${list.name}`}
+                                    onClick={() => void workspace.handleDeleteList(list.listId)}
+                                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[1rem] text-slate-500 transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-white/55 hover:text-slate-900 active:translate-y-[1px]">
+                                    <AppIcon name="trash" size={14} />
+                                  </button>
+                                ) : null}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="border-t border-white/45 px-4 py-4 md:px-5">
+                        <button
+                          type="button"
+                          data-testid="toggle-list-composer"
+                          onClick={() => setShowListComposer((current) => !current)}
+                          className={cn(
+                            "inline-flex min-h-[42px] w-full items-center justify-between rounded-[1.1rem] border px-3.5 text-sm font-medium transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] active:translate-y-[1px]",
+                            showListComposer
+                              ? "border-slate-900/90 bg-slate-950 text-white"
+                              : "border-white/65 bg-white/28 text-slate-700 hover:bg-white/40"
+                          )}>
+                          <span>{copy.newList}</span>
+                          <AppIcon name={showListComposer ? "close" : "bookmark"} size={14} />
+                        </button>
+
+                        {showListComposer ? (
+                          <div className="mt-4 space-y-4">
+                            <FieldBlock label={copy.newList} htmlFor={newListId} description={copy.newListDescription}>
+                              <TextInputField
+                                id={newListId}
+                                value={newListName}
+                                placeholder="Research"
+                                onChange={setNewListName}
+                                dataTestId="new-list-name"
+                              />
+                            </FieldBlock>
                             <button
                               type="button"
-                              aria-label={`${copy.deleteLabel} ${list.name}`}
-                              onClick={() => void workspace.handleDeleteList(list.listId)}
-                              className="chip-button">
-                              <AppIcon name="trash" size={14} />
+                              onClick={() =>
+                                void workspace.handleCreateList(newListName).then(() => {
+                                  setNewListName("")
+                                  setShowListComposer(false)
+                                })
+                              }
+                              disabled={workspace.isSavingLists || !newListName.trim()}
+                              className="glass-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
+                              <AppIcon name="bookmark" size={16} />
+                              <span>{copy.createList}</span>
                             </button>
-                          ) : null}
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  <div className="mt-8 space-y-4">
-                    <FieldBlock label={copy.newList} htmlFor={newListId} description={copy.newListDescription}>
-                      <TextInputField id={newListId} value={newListName} placeholder="Research" onChange={setNewListName} />
-                    </FieldBlock>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void workspace.handleCreateList(newListName).then(() => {
-                          setNewListName("")
-                        })
-                      }
-                      disabled={workspace.isSavingLists || !newListName.trim()}
-                      className="glass-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
-                      <AppIcon name="bookmark" size={16} />
-                      <span>{copy.createList}</span>
-                    </button>
-                  </div>
-                </SurfaceCard>
-
-                <section className="min-h-[420px]">
-                  <div className="glass-panel p-5 md:p-6">
-                    <div className="flex flex-col gap-5">
-                      <div className="flex flex-col gap-4 border-b border-white/45 pb-5 lg:flex-row lg:items-end lg:justify-between">
-                        <div className="min-w-0">
-                          <h2 className="text-[1.35rem] font-medium tracking-[-0.03em] text-slate-900">{copy.libraryTitle}</h2>
-                          <p className="mt-1 max-w-[34rem] text-sm leading-6 text-slate-600">{copy.libraryDescription}</p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                          <span className="rounded-full border border-white/60 bg-white/30 px-3 py-1.5 backdrop-blur-xl">
-                            {visibleBookmarks.length} {copy.results}
-                          </span>
-                          {hasBulkSelection ? (
-                            <span className="rounded-full border border-white/60 bg-white/30 px-3 py-1.5 backdrop-blur-xl">
-                              {selectedBookmarkIds.length} {copy.selected}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.7fr)_220px_220px]">
-                        <FieldBlock label={copy.search} htmlFor={searchId} labelClassName="text-[11px] uppercase tracking-[0.12em] text-slate-500">
-                          <div className="relative min-w-0">
-                            <AppIcon name="search" size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
-                            <TextInputField
-                              id={searchId}
-                              type="search"
-                              value={query}
-                              placeholder={copy.searchPlaceholder}
-                              onChange={setQuery}
-                              className="min-h-[50px] rounded-[1.2rem] pl-11 pr-4"
-                            />
                           </div>
-                        </FieldBlock>
-                        <FieldBlock label={copy.sortBy} htmlFor={sortId} labelClassName="text-[11px] uppercase tracking-[0.12em] text-slate-500">
-                          <SelectField
-                            id={sortId}
-                            value={sortOrder}
-                            onChange={(value) => setSortOrder(value as BookmarkSortOrder)}
-                            options={[
-                              { value: "saved-desc", label: copy.newestSaved },
-                              { value: "saved-asc", label: copy.oldestSaved },
-                              { value: "created-desc", label: copy.newestPublished },
-                              { value: "likes-desc", label: copy.mostLiked }
-                            ]}
-                            className="min-h-[50px] rounded-[1.2rem] py-2.5"
-                          />
-                        </FieldBlock>
-                        <FieldBlock label={copy.savedTime} htmlFor={timeId} labelClassName="text-[11px] uppercase tracking-[0.12em] text-slate-500">
-                          <SelectField
-                            id={timeId}
-                            value={timeRange}
-                            onChange={(value) => setTimeRange(value as SavedTimeRange)}
-                            options={[
-                              { value: "all", label: copy.anyTime },
-                              { value: "7d", label: copy.last7Days },
-                              { value: "30d", label: copy.last30Days },
-                              { value: "90d", label: copy.last90Days }
-                            ]}
-                            className="min-h-[50px] rounded-[1.2rem] py-2.5"
-                          />
-                        </FieldBlock>
+                        ) : null}
                       </div>
+                    </aside>
 
-                      <div className="grid gap-4 border-t border-white/45 pt-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <ToggleChip
-                            checked={onlyWithMedia}
-                            label={copy.hasMedia}
-                            onChange={setOnlyWithMedia}
-                            className="!px-3.5 !py-2 text-sm"
-                          />
-                          <ToggleChip
-                            checked={onlyLongform}
-                            label={copy.longform}
-                            onChange={setOnlyLongform}
-                            className="!px-3.5 !py-2 text-sm"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowAdvancedFilters((current) => !current)}
-                            className={cn("chip-button !px-3.5 !py-2 text-sm", showAdvancedFilters && "chip-button-active")}>
-                            <span>{showAdvancedFilters ? copy.hideAdvancedFilters : copy.advancedFilters}</span>
-                            {hasAdvancedRefinements ? (
-                              <span className={cn("rounded-full px-2 py-0.5 text-xs", showAdvancedFilters ? "bg-white/20 text-white" : "bg-slate-900 text-white")}>
-                                {Number(Boolean(selectedAuthorHandle)) + Number(Boolean(selectedTagId))}
+                    <section className="min-w-0 px-5 py-5 md:px-6 md:py-6">
+                      <div className="flex min-h-full flex-col">
+                        <div className="flex flex-col gap-5 border-b border-white/45 pb-5">
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                            <div className="min-w-0">
+                              <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{copy.libraryTitle}</div>
+                              <h2 className="mt-2 truncate text-[1.65rem] font-medium tracking-[-0.04em] text-slate-900">{currentScopeLabel}</h2>
+                              <p className="mt-2 max-w-[34rem] text-sm leading-6 text-slate-600">
+                                {locale === "zh-CN" ? "在当前范围内搜索、筛选并整理已保存内容。" : "Search, refine, and organize saved posts inside the active scope."}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                              <span className="rounded-full border border-white/60 bg-white/26 px-3 py-1.5 backdrop-blur-xl">
+                                {visibleBookmarks.length} {copy.results}
                               </span>
+                              {hasBulkSelection ? (
+                                <span className="rounded-full border border-white/60 bg-white/26 px-3 py-1.5 backdrop-blur-xl">
+                                  {selectedBookmarkIds.length} {copy.selected}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <div data-testid="workspace-toolbar" className="grid gap-3 xl:grid-cols-[minmax(0,1.8fr)_190px_190px]">
+                            <FieldBlock label={copy.search} htmlFor={searchId} labelClassName="text-[11px] uppercase tracking-[0.12em] text-slate-500">
+                              <div className="relative min-w-0">
+                                <AppIcon name="search" size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                                <TextInputField
+                                  id={searchId}
+                                  type="search"
+                                  value={query}
+                                  placeholder={copy.searchPlaceholder}
+                                  onChange={setQuery}
+                                  className="min-h-[50px] rounded-[1.2rem] pl-11 pr-4"
+                                />
+                              </div>
+                            </FieldBlock>
+                            <FieldBlock label={copy.sortBy} htmlFor={sortId} labelClassName="text-[11px] uppercase tracking-[0.12em] text-slate-500">
+                              <SelectField
+                                id={sortId}
+                                value={sortOrder}
+                                onChange={(value) => setSortOrder(value as BookmarkSortOrder)}
+                                options={[
+                                  { value: "saved-desc", label: copy.newestSaved },
+                                  { value: "saved-asc", label: copy.oldestSaved },
+                                  { value: "created-desc", label: copy.newestPublished },
+                                  { value: "likes-desc", label: copy.mostLiked }
+                                ]}
+                                className="min-h-[50px] rounded-[1.2rem] py-2.5"
+                              />
+                            </FieldBlock>
+                            <FieldBlock label={copy.savedTime} htmlFor={timeId} labelClassName="text-[11px] uppercase tracking-[0.12em] text-slate-500">
+                              <SelectField
+                                id={timeId}
+                                value={timeRange}
+                                onChange={(value) => setTimeRange(value as SavedTimeRange)}
+                                options={[
+                                  { value: "all", label: copy.anyTime },
+                                  { value: "7d", label: copy.last7Days },
+                                  { value: "30d", label: copy.last30Days },
+                                  { value: "90d", label: copy.last90Days }
+                                ]}
+                                className="min-h-[50px] rounded-[1.2rem] py-2.5"
+                              />
+                            </FieldBlock>
+                          </div>
+
+                          <div className="grid gap-4">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <ToggleChip
+                                checked={onlyWithMedia}
+                                label={copy.hasMedia}
+                                onChange={setOnlyWithMedia}
+                                className="!px-3.5 !py-2 text-sm"
+                              />
+                              <ToggleChip
+                                checked={onlyLongform}
+                                label={copy.longform}
+                                onChange={setOnlyLongform}
+                                className="!px-3.5 !py-2 text-sm"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowAdvancedFilters((current) => !current)}
+                                className={cn("chip-button !px-3.5 !py-2 text-sm", showAdvancedFilters && "chip-button-active")}>
+                                <span>{showAdvancedFilters ? copy.hideAdvancedFilters : copy.advancedFilters}</span>
+                                {hasAdvancedRefinements ? (
+                                  <span className={cn("rounded-full px-2 py-0.5 text-xs", showAdvancedFilters ? "bg-white/20 text-white" : "bg-slate-900 text-white")}>
+                                    {Number(Boolean(selectedAuthorHandle)) + Number(Boolean(selectedTagId))}
+                                  </span>
+                                ) : null}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedBookmarkIds(visibleBookmarks.map((bookmark) => bookmark.tweetId))}
+                                disabled={!visibleBookmarks.length}
+                                className="chip-button !px-3.5 !py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60">
+                                <span>{copy.selectVisible}</span>
+                              </button>
+                            </div>
+
+                            {showAdvancedFilters ? (
+                              <div className="grid gap-3 rounded-[1.5rem] border border-white/50 bg-white/16 p-4 md:grid-cols-2">
+                                <FieldBlock label={copy.author} htmlFor={authorId}>
+                                  <SelectField
+                                    id={authorId}
+                                    value={selectedAuthorHandle}
+                                    onChange={setSelectedAuthorHandle}
+                                    options={[{ value: "", label: copy.allAuthors }, ...authorOptions]}
+                                    className="min-h-[50px] rounded-[1.2rem] py-2.5"
+                                  />
+                                </FieldBlock>
+                                <FieldBlock label={copy.tag} htmlFor={tagId}>
+                                  <SelectField
+                                    id={tagId}
+                                    value={selectedTagId}
+                                    onChange={setSelectedTagId}
+                                    options={[{ value: "", label: copy.allTags }, ...workspace.tags.map((tag) => ({ value: tag.id, label: tag.name }))]}
+                                    className="min-h-[50px] rounded-[1.2rem] py-2.5"
+                                  />
+                                </FieldBlock>
+                              </div>
                             ) : null}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedBookmarkIds(visibleBookmarks.map((bookmark) => bookmark.tweetId))}
-                            disabled={!visibleBookmarks.length}
-                            className="chip-button !px-3.5 !py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60">
-                            <span>{copy.selectVisible}</span>
-                          </button>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              {hasActiveRefinements ? (
+                                activeRefinementChips.map((chip) => (
+                                  <button
+                                    key={chip.key}
+                                    type="button"
+                                    onClick={() => clearRefinement(chip.key)}
+                                    className="chip-button !px-3 !py-1.5 !text-xs">
+                                    <span>{chip.label}</span>
+                                    <AppIcon name="close" size={12} />
+                                  </button>
+                                ))
+                              ) : (
+                                <span className="text-sm text-slate-500">{copy.noActiveFilters}</span>
+                              )}
+
+                              {hasActiveRefinements ? (
+                                <button
+                                  type="button"
+                                  onClick={clearAllRefinements}
+                                  className="ml-auto inline-flex min-h-[40px] items-center justify-center rounded-full border border-white/60 bg-white/30 px-4 text-sm font-medium text-slate-700 backdrop-blur-xl transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-white/45 active:translate-y-[1px]">
+                                  <span>{copy.clearAll}</span>
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
                         </div>
 
-                        {showAdvancedFilters ? (
-                          <div className="grid gap-3 rounded-[1.5rem] border border-white/50 bg-white/16 p-4 md:grid-cols-2">
-                            <FieldBlock label={copy.author} htmlFor={authorId}>
-                              <SelectField
-                                id={authorId}
-                                value={selectedAuthorHandle}
-                                onChange={setSelectedAuthorHandle}
-                                options={[{ value: "", label: copy.allAuthors }, ...authorOptions]}
-                                className="min-h-[50px] rounded-[1.2rem] py-2.5"
-                              />
-                            </FieldBlock>
-                            <FieldBlock label={copy.tag} htmlFor={tagId}>
-                              <SelectField
-                                id={tagId}
-                                value={selectedTagId}
-                                onChange={setSelectedTagId}
-                                options={[{ value: "", label: copy.allTags }, ...workspace.tags.map((tag) => ({ value: tag.id, label: tag.name }))]}
-                                className="min-h-[50px] rounded-[1.2rem] py-2.5"
-                              />
-                            </FieldBlock>
+                        {hasBulkSelection ? (
+                          <div className="border-b border-white/45 py-4">
+                            <div className="rounded-[1.5rem] border border-white/50 bg-white/20 p-4">
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                  <div className="text-sm font-medium text-slate-900">{selectedBookmarkIds.length} {copy.selectedCount}</div>
+                                  <p className="mt-0.5 text-sm text-slate-600">{locale === "zh-CN" ? "一次性应用列表和标签变更。" : "Apply list and tag changes in one pass."}</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedBookmarkIds([])}
+                                  className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-white/60 bg-white/30 px-4 text-sm font-medium text-slate-700 backdrop-blur-xl transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-white/45 active:translate-y-[1px]">
+                                  <span>{copy.clearSelection}</span>
+                                </button>
+                              </div>
+
+                              <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto]">
+                                <FieldBlock label={copy.moveSelectedTo} htmlFor={moveId}>
+                                  <SelectField
+                                    id={moveId}
+                                    value={bulkListId}
+                                    onChange={setBulkListId}
+                                    options={[
+                                      { value: "", label: copy.chooseList },
+                                      ...workspace.lists.map((list) => ({ value: list.id, label: list.name }))
+                                    ]}
+                                    className="min-h-[50px] rounded-[1.2rem]"
+                                  />
+                                </FieldBlock>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void workspace.handleMoveBookmarksToList(selectedBookmarkIds, bulkListId).then(() => {
+                                      setSelectedBookmarkIds([])
+                                      setBulkListId("")
+                                    })
+                                  }
+                                  disabled={workspace.isSavingLists || !bulkListId || !hasBulkSelection}
+                                  className="inline-flex min-h-[50px] items-center justify-center rounded-full border border-slate-900/90 bg-slate-950 px-5 text-sm font-medium text-white shadow-[0_18px_44px_-26px_rgba(15,23,42,0.45)] transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-slate-800 active:translate-y-[1px] active:scale-[0.985] self-end disabled:cursor-not-allowed disabled:opacity-60">
+                                  <span>{copy.moveSelected}</span>
+                                </button>
+                                <FieldBlock label={copy.tagSelectedWith} htmlFor={bulkTagIdField}>
+                                  <SelectField
+                                    id={bulkTagIdField}
+                                    value={bulkTagId}
+                                    onChange={setBulkTagId}
+                                    options={[
+                                      { value: "", label: copy.chooseTag },
+                                      ...workspace.tags.map((tag) => ({ value: tag.id, label: tag.name }))
+                                    ]}
+                                    className="min-h-[50px] rounded-[1.2rem]"
+                                  />
+                                </FieldBlock>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void workspace.handleBulkAttachTag(selectedBookmarkIds, bulkTagId).then(() => {
+                                      setSelectedBookmarkIds([])
+                                      setBulkTagId("")
+                                    })
+                                  }
+                                  disabled={workspace.isSavingTags || !bulkTagId || !hasBulkSelection}
+                                  className="inline-flex min-h-[50px] items-center justify-center rounded-full border border-white/60 bg-white/30 px-5 text-sm font-medium text-slate-700 backdrop-blur-xl transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-white/45 active:translate-y-[1px] self-end disabled:cursor-not-allowed disabled:opacity-60">
+                                  <span>{copy.applyTag}</span>
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         ) : null}
 
-                        <div className="flex flex-wrap items-center gap-2">
-                          {hasActiveRefinements ? (
-                            activeRefinementChips.map((chip) => (
-                              <button
-                                key={chip.key}
-                                type="button"
-                                onClick={() => clearRefinement(chip.key)}
-                                className="chip-button !px-3 !py-1.5 !text-xs">
-                                <span>{chip.label}</span>
-                                <AppIcon name="close" size={12} />
-                              </button>
-                            ))
-                          ) : (
-                            <span className="text-sm text-slate-500">{copy.noActiveFilters}</span>
-                          )}
-
-                          {hasActiveRefinements ? (
-                            <button
-                              type="button"
-                              onClick={clearAllRefinements}
-                              className="ml-auto inline-flex min-h-[40px] items-center justify-center rounded-full border border-white/60 bg-white/30 px-4 text-sm font-medium text-slate-700 backdrop-blur-xl transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-white/45 active:translate-y-[1px]">
-                              <span>{copy.clearAll}</span>
-                            </button>
-                          ) : null}
+                        <div className="flex items-center justify-between gap-3 py-4">
+                          <span className="text-sm text-slate-600">{copy.showing} {visibleBookmarks.length} {copy.of} {workspace.bookmarks.length}</span>
+                          {selectedListId ? <span className="text-sm text-slate-500">{copy.scopedTo} {currentScopeLabel}</span> : null}
                         </div>
-                      </div>
-                    </div>
-                  </div>
 
-                  {hasBulkSelection ? (
-                    <div className="glass-panel mt-4 overflow-hidden p-0">
-                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/45 px-4 py-3 md:px-5">
-                        <div>
-                          <div className="text-sm font-medium text-slate-900">{selectedBookmarkIds.length} {copy.selectedCount}</div>
-                          <p className="mt-0.5 text-sm text-slate-600">{locale === "zh-CN" ? "一次性应用列表和标签变更。" : "Apply list and tag changes in one pass."}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedBookmarkIds([])}
-                          className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-white/60 bg-white/30 px-4 text-sm font-medium text-slate-700 backdrop-blur-xl transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-white/45 active:translate-y-[1px]">
-                          <span>{copy.clearSelection}</span>
-                        </button>
-                      </div>
+                        {visibleBookmarks.length ? (
+                          <div className="scroll-shell grid max-h-[780px] content-start gap-4 overflow-y-auto pb-1 pr-1 sm:grid-cols-2 2xl:grid-cols-3">
+                            {visibleBookmarks.map((bookmark, index) => {
+                              const currentTagNames = tagNamesByBookmarkId.get(bookmark.tweetId) ?? []
+                              const currentListName = listNamesById.get(getListIdByBookmarkId(bookmark.tweetId, bookmarkListByBookmarkId)) ?? copy.inbox
+                              const isSelected = selectedBookmarkId === bookmark.tweetId
+                              const isChecked = selectedBookmarkIds.includes(bookmark.tweetId)
 
-                      <div className="grid gap-3 p-4 md:p-5 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto]">
-                        <FieldBlock label={copy.moveSelectedTo} htmlFor={moveId}>
-                          <SelectField
-                            id={moveId}
-                            value={bulkListId}
-                            onChange={setBulkListId}
-                            options={[
-                              { value: "", label: copy.chooseList },
-                              ...workspace.lists.map((list) => ({ value: list.id, label: list.name }))
-                            ]}
-                            className="min-h-[50px] rounded-[1.2rem]"
-                          />
-                        </FieldBlock>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void workspace.handleMoveBookmarksToList(selectedBookmarkIds, bulkListId).then(() => {
-                              setSelectedBookmarkIds([])
-                              setBulkListId("")
-                            })
-                          }
-                          disabled={workspace.isSavingLists || !bulkListId || !hasBulkSelection}
-                          className="inline-flex min-h-[50px] items-center justify-center rounded-full border border-slate-900/90 bg-slate-950 px-5 text-sm font-medium text-white shadow-[0_18px_44px_-26px_rgba(15,23,42,0.45)] transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-slate-800 active:translate-y-[1px] active:scale-[0.985] self-end disabled:cursor-not-allowed disabled:opacity-60">
-                          <span>{copy.moveSelected}</span>
-                        </button>
-                        <FieldBlock label={copy.tagSelectedWith} htmlFor={bulkTagIdField}>
-                          <SelectField
-                            id={bulkTagIdField}
-                            value={bulkTagId}
-                            onChange={setBulkTagId}
-                            options={[
-                              { value: "", label: copy.chooseTag },
-                              ...workspace.tags.map((tag) => ({ value: tag.id, label: tag.name }))
-                            ]}
-                            className="min-h-[50px] rounded-[1.2rem]"
-                          />
-                        </FieldBlock>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void workspace.handleBulkAttachTag(selectedBookmarkIds, bulkTagId).then(() => {
-                              setSelectedBookmarkIds([])
-                              setBulkTagId("")
-                            })
-                          }
-                          disabled={workspace.isSavingTags || !bulkTagId || !hasBulkSelection}
-                          className="inline-flex min-h-[50px] items-center justify-center rounded-full border border-white/60 bg-white/30 px-5 text-sm font-medium text-slate-700 backdrop-blur-xl transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-white/45 active:translate-y-[1px] self-end disabled:cursor-not-allowed disabled:opacity-60">
-                          <span>{copy.applyTag}</span>
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm text-slate-600">{copy.showing} {visibleBookmarks.length} {copy.of} {workspace.bookmarks.length}</span>
-                      {selectedListId ? (
-                        <span className="text-sm text-slate-500">{copy.scopedTo} {listNamesById.get(selectedListId) ?? copy.listsTitle}</span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {visibleBookmarks.length ? (
-                    <div className="scroll-shell mt-4 grid max-h-[780px] content-start gap-4 overflow-y-auto pb-1 pr-1 sm:grid-cols-2 2xl:grid-cols-3">
-                      {visibleBookmarks.map((bookmark, index) => {
-                        const currentTagNames = tagNamesByBookmarkId.get(bookmark.tweetId) ?? []
-                        const currentListName = listNamesById.get(getListIdByBookmarkId(bookmark.tweetId, bookmarkListByBookmarkId)) ?? copy.inbox
-                        const isSelected = selectedBookmarkId === bookmark.tweetId
-                        const isChecked = selectedBookmarkIds.includes(bookmark.tweetId)
-
-                        return (
-                          <BookmarkCard
-                            key={bookmark.tweetId}
-                            bookmark={bookmark}
-                            index={index}
-                            currentListName={currentListName}
-                            currentTagNames={currentTagNames}
-                            selected={isSelected}
-                            checked={isChecked}
-                            locale={locale}
-                            copy={copy}
-                            onSelect={() => setSelectedBookmarkId(bookmark.tweetId)}
-                            onToggle={() =>
-                              setSelectedBookmarkIds((current) =>
-                                current.includes(bookmark.tweetId)
-                                  ? current.filter((bookmarkId) => bookmarkId !== bookmark.tweetId)
-                                  : [...current, bookmark.tweetId]
+                              return (
+                                <BookmarkCard
+                                  key={bookmark.tweetId}
+                                  bookmark={bookmark}
+                                  index={index}
+                                  currentListName={currentListName}
+                                  currentTagNames={currentTagNames}
+                                  selected={isSelected}
+                                  checked={isChecked}
+                                  locale={locale}
+                                  copy={copy}
+                                  onSelect={() => setSelectedBookmarkId(bookmark.tweetId)}
+                                  onToggle={() =>
+                                    setSelectedBookmarkIds((current) =>
+                                      current.includes(bookmark.tweetId)
+                                        ? current.filter((bookmarkId) => bookmarkId !== bookmark.tweetId)
+                                        : [...current, bookmark.tweetId]
+                                    )
+                                  }
+                                />
                               )
-                            }
-                          />
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <div className="mt-4">
-                      <EmptyState
-                        title={copy.noBookmarksTitle}
-                        description={copy.noBookmarksDescription}
-                      />
-                    </div>
-                  )}
+                            })}
+                          </div>
+                        ) : (
+                          <div className="py-1">
+                            <EmptyState
+                              title={copy.noBookmarksTitle}
+                              description={copy.noBookmarksDescription}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  </div>
                 </section>
 
                 <BookmarkInspector
