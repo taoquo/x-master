@@ -934,7 +934,7 @@ function WorkspaceSidebar({
   return (
     <aside
       data-testid="lists-sidebar"
-      className="workspace-rail workspace-rail-left flex min-h-[420px] min-w-0 flex-col overflow-hidden xl:sticky xl:top-6 xl:h-[calc(100dvh-3rem)]">
+      className="panel-surface workspace-rail flex min-h-[420px] min-w-0 flex-col overflow-hidden rounded-[24px] p-0 xl:sticky xl:top-6 xl:h-[calc(100dvh-3rem)] xl:max-h-[calc(100dvh-3rem)]">
       <section data-testid="sidebar-status-section" className="border-b border-white/45 px-5 py-5 md:px-6">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="workspace-title-xl max-w-[8ch] text-slate-950">
@@ -951,7 +951,7 @@ function WorkspaceSidebar({
             type="button"
             onClick={() => void workspace.handleSync()}
             disabled={workspace.isSyncing}
-            className="primary-button inline-flex min-h-[50px] items-center justify-center gap-2 rounded-[1.2rem] border border-slate-900/90 bg-slate-950 px-4 py-2.5 text-[0.95rem] font-medium text-white shadow-[0_18px_44px_-26px_rgba(15,23,42,0.45)] transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-slate-800 active:translate-y-[1px] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-60">
+            className="primary-button workspace-sync-primary">
             <AppIcon name="sync" size={16} />
             <span>{workspace.isSyncing ? copy.syncing : copy.syncNow}</span>
           </button>
@@ -1422,7 +1422,7 @@ function BookmarkResultsPane({
   clearAllRefinements: () => void
 }) {
   return (
-    <section data-testid="library-workspace" className="workspace-main-surface min-h-[420px] min-w-0 overflow-hidden xl:h-[calc(100dvh-3rem)]">
+    <section data-testid="library-workspace" className="panel-surface workspace-main-surface min-h-[420px] min-w-0 overflow-hidden rounded-[24px] p-0 xl:h-[calc(100dvh-3rem)]">
       <div className="flex h-full min-h-0 flex-col">
         <WorkspaceToolbar
           copy={copy}
@@ -1867,7 +1867,7 @@ function OptionsScreen() {
         <div data-testid="workspace-shell" className="mx-auto max-w-[1400px]">
           <div
             data-testid="workspace-overview"
-            className="grid gap-6 xl:min-h-0 xl:h-[calc(100dvh-3rem)] xl:grid-cols-[240px_minmax(0,1fr)_320px] xl:items-start">
+            className="grid gap-6 workspace-three-rail-grid xl:min-h-0 xl:h-[calc(100dvh-3rem)] xl:grid-cols-[232px_minmax(0,1fr)_340px] xl:items-start 2xl:grid-cols-[248px_minmax(0,1fr)_360px]">
           {workspace.isLoading && !workspace.bookmarks.length ? (
             <>
               <SidebarLoading copy={copy} />
