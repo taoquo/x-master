@@ -384,7 +384,7 @@ test("OptionsApp uses rail layout and shared field/button primitives", async () 
     classificationRules: []
   })
 
-  const { container } = render(React.createElement(OptionsApp))
+  const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
   const overview = findByTestId(container, "workspace-overview")
@@ -421,6 +421,8 @@ test("OptionsApp renders flat navigation rows and restrained result cards", asyn
       rawPayload: {}
     }
   ])
+  const aiList = await createList({ name: "AI" })
+  await moveBookmarkToList({ bookmarkId: "tweet-1", listId: aiList.id })
   await saveSettings({
     schemaVersion: 3,
     locale: "en",
@@ -429,19 +431,36 @@ test("OptionsApp renders flat navigation rows and restrained result cards", asyn
     classificationRules: []
   })
 
-  const { container } = render(React.createElement(OptionsApp))
+  const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
   const allBookmarksButton = findListButton(container, "all")
+  const aiListButton = findListButton(container, aiList.id)
   const searchInput = container.querySelector("#filters-search") as HTMLInputElement | null
-  const cards = getBookmarkCards(container)
+  let cards = getBookmarkCards(container)
 
   assert.ok(allBookmarksButton)
+  assert.ok(aiListButton)
   assert.ok(searchInput)
+  assert.match(allBookmarksButton?.className ?? "", /workspace-nav-row-active/)
   assert.equal(cards.length, 1)
   assert.match(allBookmarksButton?.className ?? "", /workspace-nav-row/)
   assert.match(searchInput.className, /workspace-input/)
   assert.match(cards[0].className, /workspace-result-card/)
+  assert.match(cards[0].className, /workspace-result-card-selected/)
+
+  await act(async () => {
+    aiListButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  cards = getBookmarkCards(container)
+  const listBadge = cards[0].querySelector(".workspace-badge-plain")
+
+  assert.equal(cards.length, 1)
+  assert.match(aiListButton?.className ?? "", /workspace-nav-row-active/)
+  assert.ok(listBadge)
+  assert.equal(listBadge?.textContent, "AI")
 })
 
 test("OptionsApp supports double-click rename and keeps duplicate names blocked", async () => {

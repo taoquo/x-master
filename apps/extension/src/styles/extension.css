@@ -360,6 +360,10 @@
     text-transform: capitalize;
   }
 
+  .workspace-badge-plain {
+    text-transform: none;
+  }
+
   .workspace-meta {
     font-size: 0.78rem;
     line-height: 1.5;
@@ -448,6 +452,16 @@
     border: 1px solid var(--rail-border);
     border-radius: 12px;
     background: var(--surface-bg);
+    transition:
+      transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+      background-color 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .workspace-result-card:hover {
+    transform: translateY(-1px);
+    border-color: var(--panel-border);
+    background: var(--panel-bg);
   }
 
   .workspace-result-card-selected {

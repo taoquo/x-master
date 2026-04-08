@@ -658,7 +658,7 @@ function BookmarkCard({
           </div>
           <p className="mt-3 text-[0.875rem] leading-[1.55rem] text-slate-600">{truncateText(bookmark.text, 62)}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <span className="workspace-badge">{currentListName}</span>
+            <span className="workspace-badge workspace-badge-plain">{currentListName}</span>
             {bookmark.media?.length ? <span className="chip-button workspace-chip !cursor-default !px-3 !py-1.5">{copy.hasMedia}</span> : null}
             {currentTagNames.slice(0, 2).map((tagName) => (
               <span key={tagName} className="chip-button workspace-chip !cursor-default !px-3 !py-1.5">
