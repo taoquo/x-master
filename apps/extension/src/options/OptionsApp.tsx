@@ -1867,7 +1867,7 @@ function OptionsScreen() {
         <div data-testid="workspace-shell" className="mx-auto max-w-[1400px]">
           <div
             data-testid="workspace-overview"
-            className="grid gap-6 workspace-three-rail-grid xl:min-h-0 xl:h-[calc(100dvh-3rem)] xl:grid-cols-[232px_minmax(0,1fr)_340px] xl:items-start 2xl:grid-cols-[248px_minmax(0,1fr)_360px]">
+            className="grid gap-6 xl:min-h-0 xl:h-[calc(100dvh-3rem)] xl:grid-cols-[240px_minmax(0,1fr)_320px] xl:items-start">
           {workspace.isLoading && !workspace.bookmarks.length ? (
             <>
               <SidebarLoading copy={copy} />

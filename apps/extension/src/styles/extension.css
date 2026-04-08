@@ -346,10 +346,6 @@
     background: var(--surface-bg);
   }
 
-  .workspace-three-rail-grid {
-    display: grid;
-  }
-
   .workspace-input {
     min-height: 40px;
     border-radius: 8px;
