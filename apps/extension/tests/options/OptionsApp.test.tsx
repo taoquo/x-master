@@ -340,6 +340,38 @@ test("OptionsApp creates a list inline and commits the edited name on Enter", as
   assert.match(container.textContent ?? "", /Scoped to Reading/)
 })
 
+test("OptionsApp uses rail layout and shared field/button primitives", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: { status: "idle", fetchedCount: 0, insertedCount: 0, updatedCount: 0, failedCount: 0 },
+    classificationRules: []
+  })
+
+  const { container } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const overview = findByTestId(container, "workspace-overview")
+  const sidebar = findByTestId(container, "lists-sidebar")
+  const library = findByTestId(container, "library-workspace")
+  const syncButton = findButton(container, "Sync now")
+  const searchInput = container.querySelector("#filters-search") as HTMLInputElement | null
+
+  assert.ok(overview)
+  assert.ok(sidebar)
+  assert.ok(library)
+  assert.ok(syncButton)
+  assert.ok(searchInput)
+  assert.match(overview?.className ?? "", /xl:grid-cols-\[240px_minmax\(0,1fr\)_320px\]/)
+  assert.match(sidebar?.className ?? "", /workspace-rail/)
+  assert.match(library?.className ?? "", /workspace-main-surface/)
+  assert.match(syncButton?.className ?? "", /primary-button/)
+  assert.match(searchInput.className, /workspace-input/)
+})
+
 test("OptionsApp supports double-click rename and keeps duplicate names blocked", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()

@@ -22,6 +22,9 @@
     --panel-bg-strong: #ffffff;
     --panel-border: rgba(17, 19, 24, 0.1);
     --panel-border-subtle: rgba(17, 19, 24, 0.06);
+    --rail-border: var(--panel-border);
+    --rail-bg: var(--panel-bg);
+    --surface-bg: var(--panel-bg-strong);
     --panel-shadow: 0 18px 48px -28px rgba(12, 18, 28, 0.14);
     --text-primary: #111318;
     --text-secondary: #3d4450;
@@ -53,6 +56,9 @@
     --panel-bg-strong: rgba(25, 26, 27, 0.96);
     --panel-border: rgba(255, 255, 255, 0.08);
     --panel-border-subtle: rgba(255, 255, 255, 0.05);
+    --rail-border: var(--panel-border);
+    --rail-bg: var(--panel-bg);
+    --surface-bg: var(--panel-bg-strong);
     --panel-shadow: 0 24px 50px -36px rgba(0, 0, 0, 0.75);
     --text-primary: #f7f8f8;
     --text-secondary: #d0d6e0;
@@ -298,6 +304,21 @@
     padding-block: 0.75rem;
     padding-inline: 0.875rem;
     font-size: 0.875rem;
+  }
+
+  .workspace-rail {
+    border: 1px solid var(--rail-border);
+    background: var(--rail-bg);
+  }
+
+  .workspace-main-surface {
+    border: 1px solid var(--rail-border);
+    background: var(--surface-bg);
+  }
+
+  .workspace-input {
+    min-height: 40px;
+    border-radius: 8px;
   }
 
   .workspace-chip {
