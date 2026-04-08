@@ -737,6 +737,7 @@ function BookmarkInspector({
   return (
     <SurfaceCard
       title={copy.detailsTitle}
+      chrome="bare"
       className="workspace-rail workspace-detail-rail xl:sticky xl:top-6 xl:h-[calc(100dvh-3rem)] xl:max-h-[calc(100dvh-3rem)]">
       <div
         ref={inspectorScrollRef}

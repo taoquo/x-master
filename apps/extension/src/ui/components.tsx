@@ -36,16 +36,23 @@ export function SurfaceCard({
   description,
   children,
   className,
-  bodyClassName
+  bodyClassName,
+  chrome = "default"
 }: {
   title?: string
   description?: string
   children: React.ReactNode
   className?: string
   bodyClassName?: string
+  chrome?: "default" | "bare"
 }) {
+  const shellClassName =
+    chrome === "bare"
+      ? "workspace-surface flex flex-col"
+      : "workspace-surface panel-surface flex flex-col rounded-[22px] p-5 md:p-6"
+
   return (
-    <section className={cn("workspace-surface panel-surface flex flex-col rounded-[22px] p-5 md:p-6", className)}>
+    <section className={cn(shellClassName, className)}>
       {title ? (
         <div className="mb-4 space-y-2">
           <h2 className="workspace-heading-lg">{title}</h2>
