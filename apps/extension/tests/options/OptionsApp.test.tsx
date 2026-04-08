@@ -386,7 +386,7 @@ test("OptionsApp uses rail layout and shared field/button primitives", async () 
     classificationRules: []
   })
 
-  const { container, dom } = render(React.createElement(OptionsApp))
+  const { container } = render(React.createElement(OptionsApp))
   await settle()
 
   const overview = findByTestId(container, "workspace-overview")
