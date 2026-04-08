@@ -187,9 +187,11 @@ test("OptionsApp uses the shared badge and status surface language", async () =>
 
   const statusBadge = container.querySelector('[data-testid="lists-sidebar"] .status-success') as HTMLElement | null
   const preferencesToggle = findByTestId(container, "toggle-preferences-panel") as HTMLButtonElement | null
+  const inspectorEmptyState = container.querySelector('[data-testid="workspace-inspector"] .panel-elevated') as HTMLElement | null
 
   assert.ok(statusBadge)
   assert.ok(preferencesToggle)
+  assert.ok(inspectorEmptyState)
   assert.equal(dom.window.document.documentElement.dataset.theme, "dark")
   assert.match(statusBadge.className, /workspace-badge/)
   assert.match(preferencesToggle.textContent ?? "", /偏好设置/)

@@ -45,9 +45,9 @@ export function SurfaceCard({
   bodyClassName?: string
 }) {
   return (
-    <section className={cn("workspace-surface flex flex-col", className)}>
+    <section className={cn("workspace-surface panel-surface flex flex-col rounded-[22px] p-5 md:p-6", className)}>
       {title ? (
-        <div className="space-y-2">
+        <div className="mb-4 space-y-2">
           <h2 className="workspace-heading-lg">{title}</h2>
           {description ? <p className="workspace-copy">{description}</p> : null}
         </div>
@@ -84,7 +84,7 @@ export function MetricCard({
 
 export function EmptyState({ title, description }: { title: string; description?: string }) {
   return (
-    <div className="workspace-surface flex flex-col gap-3 text-left">
+    <div className="workspace-surface panel-elevated flex flex-col gap-3 rounded-[20px] p-8 text-left">
       <h3 className="workspace-heading-md">{title}</h3>
       {description ? <p className="workspace-copy max-w-[40ch]">{description}</p> : null}
     </div>
