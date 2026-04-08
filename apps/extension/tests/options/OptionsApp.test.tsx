@@ -11,6 +11,7 @@ import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
 import { attachTagToBookmark, createTag } from "../../src/lib/storage/tagsStore.ts"
 import { render, settle } from "../helpers/render.tsx"
 import { installChromeRuntimeHarness } from "../helpers/runtime.ts"
+import { LOAD_WORKSPACE_DATA_MESSAGE } from "../../src/lib/runtime/messages.ts"
 
 function findButton(container: HTMLDivElement, label: string) {
   return Array.from(container.querySelectorAll("button")).find((button) =>
@@ -49,6 +50,19 @@ function setSelectValue(
   const descriptor = Object.getOwnPropertyDescriptor(dom.HTMLSelectElement.prototype, "value")
   descriptor?.set?.call(element, value)
   element.dispatchEvent(new dom.Event("change", { bubbles: true }))
+}
+
+function setInputValue(
+  element: HTMLInputElement,
+  value: string,
+  dom: {
+    HTMLInputElement: typeof HTMLInputElement
+    Event: typeof Event
+  }
+) {
+  const descriptor = Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, "value")
+  descriptor?.set?.call(element, value)
+  element.dispatchEvent(new dom.Event("input", { bubbles: true }))
 }
 
 test("OptionsApp renders in Chinese by default and updates locale/theme preferences", async () => {
@@ -104,6 +118,15 @@ test("OptionsApp renders in Chinese by default and updates locale/theme preferen
   assert.match(container.textContent ?? "", /列表/)
   assert.match(container.textContent ?? "", /详情/)
   assert.match(container.textContent ?? "", /偏好设置/)
+
+  const togglePreferencesButton = findByTestId(container, "toggle-preferences-panel") as HTMLButtonElement | null
+  assert.ok(togglePreferencesButton)
+  assert.equal(findByTestId(container, "workspace-preferences-inline"), null)
+
+  await act(async () => {
+    togglePreferencesButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
 
   const localeSelect = findInputByLabel(container, "语言") as HTMLSelectElement
   await act(async () => {
@@ -240,7 +263,7 @@ test("OptionsApp supports bulk list moves and tag creation on the inspector", as
 
 })
 
-test("OptionsApp renders a unified workspace with a collapsed list composer", async () => {
+test("OptionsApp creates a list inline and commits the edited name on Enter", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
 
@@ -275,23 +298,257 @@ test("OptionsApp renders a unified workspace with a collapsed list composer", as
   const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
+  assert.ok(findByTestId(container, "workspace-shell"))
   assert.ok(findByTestId(container, "library-workspace"))
   assert.ok(findByTestId(container, "lists-sidebar"))
+  assert.ok(findByTestId(container, "workspace-inspector"))
   assert.ok(findByTestId(container, "workspace-toolbar"))
-  assert.equal(findByTestId(container, "new-list-name"), null)
+  assert.ok(findByTestId(container, "sidebar-lists-scroll"))
+  assert.ok(findByTestId(container, "sidebar-list-tree"))
+  assert.ok(findByTestId(container, "library-results-scroll"))
+  assert.ok(findByTestId(container, "results-stack"))
+  assert.ok(findByTestId(container, "inspector-section-stack"))
+  assert.equal(findByTestId(container, "inline-list-name-input"), null)
 
-  const toggleComposerButton = findByTestId(container, "toggle-list-composer") as HTMLButtonElement | null
-  assert.ok(toggleComposerButton)
+  const addListButton = findByTestId(container, "add-list-button") as HTMLButtonElement | null
+  assert.ok(addListButton)
 
   await act(async () => {
-    toggleComposerButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    addListButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
 
-  assert.ok(findByTestId(container, "new-list-name"))
+  const inlineEditor = findByTestId(container, "inline-list-name-input") as HTMLInputElement | null
+  assert.ok(inlineEditor)
+  assert.equal(inlineEditor.value, "New list")
+  assert.match(container.textContent ?? "", /Showing 1 of 1/)
+  assert.doesNotMatch(container.textContent ?? "", /Scoped to New list/)
+
+  await act(async () => {
+    setInputValue(inlineEditor, "Reading", dom.window)
+  })
+  await settle()
+
+  await act(async () => {
+    inlineEditor.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+  })
+  await settle()
+
+  assert.equal(findByTestId(container, "inline-list-name-input"), null)
+  assert.match(container.textContent ?? "", /Reading/)
+  assert.match(container.textContent ?? "", /Showing 0 of 1/)
+  assert.match(container.textContent ?? "", /Scoped to Reading/)
 })
 
-test("OptionsApp renders a compact overview strip above the workspace", async () => {
+test("OptionsApp supports double-click rename and keeps duplicate names blocked", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-1",
+      tweetUrl: "https://x.com/alice/status/tweet-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Agents workflow notes",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T01:00:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const researchList = await createList({ name: "Research" })
+  await createList({ name: "Archive" })
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: {
+      status: "idle",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 0
+    },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const researchButton = findListButton(container, researchList.id)
+  assert.ok(researchButton)
+
+  await act(async () => {
+    researchButton.dispatchEvent(new dom.window.MouseEvent("dblclick", { bubbles: true }))
+  })
+  await settle()
+
+  const inlineEditor = findByTestId(container, "inline-list-name-input") as HTMLInputElement | null
+  assert.ok(inlineEditor)
+  assert.equal(inlineEditor.value, "Research")
+
+  await act(async () => {
+    setInputValue(inlineEditor, "Archive", dom.window)
+  })
+  await settle()
+
+  await act(async () => {
+    inlineEditor.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+  })
+  await settle()
+
+  assert.ok(findByTestId(container, "inline-list-name-input"))
+  assert.match(container.textContent ?? "", /already exists/i)
+  assert.match(container.textContent ?? "", /Research/)
+  assert.match(container.textContent ?? "", /Archive/)
+})
+
+test("OptionsApp renders an explorer sidebar and placeholder-style toolbar controls", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-1",
+      tweetUrl: "https://x.com/alice/status/tweet-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Agents workflow notes",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T01:00:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  await createList({ name: "Research" })
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: {
+      status: "idle",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 0
+    },
+    classificationRules: []
+  })
+
+  const { container } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const toolbar = findByTestId(container, "workspace-toolbar")
+  const treeRoot = findByTestId(container, "sidebar-tree-root")
+  const treeList = findByTestId(container, "sidebar-list-tree")
+  const shell = findByTestId(container, "workspace-shell")
+  const syncPanel = findByTestId(container, "workspace-sidebar-sync")
+  const addListButton = findByTestId(container, "add-list-button") as HTMLButtonElement | null
+  const searchInput = container.querySelector("#filters-search") as HTMLInputElement | null
+
+  assert.ok(shell)
+  assert.ok(toolbar)
+  assert.ok(treeRoot)
+  assert.ok(treeList)
+  assert.ok(syncPanel)
+  assert.ok(addListButton)
+  assert.ok(searchInput)
+  assert.match(treeRoot.textContent ?? "", /Lists/)
+  assert.match(syncPanel.textContent ?? "", /Last sync/)
+  assert.match(addListButton.textContent ?? "", /\+/)
+  assert.doesNotMatch(container.textContent ?? "", /Inbox/)
+  assert.equal(toolbar.querySelector('label[for="filters-search"]'), null)
+  assert.equal(toolbar.querySelector('label[for="filters-sort"]'), null)
+  assert.equal(toolbar.querySelector('label[for="filters-time"]'), null)
+  assert.equal(searchInput.getAttribute("placeholder"), "Search bookmarks, authors, and notes")
+  assert.match(findByTestId(container, "toolbar-sort-shell")?.textContent ?? "", /Sort by/)
+  assert.match(findByTestId(container, "toolbar-time-shell")?.textContent ?? "", /Saved time/)
+  assert.doesNotMatch(container.textContent ?? "", /Search, refine, and organize saved posts inside the active scope\./)
+  assert.doesNotMatch(container.textContent ?? "", /Refined bookmark context and filing controls\./)
+  assert.doesNotMatch(container.textContent ?? "", /No active filters\./)
+  assert.doesNotMatch(container.textContent ?? "", /Flat groups only\. Nested folders are intentionally removed\./)
+})
+
+test("OptionsApp keeps sidebar lists and library results in separate scroll regions", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-1",
+      tweetUrl: "https://x.com/alice/status/tweet-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Agents workflow notes",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T01:00:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: {
+      status: "idle",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 0
+    },
+    classificationRules: []
+  })
+
+  const { container } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const sidebar = findByTestId(container, "lists-sidebar")
+  const sidebarStatus = findByTestId(container, "sidebar-status-section")
+  const sidebarLists = findByTestId(container, "sidebar-lists-section")
+  const sidebarFooter = findByTestId(container, "sidebar-footer-section")
+  const sidebarScroll = findByTestId(container, "sidebar-lists-scroll")
+  const library = findByTestId(container, "library-workspace")
+  const inspector = findByTestId(container, "workspace-inspector")
+  const libraryHeader = findByTestId(container, "library-header-section")
+  const librarySummary = findByTestId(container, "library-results-summary")
+  const toolbar = findByTestId(container, "workspace-toolbar")
+  const resultsScroll = findByTestId(container, "library-results-scroll")
+  const inspectorMeta = findByTestId(container, "inspector-meta-section")
+  const inspectorTags = findByTestId(container, "inspector-tags-section")
+  const inspectorAssignment = findByTestId(container, "inspector-assignment-section")
+  const inspectorCreateTag = findByTestId(container, "inspector-create-tag-section")
+
+  assert.ok(sidebar)
+  assert.ok(sidebarStatus)
+  assert.ok(sidebarLists)
+  assert.ok(sidebarFooter)
+  assert.ok(sidebarScroll)
+  assert.ok(library)
+  assert.ok(inspector)
+  assert.ok(libraryHeader)
+  assert.ok(librarySummary)
+  assert.ok(toolbar)
+  assert.ok(resultsScroll)
+  assert.ok(inspectorMeta)
+  assert.ok(inspectorTags)
+  assert.ok(inspectorAssignment)
+  assert.ok(inspectorCreateTag)
+  assert.equal(sidebar.contains(sidebarStatus), true)
+  assert.equal(sidebar.contains(sidebarLists), true)
+  assert.equal(sidebar.contains(sidebarFooter), true)
+  assert.equal(sidebar.contains(sidebarScroll), true)
+  assert.equal(sidebarScroll.contains(sidebarFooter), false)
+  assert.match(sidebarScroll.className, /overflow-y-auto/)
+  assert.equal(library.contains(libraryHeader), true)
+  assert.equal(library.contains(librarySummary), true)
+  assert.equal(library.contains(toolbar), true)
+  assert.equal(library.contains(resultsScroll), true)
+  assert.equal(resultsScroll.contains(toolbar), false)
+})
+
+test("OptionsApp renders a single tags summary and preferences inside the left sidebar", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
 
@@ -327,6 +584,106 @@ test("OptionsApp renders a compact overview strip above the workspace", async ()
   await settle()
 
   assert.ok(findByTestId(container, "workspace-overview"))
-  assert.ok(findByTestId(container, "workspace-summary-strip"))
+  const sidebar = findByTestId(container, "lists-sidebar")
+  const summaryStrip = findByTestId(container, "workspace-summary-strip")
+  const preferencesToggle = findByTestId(container, "toggle-preferences-panel")
+
+  assert.ok(sidebar)
+  assert.ok(summaryStrip)
+  assert.ok(preferencesToggle)
+  assert.match(summaryStrip.textContent ?? "", /总标签数/)
+  assert.doesNotMatch(summaryStrip.textContent ?? "", /未分类/)
+  assert.equal(sidebar.contains(summaryStrip), true)
+  assert.equal(sidebar.contains(preferencesToggle), true)
+  assert.equal(findByTestId(container, "workspace-preferences-inline"), null)
+})
+
+test("OptionsApp expands the preferences panel on demand", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "dark",
+    lastSyncSummary: {
+      status: "idle",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 0
+    },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  assert.match(container.textContent ?? "", /深色/)
+
+  const preferencesToggle = findByTestId(container, "toggle-preferences-panel") as HTMLButtonElement | null
+  assert.ok(preferencesToggle)
+  assert.equal(findByTestId(container, "workspace-preferences-inline"), null)
+
+  await act(async () => {
+    preferencesToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
   assert.ok(findByTestId(container, "workspace-preferences-inline"))
+})
+
+test("OptionsApp shows load errors in the workspace area", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  const originalSendMessage = chrome.runtime.sendMessage as (message: { type: string }) => Promise<unknown>
+  ;(chrome.runtime.sendMessage as unknown as (message: { type: string }) => Promise<unknown>) = async (message) => {
+    if (message.type === LOAD_WORKSPACE_DATA_MESSAGE) {
+      return { error: "Load failed on purpose" }
+    }
+
+    return originalSendMessage(message)
+  }
+
+  const { container } = render(React.createElement(OptionsApp))
+  await settle()
+
+  assert.match(container.textContent ?? "", /Load failed on purpose/)
+})
+
+test("OptionsApp shows command errors near the sync controls", async () => {
+  installChromeRuntimeHarness({
+    runSync: async () => {
+      throw new Error("Sync failed on purpose")
+    }
+  })
+  await resetBookmarksDb()
+
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: {
+      status: "idle",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 0
+    },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const syncButton = findButton(container, "Sync now")
+  assert.ok(syncButton)
+
+  await act(async () => {
+    syncButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.match(container.textContent ?? "", /Sync failed on purpose/)
 })

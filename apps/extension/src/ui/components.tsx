@@ -17,11 +17,11 @@ export function SectionHeader({
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0 flex-1">
-        <h1 className="max-w-[10ch] font-display text-[clamp(3.8rem,9vw,6.6rem)] leading-[0.9] tracking-[-0.06em] text-ink">
+        <h1 className="max-w-[10ch] font-sans text-[clamp(3rem,8vw,5rem)] leading-[0.92] tracking-[-0.06em] text-ink">
           {title}
         </h1>
         {description ? (
-          <p className="mt-5 max-w-[28ch] text-xl leading-[1.2] tracking-[-0.03em] text-slate-900/88 md:text-[2rem]">
+          <p className="mt-4 max-w-[28ch] text-lg leading-[1.35] tracking-[-0.02em] text-slate-600 md:text-xl">
             {description}
           </p>
         ) : null}
@@ -45,11 +45,11 @@ export function SurfaceCard({
   bodyClassName?: string
 }) {
   return (
-    <section className={cn("glass-panel flex flex-col p-5 md:p-6", className)}>
+    <section className={cn("panel-surface flex flex-col rounded-[22px] p-5 md:p-6", className)}>
       {title ? (
-        <div className="mb-5">
-          <h2 className="font-display text-[2.1rem] leading-none tracking-[-0.05em] text-ink">{title}</h2>
-          {description ? <p className="mt-2 max-w-[30ch] text-sm leading-6 text-slate-700/78">{description}</p> : null}
+        <div className="mb-4">
+          <h2 className="workspace-title-lg text-ink">{title}</h2>
+          {description ? <p className="workspace-body mt-2 max-w-[34ch]">{description}</p> : null}
         </div>
       ) : null}
       <div className={cn("flex min-h-0 flex-1 flex-col", bodyClassName)}>{children}</div>
@@ -69,25 +69,24 @@ export function MetricCard({
   accentClassName?: string
 }) {
   return (
-    <div className="glass-panel relative overflow-hidden rounded-[2rem] p-7">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_78%_22%,rgba(255,255,255,0.65),transparent_34%),radial-gradient(circle_at_100%_100%,rgba(189,224,254,0.36),transparent_32%)]" />
+    <div className="panel-elevated relative overflow-hidden rounded-[20px] p-6">
       <div className="relative">
-        <p className="text-xs font-medium uppercase tracking-[0.08em] text-slate-800/76">{label}</p>
+        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{label}</p>
         <div className="mt-5 grid gap-3 md:grid-cols-[auto_minmax(0,1fr)] md:items-end">
-          <div className="font-sans text-[4rem] leading-none tracking-[-0.08em] text-slate-700">{value}</div>
-          <p className="max-w-[18ch] text-[1.05rem] leading-7 text-slate-900/86">{hint}</p>
+          <div className="font-mono text-[3.3rem] leading-none tracking-[-0.06em] text-slate-900">{value}</div>
+          <p className="max-w-[18ch] text-[0.92rem] leading-6 text-slate-600">{hint}</p>
         </div>
-        <div className={cn("mt-7 h-1 rounded-full bg-sky-500", accentClassName)} />
+        <div className={cn("mt-6 h-px rounded-full bg-[var(--accent-bg)]", accentClassName)} />
       </div>
     </div>
   )
 }
 
-export function EmptyState({ title, description }: { title: string; description: string }) {
+export function EmptyState({ title, description }: { title: string; description?: string }) {
   return (
-    <div className="glass-panel flex flex-col gap-3 rounded-[2rem] p-8 text-left">
-      <h3 className="font-display text-[1.9rem] leading-none tracking-[-0.05em] text-ink">{title}</h3>
-      <p className="max-w-[40ch] text-sm leading-6 text-slate-700/76">{description}</p>
+    <div className="panel-elevated flex flex-col gap-3 rounded-[20px] p-8 text-left">
+      <h3 className="workspace-title-md text-ink">{title}</h3>
+      {description ? <p className="workspace-body max-w-[40ch]">{description}</p> : null}
     </div>
   )
 }
@@ -96,7 +95,7 @@ export function StatusBadge({ status, label }: { status?: string; label?: string
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-medium capitalize tracking-[0.04em] backdrop-blur-lg",
+        "inline-flex items-center rounded-full border px-3 py-1.5 text-[11px] font-medium capitalize tracking-[0.08em] backdrop-blur-lg",
         getStatusClasses(status)
       )}>
       {label ?? status ?? "idle"}

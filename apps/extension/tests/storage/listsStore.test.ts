@@ -12,7 +12,8 @@ import {
   getAllLists,
   INBOX_LIST_ID,
   moveBookmarksToList,
-  moveBookmarkToList
+  moveBookmarkToList,
+  renameList
 } from "../../src/lib/storage/listsStore.ts"
 
 test("ensureInboxList creates the default Inbox list", async () => {
@@ -114,4 +115,18 @@ test("deleteList keeps bookmarks and moves them back to Inbox", async () => {
 
   assert.equal(lists.some((list) => list.id === researchList.id), false)
   assert.equal(bookmarkLists[0].listId, INBOX_LIST_ID)
+})
+
+test("createList and renameList reject duplicate names", async () => {
+  await resetBookmarksDb()
+
+  const researchList = await createList({ name: "Research" })
+  const archiveList = await createList({ name: "Archive" })
+
+  await assert.rejects(() => createList({ name: " research " }), /already exists/i)
+  await assert.rejects(() => renameList({ listId: archiveList.id, name: "RESEARCH" }), /already exists/i)
+
+  const lists = await getAllLists()
+  assert.equal(lists.some((list) => list.id === researchList.id && list.name === "Research"), true)
+  assert.equal(lists.some((list) => list.id === archiveList.id && list.name === "Archive"), true)
 })

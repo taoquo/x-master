@@ -9,6 +9,10 @@ import {
 
 export const INBOX_LIST_ID = "list-inbox"
 
+function normalizeListName(name: string) {
+  return name.trim().toLocaleLowerCase()
+}
+
 function createInboxList(): ListRecord {
   return {
     id: INBOX_LIST_ID,
@@ -104,6 +108,18 @@ export async function createList({ name }: { name: string }): Promise<ListRecord
   const db = await getBookmarksDb()
   const transaction = db.transaction(LISTS_STORE, "readwrite")
   const store = transaction.objectStore(LISTS_STORE)
+  const existingRecords = (await requestToPromise(store.getAll())) as Array<{ id: string; name?: string; createdAt?: string }>
+  const normalizedName = normalizeListName(trimmedName)
+  const hasDuplicate = existingRecords
+    .map(toListRecord)
+    .filter((list): list is ListRecord => list !== null)
+    .some((list) => list.id !== INBOX_LIST_ID && normalizeListName(list.name) === normalizedName)
+
+  if (hasDuplicate) {
+    await transactionDone(transaction)
+    throw new Error("List name already exists")
+  }
+
   const list: ListRecord = {
     id: `list-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     name: trimmedName,
@@ -138,6 +154,18 @@ export async function renameList({
 
   if (existing.id === INBOX_LIST_ID) {
     throw new Error("Inbox cannot be renamed")
+  }
+
+  const existingRecords = (await requestToPromise(store.getAll())) as Array<{ id: string; name?: string; createdAt?: string }>
+  const normalizedName = normalizeListName(trimmedName)
+  const hasDuplicate = existingRecords
+    .map(toListRecord)
+    .filter((list): list is ListRecord => list !== null)
+    .some((list) => list.id !== INBOX_LIST_ID && list.id !== listId && normalizeListName(list.name) === normalizedName)
+
+  if (hasDuplicate) {
+    await transactionDone(transaction)
+    throw new Error("List name already exists")
   }
 
   const updated: ListRecord = {

@@ -34,7 +34,10 @@ test("SyncPanel renders sync summary and triggers manual sync", async () => {
   assert.ok(button)
   await settle()
 
+  assert.ok(container.querySelector('[data-testid="popup-sync-panel"]'))
+  assert.ok(container.querySelector('[data-testid="popup-sync-stats"]'))
   assert.match(container.textContent ?? "", /成功/)
+  assert.match(container.textContent ?? "", /最近同步/)
   assert.match(container.textContent ?? "", /5/)
   assert.match(container.textContent ?? "", /none/)
 

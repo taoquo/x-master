@@ -31,9 +31,10 @@ function openManager() {
 function getPopupAppCopy(locale: Locale) {
   if (locale === "zh-CN") {
     return {
-      workspaceSnapshot: "工作区快照",
-      workspaceDescription: "快速查看还有哪些内容等待整理。",
-      appDescription: "更轻量的桌面胶囊，用于搜索、归档和手动同步。",
+      workspaceSnapshot: "工作区入口",
+      workspaceDescription: "同步状态与本地库存。",
+      appDescription: "查看当前书签库存，触发同步，然后进入完整工作台。",
+      inventory: "本地库存",
       totalBookmarks: "总书签数",
       unclassified: "未分类",
       openManager: "打开管理器",
@@ -48,9 +49,10 @@ function getPopupAppCopy(locale: Locale) {
   }
 
   return {
-    workspaceSnapshot: "Workspace snapshot",
-    workspaceDescription: "A compact read on what still needs filing.",
-    appDescription: "A lighter desktop capsule for search, filing, and manual sync.",
+    workspaceSnapshot: "Workspace entry",
+    workspaceDescription: "Sync status and local inventory.",
+    appDescription: "Check the current bookmark inventory, run sync, then jump into the full workspace.",
+    inventory: "Local inventory",
     totalBookmarks: "Total bookmarks",
     unclassified: "Unclassified",
     openManager: "Open manager",
@@ -91,40 +93,48 @@ function PopupScreen() {
   }
 
   return (
-    <main className="popup-shell min-h-[100dvh] w-[366px] max-w-full space-y-4 p-4">
-      <SurfaceCard title={copy.workspaceSnapshot} description={copy.workspaceDescription} className="bg-white/42">
-          <div className="space-y-5">
+    <main data-testid="popup-shell" className="popup-shell min-h-[100dvh] w-[366px] max-w-full space-y-4 p-4">
+      <SurfaceCard
+        title={copy.workspaceSnapshot}
+        description={copy.workspaceDescription}
+        className="rounded-[24px]"
+        bodyClassName="gap-5"
+      >
+          <div data-testid="popup-overview-panel" className="space-y-5">
             <div className="flex items-start justify-between gap-3">
-              <div>
-                <h1 className="font-display text-[3rem] leading-[0.9] tracking-[-0.06em] text-ink">
+              <div className="min-w-0">
+                <div className="workspace-overline">{copy.inventory}</div>
+                <h1 className="mt-2 font-sans text-[2.35rem] leading-[0.92] tracking-[-0.06em] text-ink">
                   X Bookmark Manager
                 </h1>
-                <p className="mt-3 max-w-[22ch] text-base leading-7 text-slate-800/82">
+                <p className="mt-3 max-w-[24ch] text-sm leading-6 text-slate-600">
                   {copy.appDescription}
                 </p>
               </div>
               <StatusBadge status={data.summary.status} label={copy.status[data.summary.status]} />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="glass-panel rounded-[1.7rem] p-4">
-                <div className="text-[11px] uppercase tracking-[0.08em] text-slate-700/72">{copy.totalBookmarks}</div>
-                <div className="mt-3 font-sans text-[2.8rem] leading-none tracking-[-0.08em] text-slate-700">
+            <div data-testid="popup-stats-grid" className="grid grid-cols-2 gap-3">
+              <div className="panel-elevated rounded-[18px] p-4">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-slate-500">{copy.totalBookmarks}</div>
+                <div className="mt-3 font-mono text-[2.4rem] leading-none tracking-[-0.04em] text-slate-900">
                   {data.stats.totalBookmarks}
                 </div>
               </div>
-              <div className="glass-panel rounded-[1.7rem] p-4">
-                <div className="text-[11px] uppercase tracking-[0.08em] text-slate-700/72">{copy.unclassified}</div>
-                <div className="mt-3 font-sans text-[2.8rem] leading-none tracking-[-0.08em] text-slate-700">
+              <div className="panel-elevated rounded-[18px] p-4">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-slate-500">{copy.unclassified}</div>
+                <div className="mt-3 font-mono text-[2.4rem] leading-none tracking-[-0.04em] text-slate-900">
                   {data.stats.unclassifiedCount}
                 </div>
               </div>
             </div>
 
-            <button type="button" onClick={openManager} className="glass-button w-full justify-center">
-              <AppIcon name="external" size={16} />
-              <span>{copy.openManager}</span>
-            </button>
+            <div data-testid="popup-actions-panel" className="flex gap-2">
+              <button type="button" onClick={openManager} className="glass-button flex-1 justify-center">
+                <AppIcon name="external" size={16} />
+                <span>{copy.openManager}</span>
+              </button>
+            </div>
           </div>
       </SurfaceCard>
 

@@ -26,6 +26,14 @@ export function render(ui: React.ReactElement) {
   }).cancelAnimationFrame = (handle) => clearTimeout(handle)
   dom.window.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0) as unknown as number
   dom.window.cancelAnimationFrame = (handle) => clearTimeout(handle as unknown as number)
+  ;(dom.window.HTMLElement.prototype as HTMLElement & {
+    attachEvent?: (eventName: string, listener: EventListenerOrEventListenerObject) => void
+    detachEvent?: (eventName: string, listener: EventListenerOrEventListenerObject) => void
+  }).attachEvent = function attachEvent(_eventName, _listener) {}
+  ;(dom.window.HTMLElement.prototype as HTMLElement & {
+    attachEvent?: (eventName: string, listener: EventListenerOrEventListenerObject) => void
+    detachEvent?: (eventName: string, listener: EventListenerOrEventListenerObject) => void
+  }).detachEvent = function detachEvent(_eventName, _listener) {}
   ;(globalThis as typeof globalThis & { MutationObserver: typeof MutationObserver }).MutationObserver =
     dom.window.MutationObserver
   ;(globalThis as typeof globalThis & { ResizeObserver: any }).ResizeObserver = class ResizeObserver {

@@ -25,8 +25,9 @@ function formatTimestamp(value: string | undefined, locale: Locale) {
 function getPopupCopy(locale: Locale) {
   if (locale === "zh-CN") {
     return {
-      sync: "同步",
-      syncDescription: "从 X 手动全量同步到本地书签资料库。",
+      sync: "同步运行",
+      syncDescription: "从 X 拉取书签并写入本地工作区。",
+      lastSync: "最近同步",
       fetched: "抓取",
       inserted: "新增",
       updated: "更新",
@@ -45,8 +46,9 @@ function getPopupCopy(locale: Locale) {
   }
 
   return {
-    sync: "Sync",
-    syncDescription: "Manual full sync from X into the local bookmark library.",
+    sync: "Sync run",
+    syncDescription: "Pull bookmarks from X and write them into the local workspace.",
+    lastSync: "Last sync",
     fetched: "Fetched",
     inserted: "Inserted",
     updated: "Updated",
@@ -81,28 +83,33 @@ export function SyncPanel({
     <SurfaceCard
       title={copy.sync}
       description={copy.syncDescription}
-      className="bg-slate-950/80 text-white">
-      <div className="space-y-5">
+      className="rounded-[24px] bg-slate-950/80 text-white"
+      bodyClassName="space-y-5"
+    >
+      <div data-testid="popup-sync-panel" className="space-y-5">
         <div className="flex items-center justify-between gap-3">
           <StatusBadge status={summary.status} label={statusLabel} />
-          <span className="text-sm text-white/65">{formatTimestamp(summary.lastSyncedAt, locale)}</span>
+          <div className="text-right">
+            <div className="text-[11px] uppercase tracking-[0.14em] text-white/40">{copy.lastSync}</div>
+            <span className="mt-1 block text-sm text-white/70">{formatTimestamp(summary.lastSyncedAt, locale)}</span>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 text-white">
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.08em] text-white/50">{copy.fetched}</div>
+        <div data-testid="popup-sync-stats" className="grid grid-cols-2 gap-3 text-white">
+          <div className="panel-elevated rounded-[16px] p-3">
+            <div className="text-[11px] uppercase tracking-[0.14em] text-white/42">{copy.fetched}</div>
             <div className="mt-1 font-mono text-2xl">{summary.fetchedCount}</div>
           </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.08em] text-white/50">{copy.inserted}</div>
+          <div className="panel-elevated rounded-[16px] p-3">
+            <div className="text-[11px] uppercase tracking-[0.14em] text-white/42">{copy.inserted}</div>
             <div className="mt-1 font-mono text-2xl">{summary.insertedCount}</div>
           </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.08em] text-white/50">{copy.updated}</div>
+          <div className="panel-elevated rounded-[16px] p-3">
+            <div className="text-[11px] uppercase tracking-[0.14em] text-white/42">{copy.updated}</div>
             <div className="mt-1 font-mono text-2xl">{summary.updatedCount}</div>
           </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.08em] text-white/50">{copy.failed}</div>
+          <div className="panel-elevated rounded-[16px] p-3">
+            <div className="text-[11px] uppercase tracking-[0.14em] text-white/42">{copy.failed}</div>
             <div className="mt-1 font-mono text-2xl">{summary.failedCount}</div>
           </div>
         </div>

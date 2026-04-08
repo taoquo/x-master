@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { runSync } from "../../lib/runtime/popupClient.ts"
-import { createList, deleteList, moveBookmarkToList, moveBookmarksToList } from "../../lib/storage/listsStore.ts"
+import { createList, deleteList, moveBookmarkToList, moveBookmarksToList, renameList } from "../../lib/storage/listsStore.ts"
 import { removeTagFromClassificationRules, saveClassificationRules } from "../../lib/storage/settings.ts"
 import { attachTagToBookmark, attachTagToBookmarks, createTag, deleteTag, detachTagFromBookmark } from "../../lib/storage/tagsStore.ts"
 import type { ClassificationRule } from "../../lib/types.ts"
@@ -40,10 +40,32 @@ export function useWorkspaceCommands({ refreshData }: { refreshData: () => Promi
     setIsSavingLists(true)
 
     try {
-      await createList({ name: trimmedName })
+      const list = await createList({ name: trimmedName })
       await refreshData()
+      return list
     } catch (error) {
       setCommandError(toErrorMessage(error, "Failed to create list"))
+      throw error
+    } finally {
+      setIsSavingLists(false)
+    }
+  }
+
+  async function handleRenameList(listId: string, name: string) {
+    const trimmedName = name.trim()
+    if (!trimmedName) {
+      return
+    }
+
+    setCommandError(null)
+    setIsSavingLists(true)
+
+    try {
+      const list = await renameList({ listId, name: trimmedName })
+      await refreshData()
+      return list
+    } catch (error) {
+      setCommandError(toErrorMessage(error, "Failed to rename list"))
       throw error
     } finally {
       setIsSavingLists(false)
@@ -212,6 +234,7 @@ export function useWorkspaceCommands({ refreshData }: { refreshData: () => Promi
     commandError,
     handleSync,
     handleCreateList,
+    handleRenameList,
     handleDeleteList,
     handleMoveBookmarkToList,
     handleMoveBookmarksToList,

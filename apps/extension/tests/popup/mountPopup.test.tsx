@@ -39,7 +39,10 @@ test("mountPopup renders Chinese popup copy and the default light theme", async 
   await settle()
 
   assert.match(dom.window.document.body.textContent ?? "", /X Bookmark Manager/)
-  assert.match(dom.window.document.body.textContent ?? "", /工作区快照/)
+  assert.match(dom.window.document.body.textContent ?? "", /工作区入口/)
+  assert.match(dom.window.document.body.textContent ?? "", /本地库存/)
+  assert.ok(dom.window.document.body.querySelector('[data-testid="popup-overview-panel"]'))
+  assert.ok(dom.window.document.body.querySelector('[data-testid="popup-actions-panel"]'))
   assert.match(dom.window.document.body.textContent ?? "", /立即同步/)
   assert.equal(dom.window.document.documentElement.dataset.theme, "light")
 })
@@ -68,7 +71,8 @@ test("mountPopup renders stored english copy and dark theme preference", async (
 
   await settle()
 
-  assert.match(dom.window.document.body.textContent ?? "", /Workspace snapshot/)
+  assert.match(dom.window.document.body.textContent ?? "", /Workspace entry/)
+  assert.match(dom.window.document.body.textContent ?? "", /Local inventory/)
   assert.match(dom.window.document.body.textContent ?? "", /Sync now/)
   assert.equal(dom.window.document.documentElement.dataset.theme, "dark")
 })
