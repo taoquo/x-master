@@ -187,7 +187,7 @@ test("OptionsApp uses the shared badge and status surface language", async () =>
 
   const statusBadge = container.querySelector('[data-testid="lists-sidebar"] .status-success') as HTMLElement | null
   const preferencesToggle = findByTestId(container, "toggle-preferences-panel") as HTMLButtonElement | null
-  const inspectorEmptyState = container.querySelector('[data-testid="workspace-inspector"] .panel-elevated') as HTMLElement | null
+  const inspectorEmptyState = container.querySelector('[data-testid="workspace-inspector"] .workspace-empty-state') as HTMLElement | null
 
   assert.ok(statusBadge)
   assert.ok(preferencesToggle)
@@ -404,6 +404,50 @@ test("OptionsApp uses rail layout and shared field/button primitives", async () 
   assert.match(syncButton?.className ?? "", /primary-button/)
   assert.match(syncButton?.className ?? "", /workspace-sync-primary/)
   assert.match(searchInput.className, /workspace-input/)
+})
+
+test("OptionsApp renders the detail inspector as a rail with shared form actions", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-1",
+      tweetUrl: "https://x.com/alice/status/tweet-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Agents",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T01:00:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: { status: "idle", fetchedCount: 0, insertedCount: 0, updatedCount: 0, failedCount: 0 },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const firstCard = getBookmarkCards(container)[0]
+  await act(async () => {
+    firstCard.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const inspector = container.querySelector(".workspace-detail-rail") as HTMLElement | null
+  const attachTagSelect = container.querySelector('[data-testid="attach-tag-select"]') as HTMLSelectElement | null
+  const createButton = findButton(container, "Create")
+
+  assert.ok(inspector)
+  assert.ok(attachTagSelect)
+  assert.ok(createButton)
+  assert.match(inspector.className, /workspace-rail/)
+  assert.match(attachTagSelect.className, /workspace-input/)
+  assert.match(createButton?.className ?? "", /primary-button/)
 })
 
 test("OptionsApp renders flat navigation rows and restrained result cards", async () => {

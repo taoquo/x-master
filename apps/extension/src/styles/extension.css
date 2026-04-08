@@ -392,6 +392,11 @@
     background: var(--surface-bg);
   }
 
+  .workspace-detail-rail {
+    padding: 24px;
+    border-left: 1px solid var(--rail-border);
+  }
+
   .workspace-input {
     min-height: 40px;
     border-radius: 8px;
@@ -494,12 +499,30 @@
     padding: 1rem;
   }
 
+  .workspace-section-kicker {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
   .workspace-section-label {
     font-size: 10px;
     font-weight: 510;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-quaternary);
+  }
+
+  .workspace-empty-state {
+    border: 1px solid var(--rail-border);
+    border-radius: 12px;
+    background: var(--surface-bg);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
 
   .scroll-shell {

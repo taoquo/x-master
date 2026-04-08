@@ -291,11 +291,11 @@ function BackgroundScene() {
 
 function LoadingPanel({ title }: { title: string }) {
   return (
-    <SurfaceCard title={title}>
-      <div className="space-y-4">
-        <div className="h-12 animate-pulse rounded-2xl bg-white/55" />
-        <div className="h-12 animate-pulse rounded-2xl bg-white/55" />
-        <div className="h-48 animate-pulse rounded-[2rem] bg-white/55" />
+    <SurfaceCard title={title} className="workspace-surface">
+      <div className="space-y-3">
+        <div className="h-10 animate-pulse rounded-[8px] bg-[var(--surface-muted)]" />
+        <div className="h-10 animate-pulse rounded-[8px] bg-[var(--surface-muted)]" />
+        <div className="h-32 animate-pulse rounded-[12px] bg-[var(--surface-muted)]" />
       </div>
     </SurfaceCard>
   )
@@ -737,13 +737,14 @@ function BookmarkInspector({
   return (
     <SurfaceCard
       title={copy.detailsTitle}
-      className="workspace-inspector-shell xl:sticky xl:top-6 xl:h-[calc(100dvh-3rem)] xl:max-h-[calc(100dvh-3rem)]">
+      className="workspace-rail workspace-detail-rail xl:sticky xl:top-6 xl:h-[calc(100dvh-3rem)] xl:max-h-[calc(100dvh-3rem)]">
       <div
         ref={inspectorScrollRef}
         data-testid="inspector-section-stack"
         className="scroll-shell flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
         <section data-testid="inspector-meta-section" className="workspace-inspector-section">
-          <div className="workspace-section-label">{copy.bookmarkFocus}</div>
+          <div className="workspace-section-kicker">{copy.bookmarkFocus}</div>
+          <h3 className="workspace-heading-md">{copy.bookmarkFocus}</h3>
           <div className="mt-3 overflow-hidden rounded-[1.8rem]">
             <PreviewMedia bookmark={bookmark} index={0} />
           </div>
@@ -774,8 +775,8 @@ function BookmarkInspector({
         </section>
 
         <section data-testid="inspector-tags-section" className="workspace-inspector-section">
-          <div className="workspace-section-label">{copy.tagsTitle}</div>
-          <h3 className="workspace-title-md text-slate-900">{copy.tagsTitle}</h3>
+          <div className="workspace-section-kicker">{copy.tagsTitle}</div>
+          <h3 className="workspace-heading-md">{copy.tagsTitle}</h3>
           <div data-testid="current-tags" className="mt-4 flex flex-wrap gap-2">
             {!currentTags.length ? <span className="text-sm text-slate-600">{copy.noTagsYet}</span> : null}
             {currentTags.map((tag) => (
@@ -801,14 +802,14 @@ function BookmarkInspector({
                   { value: "", label: copy.selectTag },
                   ...availableTagOptions.map((tag) => ({ value: tag.id, label: tag.name }))
                 ]}
-                className="workspace-field"
+                className="workspace-input workspace-field"
               />
             </FieldBlock>
             <button
               type="button"
               onClick={() => void onAttachTag(selectedTagId)}
               disabled={isSavingTags || !selectedTagId}
-              className="glass-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
+              className="primary-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
               <AppIcon name="tag" size={16} />
               <span>{copy.addTag}</span>
             </button>
@@ -816,8 +817,8 @@ function BookmarkInspector({
         </section>
 
         <section data-testid="inspector-assignment-section" className="workspace-inspector-section">
-          <div className="workspace-section-label">{copy.assignmentTitle}</div>
-          <h3 className="workspace-title-md text-slate-900">{copy.assignmentTitle}</h3>
+          <div className="workspace-section-kicker">{copy.assignmentTitle}</div>
+          <h3 className="workspace-heading-md">{copy.assignmentTitle}</h3>
           <div className="mt-4 grid gap-4">
             <FieldBlock label={copy.bookmarkFocus} htmlFor={focusId}>
               <ReadonlyField id={focusId} value={truncateText(bookmark.text, 90)} />
@@ -839,8 +840,8 @@ function BookmarkInspector({
         </section>
 
         <section data-testid="inspector-create-tag-section" className="workspace-inspector-section">
-          <div className="workspace-section-label">{copy.createTagLabel}</div>
-          <h3 className="workspace-title-md text-slate-900">{copy.createTagLabel}</h3>
+          <div className="workspace-section-kicker">{copy.createTagLabel}</div>
+          <h3 className="workspace-heading-md">{copy.createTagLabel}</h3>
           <div className="mt-4 grid gap-4">
             <FieldBlock
               label={copy.createTagLabel}
@@ -861,7 +862,7 @@ function BookmarkInspector({
                 })
               }
               disabled={isSavingTags || !newTagName.trim()}
-              className="glass-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
+              className="primary-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
               <AppIcon name="sparkle" size={16} />
               <span>{copy.create}</span>
             </button>
@@ -869,8 +870,8 @@ function BookmarkInspector({
         </section>
 
         <section className="workspace-inspector-section">
-          <div className="workspace-section-label">{copy.tagLibrary}</div>
-          <h3 className="workspace-title-md text-slate-900">{copy.tagLibrary}</h3>
+          <div className="workspace-section-kicker">{copy.tagLibrary}</div>
+          <h3 className="workspace-heading-md">{copy.tagLibrary}</h3>
           <div className="mt-4 flex flex-wrap gap-2">
             {!tags.length ? <span className="text-sm text-slate-600">{copy.noTagsCreated}</span> : null}
             {tags.map((tag) => (

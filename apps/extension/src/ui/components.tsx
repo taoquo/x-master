@@ -84,9 +84,9 @@ export function MetricCard({
 
 export function EmptyState({ title, description }: { title: string; description?: string }) {
   return (
-    <div className="workspace-surface panel-elevated flex flex-col gap-3 rounded-[20px] p-8 text-left">
+    <div className="workspace-empty-state">
       <h3 className="workspace-heading-md">{title}</h3>
-      {description ? <p className="workspace-copy max-w-[40ch]">{description}</p> : null}
+      {description ? <p className="workspace-copy">{description}</p> : null}
     </div>
   )
 }
