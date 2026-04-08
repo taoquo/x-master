@@ -406,6 +406,44 @@ test("OptionsApp uses rail layout and shared field/button primitives", async () 
   assert.match(searchInput.className, /workspace-input/)
 })
 
+test("OptionsApp renders flat navigation rows and restrained result cards", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-1",
+      tweetUrl: "https://x.com/alice/status/tweet-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Agents workflow notes",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T01:00:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: { status: "idle", fetchedCount: 0, insertedCount: 0, updatedCount: 0, failedCount: 0 },
+    classificationRules: []
+  })
+
+  const { container } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const allBookmarksButton = findListButton(container, "all")
+  const searchInput = container.querySelector("#filters-search") as HTMLInputElement | null
+  const cards = getBookmarkCards(container)
+
+  assert.ok(allBookmarksButton)
+  assert.ok(searchInput)
+  assert.equal(cards.length, 1)
+  assert.match(allBookmarksButton?.className ?? "", /workspace-nav-row/)
+  assert.match(searchInput.className, /workspace-input/)
+  assert.match(cards[0].className, /workspace-result-card/)
+})
+
 test("OptionsApp supports double-click rename and keeps duplicate names blocked", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()

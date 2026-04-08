@@ -623,8 +623,8 @@ function BookmarkCard({
       data-bookmark-card={bookmark.tweetId}
       onClick={onSelect}
       className={cn(
-        "workspace-bookmark-card group relative flex min-h-[232px] flex-col overflow-hidden p-4 sm:min-h-[224px] 2xl:min-h-[252px]",
-        selected && "workspace-bookmark-card-selected"
+        "workspace-result-card group relative flex min-h-[220px] flex-col overflow-hidden p-4",
+        selected && "workspace-result-card-selected"
       )}>
       <div className="absolute right-4 top-4 z-10">
         <input
@@ -658,7 +658,7 @@ function BookmarkCard({
           </div>
           <p className="mt-3 text-[0.875rem] leading-[1.55rem] text-slate-600">{truncateText(bookmark.text, 62)}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <span className="chip-button workspace-chip !cursor-default !px-3 !py-1.5">{currentListName}</span>
+            <span className="workspace-badge">{currentListName}</span>
             {bookmark.media?.length ? <span className="chip-button workspace-chip !cursor-default !px-3 !py-1.5">{copy.hasMedia}</span> : null}
             {currentTagNames.slice(0, 2).map((tagName) => (
               <span key={tagName} className="chip-button workspace-chip !cursor-default !px-3 !py-1.5">
@@ -993,10 +993,8 @@ function WorkspaceSidebar({
                 data-list-button="all"
                 onClick={() => setSelectedListId("")}
                 className={cn(
-                  "workspace-action-row workspace-tree-row w-full text-left text-[0.92rem]",
-                  selectedListId === ""
-                    ? "workspace-tree-row-active"
-                    : "text-slate-700"
+                  "workspace-nav-row w-full text-left text-[0.92rem] text-slate-700",
+                  selectedListId === "" && "workspace-nav-row-active"
                 )}>
                 <span>{copy.allBookmarks}</span>
                 <span className="font-mono text-[12px]">{workspace.stats.totalBookmarks}</span>
@@ -1008,7 +1006,7 @@ function WorkspaceSidebar({
                 return (
                   <div key={list.listId} className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                     {editingListId === list.listId ? (
-                      <div className="workspace-tree-row workspace-tree-row-active grid min-h-[42px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3">
+                      <div className="workspace-nav-row workspace-nav-row-active w-full text-[0.92rem]">
                         <input
                           data-testid="inline-list-name-input"
                           value={editingListName}
@@ -1037,10 +1035,8 @@ function WorkspaceSidebar({
                         onClick={() => setSelectedListId(list.listId)}
                         onDoubleClick={() => onStartListRename(list.listId, list.name)}
                         className={cn(
-                          "workspace-tree-row grid min-h-[42px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 text-left text-[0.92rem]",
-                          isSelected
-                            ? "workspace-tree-row-active"
-                            : "text-slate-700"
+                          "workspace-nav-row w-full text-left text-[0.92rem] text-slate-700",
+                          isSelected && "workspace-nav-row-active"
                         )}>
                         <span className="truncate">{list.name}</span>
                         <span className="font-mono text-[12px]">{list.count}</span>
