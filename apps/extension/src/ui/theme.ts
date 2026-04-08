@@ -8,7 +8,6 @@ export function getStatusClasses(status?: string) {
       return "status-partial"
     case "error":
       return "status-error"
-    case "idle":
     default:
       return "status-idle"
   }

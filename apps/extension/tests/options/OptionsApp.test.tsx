@@ -164,6 +164,37 @@ test("OptionsApp renders in Chinese by default and updates locale/theme preferen
   assert.match(cards[0].textContent ?? "", /AI/)
 })
 
+test("OptionsApp uses the shared badge and status surface language", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "dark",
+    lastSyncSummary: {
+      status: "success",
+      fetchedCount: 1,
+      insertedCount: 1,
+      updatedCount: 0,
+      failedCount: 0,
+      lastSyncedAt: "2026-03-15T03:00:00.000Z"
+    },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const statusBadge = container.querySelector('[data-testid="lists-sidebar"] .status-success') as HTMLElement | null
+  const preferencesToggle = findByTestId(container, "toggle-preferences-panel") as HTMLButtonElement | null
+
+  assert.ok(statusBadge)
+  assert.ok(preferencesToggle)
+  assert.equal(dom.window.document.documentElement.dataset.theme, "dark")
+  assert.match(statusBadge.className, /workspace-badge/)
+  assert.match(preferencesToggle.textContent ?? "", /偏好设置/)
+})
+
 test("OptionsApp supports bulk list moves and tag creation on the inspector", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()

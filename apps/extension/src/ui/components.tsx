@@ -45,11 +45,11 @@ export function SurfaceCard({
   bodyClassName?: string
 }) {
   return (
-    <section className={cn("panel-surface flex flex-col rounded-[22px] p-5 md:p-6", className)}>
+    <section className={cn("workspace-surface flex flex-col", className)}>
       {title ? (
-        <div className="mb-4">
-          <h2 className="workspace-title-lg text-ink">{title}</h2>
-          {description ? <p className="workspace-body mt-2 max-w-[34ch]">{description}</p> : null}
+        <div className="space-y-2">
+          <h2 className="workspace-heading-lg">{title}</h2>
+          {description ? <p className="workspace-copy">{description}</p> : null}
         </div>
       ) : null}
       <div className={cn("flex min-h-0 flex-1 flex-col", bodyClassName)}>{children}</div>
@@ -84,21 +84,13 @@ export function MetricCard({
 
 export function EmptyState({ title, description }: { title: string; description?: string }) {
   return (
-    <div className="panel-elevated flex flex-col gap-3 rounded-[20px] p-8 text-left">
-      <h3 className="workspace-title-md text-ink">{title}</h3>
-      {description ? <p className="workspace-body max-w-[40ch]">{description}</p> : null}
+    <div className="workspace-surface flex flex-col gap-3 text-left">
+      <h3 className="workspace-heading-md">{title}</h3>
+      {description ? <p className="workspace-copy max-w-[40ch]">{description}</p> : null}
     </div>
   )
 }
 
 export function StatusBadge({ status, label }: { status?: string; label?: string }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-3 py-1.5 text-[11px] font-medium capitalize tracking-[0.08em] backdrop-blur-lg",
-        getStatusClasses(status)
-      )}>
-      {label ?? status ?? "idle"}
-    </span>
-  )
+  return <span className={cn("workspace-badge", getStatusClasses(status))}>{label ?? status ?? "idle"}</span>
 }
