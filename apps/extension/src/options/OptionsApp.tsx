@@ -16,7 +16,7 @@ import { useWorkspaceData } from "./hooks/useWorkspaceData.ts"
 import { EmptyState, StatusBadge, SurfaceCard } from "../ui/components.tsx"
 import { ExtensionUiProvider, useExtensionUi } from "../ui/provider.tsx"
 import { AppIcon } from "../ui/icons.tsx"
-import { localeOptions, themeOptions } from "../ui/i18n.ts"
+import { themeOptions } from "../ui/i18n.ts"
 
 function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ")
@@ -81,8 +81,6 @@ function getOptionsCopy(locale: Locale) {
       last90Days: "最近 90 天",
       hasMedia: "包含媒体",
       longform: "长文",
-      advancedFilters: "高级筛选",
-      hideAdvancedFilters: "收起高级筛选",
       author: "作者",
       allAuthors: "所有作者",
       tag: "标签",
@@ -96,7 +94,6 @@ function getOptionsCopy(locale: Locale) {
       tagSelectedWith: "为选中项添加标签",
       chooseTag: "选择标签",
       applyTag: "应用标签",
-      selectVisible: "选中当前可见项",
       noBookmarksTitle: "当前筛选条件下没有匹配的书签",
       noBookmarksDescription: "",
       detailsTitle: "详情",
@@ -131,8 +128,7 @@ function getOptionsCopy(locale: Locale) {
       deleteLabel: "删除",
       selectBookmark: "选择",
       currentLocalInventory: "当前本地库存。",
-      waitingForTags: "仍在等待标签覆盖。",
-      selectedCount: "已选"
+      waitingForTags: "仍在等待标签覆盖。"
     }
   }
 
@@ -171,8 +167,6 @@ function getOptionsCopy(locale: Locale) {
     last90Days: "Last 90 days",
     hasMedia: "Has media",
     longform: "Longform",
-    advancedFilters: "Advanced filters",
-    hideAdvancedFilters: "Hide advanced filters",
     author: "Author",
     allAuthors: "All authors",
     tag: "Tag",
@@ -186,7 +180,6 @@ function getOptionsCopy(locale: Locale) {
     tagSelectedWith: "Tag selected with",
     chooseTag: "Choose tag",
     applyTag: "Apply tag",
-    selectVisible: "Select visible",
     noBookmarksTitle: "No bookmarks match the current filters",
     noBookmarksDescription: "",
     detailsTitle: "Details",
@@ -221,8 +214,7 @@ function getOptionsCopy(locale: Locale) {
     deleteLabel: "Delete",
     selectBookmark: "Select",
     currentLocalInventory: "Current local inventory.",
-    waitingForTags: "Still waiting for tag coverage.",
-    selectedCount: "selected"
+    waitingForTags: "Still waiting for tag coverage."
   }
 }
 
@@ -320,63 +312,6 @@ function InlineMessage({
         className
       )}>
       {message}
-    </div>
-  )
-}
-
-function PreferencesPanel({
-  locale,
-  themePreference,
-  setLocale,
-  setThemePreference,
-  copy,
-  compact = false
-}: {
-  locale: Locale
-  themePreference: "system" | "light" | "dark"
-  setLocale: (locale: Locale) => Promise<void>
-  setThemePreference: (themePreference: "system" | "light" | "dark") => Promise<void>
-  copy: OptionsCopy
-  compact?: boolean
-}) {
-  const localeFieldId = createFieldId("preferences-tip", "locale")
-  const themeFieldId = createFieldId("preferences-tip", "theme")
-
-  return (
-    <div data-testid="workspace-preferences-inline" className={cn("grid gap-4", compact && "gap-3")}>
-      {!compact ? (
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[1rem] border border-white/65 bg-white/36 text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
-            <AppIcon name="info" size={15} />
-          </span>
-          <div className="min-w-0">
-            <div className="workspace-overline">{copy.preferencesTitle}</div>
-            {copy.preferencesDescription ? <p className="workspace-body mt-1">{copy.preferencesDescription}</p> : null}
-          </div>
-        </div>
-      ) : null}
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <FieldBlock label={copy.languageLabel} htmlFor={localeFieldId}>
-          <SelectField
-            id={localeFieldId}
-            value={locale}
-            onChange={(value) => void setLocale(value as Locale)}
-            options={localeOptions.map((option) => ({ value: option.value, label: option.label[locale] }))}
-            className="workspace-field"
-          />
-        </FieldBlock>
-
-        <FieldBlock label={copy.themeLabel} htmlFor={themeFieldId}>
-          <SelectField
-            id={themeFieldId}
-            value={themePreference}
-            onChange={(value) => void setThemePreference(value as typeof themePreference)}
-            options={themeOptions.map((option) => ({ value: option.value, label: option.label[locale] }))}
-            className="workspace-field"
-          />
-        </FieldBlock>
-      </div>
     </div>
   )
 }
@@ -869,8 +804,6 @@ function WorkspaceSidebar({
   workspace,
   locale,
   themePreference,
-  setLocale,
-  setThemePreference,
   copy,
   lastSyncLabel,
   selectedListId,
@@ -881,15 +814,11 @@ function WorkspaceSidebar({
   onCreateList,
   onStartListRename,
   onCommitListRename,
-  onCancelListRename,
-  showPreferencesPanel,
-  setShowPreferencesPanel
+  onCancelListRename
 }: {
   workspace: ReturnType<typeof useWorkspaceData>
   locale: Locale
   themePreference: "system" | "light" | "dark"
-  setLocale: (locale: Locale) => Promise<void>
-  setThemePreference: (themePreference: "system" | "light" | "dark") => Promise<void>
   copy: OptionsCopy
   lastSyncLabel: string
   selectedListId: string
@@ -901,8 +830,6 @@ function WorkspaceSidebar({
   onStartListRename: (listId: string, name: string) => void
   onCommitListRename: (nextName?: string) => Promise<void>
   onCancelListRename: () => void
-  showPreferencesPanel: boolean
-  setShowPreferencesPanel: React.Dispatch<React.SetStateAction<boolean>>
 }) {
   const visibleListCounts = workspace.stats.listCounts.filter((list) => list.listId !== INBOX_LIST_ID)
 
@@ -1044,39 +971,15 @@ function WorkspaceSidebar({
 
       <section data-testid="sidebar-footer-section" className="options-sidebar-config">
         <div className="px-6 py-6">
-          <button
-            type="button"
-            data-testid="toggle-preferences-panel"
-            onClick={() => setShowPreferencesPanel((current) => !current)}
-            className="flex w-full items-start justify-between gap-3 text-left">
-            <div className="min-w-0">
-              <div className="options-overline">{getSectionOverline(locale, "偏好设置", "Config")}</div>
-              <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
-                <span className="options-footer-chip">
-                  {copy.languageLabel} {getLocaleSummaryLabel(locale)}
-                </span>
-                <span className="options-footer-chip">
-                  {copy.themeLabel} {getThemeSummaryLabel(themePreference, locale)}
-                </span>
-              </div>
-            </div>
-            <span className="options-icon-button shrink-0">
-              <AppIcon name={showPreferencesPanel ? "close" : "info"} size={14} />
+          <div className="options-overline">{getSectionOverline(locale, "偏好设置", "Config")}</div>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
+            <span className="options-footer-chip">
+              {copy.languageLabel} {getLocaleSummaryLabel(locale)}
             </span>
-          </button>
-
-          {showPreferencesPanel ? (
-            <div className="mt-4 border-t border-[var(--border-subtle)] pt-4">
-              <PreferencesPanel
-                locale={locale}
-                themePreference={themePreference}
-                setLocale={setLocale}
-                setThemePreference={setThemePreference}
-                copy={copy}
-                compact
-              />
-            </div>
-          ) : null}
+            <span className="options-footer-chip">
+              {copy.themeLabel} {getThemeSummaryLabel(themePreference, locale)}
+            </span>
+          </div>
         </div>
       </section>
     </aside>
@@ -1089,12 +992,7 @@ function WorkspaceToolbar({
   loadError,
   currentScopeLabel,
   visibleBookmarksCount,
-  selectedBookmarkIdsCount,
-  hasBulkSelection,
   hasActiveRefinements,
-  hasAdvancedRefinements,
-  showAdvancedFilters,
-  setShowAdvancedFilters,
   query,
   setQuery,
   searchId,
@@ -1108,30 +1006,16 @@ function WorkspaceToolbar({
   setOnlyWithMedia,
   onlyLongform,
   setOnlyLongform,
-  selectedAuthorHandle,
-  setSelectedAuthorHandle,
-  authorId,
-  authorOptions,
-  selectedTagId,
-  setSelectedTagId,
-  tagId,
-  tags,
   activeRefinementChips,
   clearRefinement,
-  clearAllRefinements,
-  onSelectVisible
+  clearAllRefinements
 }: {
   locale: Locale
   copy: OptionsCopy
   loadError: string | null
   currentScopeLabel: string
   visibleBookmarksCount: number
-  selectedBookmarkIdsCount: number
-  hasBulkSelection: boolean
   hasActiveRefinements: boolean
-  hasAdvancedRefinements: boolean
-  showAdvancedFilters: boolean
-  setShowAdvancedFilters: React.Dispatch<React.SetStateAction<boolean>>
   query: string
   setQuery: React.Dispatch<React.SetStateAction<string>>
   searchId: string
@@ -1145,18 +1029,9 @@ function WorkspaceToolbar({
   setOnlyWithMedia: React.Dispatch<React.SetStateAction<boolean>>
   onlyLongform: boolean
   setOnlyLongform: React.Dispatch<React.SetStateAction<boolean>>
-  selectedAuthorHandle: string
-  setSelectedAuthorHandle: React.Dispatch<React.SetStateAction<string>>
-  authorId: string
-  authorOptions: Array<{ value: string; label: string }>
-  selectedTagId: string
-  setSelectedTagId: React.Dispatch<React.SetStateAction<string>>
-  tagId: string
-  tags: TagRecord[]
   activeRefinementChips: Array<{ key: string; label: string }>
   clearRefinement: (key: string) => void
   clearAllRefinements: () => void
-  onSelectVisible: () => void
 }) {
   return (
     <div data-testid="library-header-section" className="options-main-header">
@@ -1176,7 +1051,6 @@ function WorkspaceToolbar({
           <div className="text-right">
             <div className="options-results-value">{visibleBookmarksCount}</div>
             <div className="options-overline mt-1">{copy.results}</div>
-            {hasBulkSelection ? <div className="options-meta-copy mt-2">{selectedBookmarkIdsCount} {copy.selected}</div> : null}
           </div>
         </div>
 
@@ -1239,48 +1113,7 @@ function WorkspaceToolbar({
               onChange={setOnlyLongform}
               className="options-chip"
             />
-            <button
-              type="button"
-              onClick={() => setShowAdvancedFilters((current) => !current)}
-              className={cn("chip-button options-chip", showAdvancedFilters && "chip-button-active")}>
-              <span>{showAdvancedFilters ? copy.hideAdvancedFilters : copy.advancedFilters}</span>
-              {hasAdvancedRefinements ? (
-                <span className={cn("rounded-full px-2 py-0.5 text-xs", showAdvancedFilters ? "bg-black/10 text-[var(--text-primary)]" : "bg-[var(--text-primary)] text-white")}>
-                  {Number(Boolean(selectedAuthorHandle)) + Number(Boolean(selectedTagId))}
-                </span>
-              ) : null}
-            </button>
-            <button
-              type="button"
-              onClick={onSelectVisible}
-              disabled={visibleBookmarksCount === 0}
-              className="chip-button options-chip disabled:cursor-not-allowed disabled:opacity-60">
-              <span>{copy.selectVisible}</span>
-            </button>
           </div>
-
-          {showAdvancedFilters ? (
-            <div className="options-advanced-panel">
-              <FieldBlock label={copy.author} htmlFor={authorId}>
-                <SelectField
-                  id={authorId}
-                  value={selectedAuthorHandle}
-                  onChange={setSelectedAuthorHandle}
-                  options={[{ value: "", label: copy.allAuthors }, ...authorOptions]}
-                  className="options-toolbar-field"
-                />
-              </FieldBlock>
-              <FieldBlock label={copy.tag} htmlFor={tagId}>
-                <SelectField
-                  id={tagId}
-                  value={selectedTagId}
-                  onChange={setSelectedTagId}
-                  options={[{ value: "", label: copy.allTags }, ...tags.map((tag) => ({ value: tag.id, label: tag.name }))]}
-                  className="options-toolbar-field"
-                />
-              </FieldBlock>
-            </div>
-          ) : null}
 
           {hasActiveRefinements ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -1316,18 +1149,10 @@ function BookmarkResultsPane({
   selectedListId,
   currentScopeLabel,
   searchId,
-  authorId,
-  tagId,
   sortId,
   timeId,
-  moveId,
-  bulkTagIdField,
   query,
   setQuery,
-  selectedAuthorHandle,
-  setSelectedAuthorHandle,
-  selectedTagId,
-  setSelectedTagId,
   sortOrder,
   setSortOrder,
   timeRange,
@@ -1340,18 +1165,9 @@ function BookmarkResultsPane({
   setSelectedBookmarkId,
   selectedBookmarkIds,
   setSelectedBookmarkIds,
-  bulkListId,
-  setBulkListId,
-  bulkTagId,
-  setBulkTagId,
-  showAdvancedFilters,
-  setShowAdvancedFilters,
   visibleBookmarks,
-  authorOptions,
   activeRefinementChips,
   hasActiveRefinements,
-  hasAdvancedRefinements,
-  hasBulkSelection,
   bookmarkListByBookmarkId,
   tagNamesByBookmarkId,
   listNamesById,
@@ -1364,18 +1180,10 @@ function BookmarkResultsPane({
   selectedListId: string
   currentScopeLabel: string
   searchId: string
-  authorId: string
-  tagId: string
   sortId: string
   timeId: string
-  moveId: string
-  bulkTagIdField: string
   query: string
   setQuery: React.Dispatch<React.SetStateAction<string>>
-  selectedAuthorHandle: string
-  setSelectedAuthorHandle: React.Dispatch<React.SetStateAction<string>>
-  selectedTagId: string
-  setSelectedTagId: React.Dispatch<React.SetStateAction<string>>
   sortOrder: BookmarkSortOrder
   setSortOrder: React.Dispatch<React.SetStateAction<BookmarkSortOrder>>
   timeRange: SavedTimeRange
@@ -1388,18 +1196,9 @@ function BookmarkResultsPane({
   setSelectedBookmarkId: React.Dispatch<React.SetStateAction<string | undefined>>
   selectedBookmarkIds: string[]
   setSelectedBookmarkIds: React.Dispatch<React.SetStateAction<string[]>>
-  bulkListId: string
-  setBulkListId: React.Dispatch<React.SetStateAction<string>>
-  bulkTagId: string
-  setBulkTagId: React.Dispatch<React.SetStateAction<string>>
-  showAdvancedFilters: boolean
-  setShowAdvancedFilters: React.Dispatch<React.SetStateAction<boolean>>
   visibleBookmarks: BookmarkRecord[]
-  authorOptions: Array<{ value: string; label: string }>
   activeRefinementChips: Array<{ key: string; label: string }>
   hasActiveRefinements: boolean
-  hasAdvancedRefinements: boolean
-  hasBulkSelection: boolean
   bookmarkListByBookmarkId: Map<string, string>
   tagNamesByBookmarkId: Map<string, string[]>
   listNamesById: Map<string, string>
@@ -1415,12 +1214,7 @@ function BookmarkResultsPane({
           loadError={workspace.loadError}
           currentScopeLabel={currentScopeLabel}
           visibleBookmarksCount={visibleBookmarks.length}
-          selectedBookmarkIdsCount={selectedBookmarkIds.length}
-          hasBulkSelection={hasBulkSelection}
           hasActiveRefinements={hasActiveRefinements}
-          hasAdvancedRefinements={hasAdvancedRefinements}
-          showAdvancedFilters={showAdvancedFilters}
-          setShowAdvancedFilters={setShowAdvancedFilters}
           query={query}
           setQuery={setQuery}
           searchId={searchId}
@@ -1434,87 +1228,10 @@ function BookmarkResultsPane({
           setOnlyWithMedia={setOnlyWithMedia}
           onlyLongform={onlyLongform}
           setOnlyLongform={setOnlyLongform}
-          selectedAuthorHandle={selectedAuthorHandle}
-          setSelectedAuthorHandle={setSelectedAuthorHandle}
-          authorId={authorId}
-          authorOptions={authorOptions}
-          selectedTagId={selectedTagId}
-          setSelectedTagId={setSelectedTagId}
-          tagId={tagId}
-          tags={workspace.tags}
           activeRefinementChips={activeRefinementChips}
           clearRefinement={clearRefinement}
           clearAllRefinements={clearAllRefinements}
-          onSelectVisible={() => setSelectedBookmarkIds(visibleBookmarks.map((bookmark) => bookmark.tweetId))}
         />
-
-        {hasBulkSelection ? (
-          <div className="border-b border-[var(--border-subtle)] px-12 py-5">
-            <div className="options-bulk-panel">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm font-medium text-[var(--text-primary)]">{selectedBookmarkIds.length} {copy.selectedCount}</div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedBookmarkIds([])}
-                  className="options-clear-button">
-                  <span>{copy.clearSelection}</span>
-                </button>
-              </div>
-
-              <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto]">
-                <FieldBlock label={copy.moveSelectedTo} htmlFor={moveId}>
-                  <SelectField
-                    id={moveId}
-                    value={bulkListId}
-                    onChange={setBulkListId}
-                    options={[
-                      { value: "", label: copy.chooseList },
-                      { value: INBOX_LIST_ID, label: copy.noList },
-                      ...getVisibleLists(workspace.lists).map((list) => ({ value: list.id, label: list.name }))
-                    ]}
-                    className="options-toolbar-field"
-                  />
-                </FieldBlock>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void workspace.handleMoveBookmarksToList(selectedBookmarkIds, bulkListId).then(() => {
-                      setSelectedBookmarkIds([])
-                      setBulkListId("")
-                    })
-                  }
-                  disabled={workspace.isSavingLists || !bulkListId || !hasBulkSelection}
-                  className="primary-button options-primary-button self-end disabled:cursor-not-allowed disabled:opacity-60">
-                  <span>{copy.moveSelected}</span>
-                </button>
-                <FieldBlock label={copy.tagSelectedWith} htmlFor={bulkTagIdField}>
-                  <SelectField
-                    id={bulkTagIdField}
-                    value={bulkTagId}
-                    onChange={setBulkTagId}
-                    options={[
-                      { value: "", label: copy.chooseTag },
-                      ...workspace.tags.map((tag) => ({ value: tag.id, label: tag.name }))
-                    ]}
-                    className="options-toolbar-field"
-                  />
-                </FieldBlock>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void workspace.handleBulkAttachTag(selectedBookmarkIds, bulkTagId).then(() => {
-                      setSelectedBookmarkIds([])
-                      setBulkTagId("")
-                    })
-                  }
-                  disabled={workspace.isSavingTags || !bulkTagId || !hasBulkSelection}
-                  className="options-clear-button self-end disabled:cursor-not-allowed disabled:opacity-60">
-                  <span>{copy.applyTag}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
 
         <div data-testid="library-results-summary" className="options-results-summary flex items-center justify-between gap-3 px-12 py-5">
           <span className="options-meta-copy">{copy.showing} {visibleBookmarks.length} {copy.of} {workspace.bookmarks.length}</span>
@@ -1593,7 +1310,7 @@ function SidebarLoading({ copy: _copy }: { copy: OptionsCopy }) {
 
 function OptionsScreen() {
   const workspace = useWorkspaceData()
-  const { locale, themePreference, setLocale, setThemePreference } = useExtensionUi()
+  const { locale, themePreference } = useExtensionUi()
   const copy = getOptionsCopy(locale)
   const [selectedListId, setSelectedListId] = useState("")
   const [query, setQuery] = useState("")
@@ -1605,13 +1322,9 @@ function OptionsScreen() {
   const [onlyLongform, setOnlyLongform] = useState(false)
   const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | undefined>(undefined)
   const [selectedBookmarkIds, setSelectedBookmarkIds] = useState<string[]>([])
-  const [bulkListId, setBulkListId] = useState("")
-  const [bulkTagId, setBulkTagId] = useState("")
   const [editingListId, setEditingListId] = useState<string | null>(null)
   const [editingListName, setEditingListName] = useState("")
   const [pendingCreatedListId, setPendingCreatedListId] = useState<string | null>(null)
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
-  const [showPreferencesPanel, setShowPreferencesPanel] = useState(false)
 
   const bookmarkListByBookmarkId = useMemo(
     () => new Map(workspace.bookmarkLists.map((bookmarkList) => [bookmarkList.bookmarkId, bookmarkList.listId])),
@@ -1700,15 +1413,9 @@ function OptionsScreen() {
   }, [tagsById, workspace.bookmarkTags, workspace.bookmarks])
 
   const searchId = createFieldId("filters", "search")
-  const authorId = createFieldId("filters", "author")
-  const tagId = createFieldId("filters", "tag")
   const sortId = createFieldId("filters", "sort")
   const timeId = createFieldId("filters", "time")
-  const moveId = createFieldId("actions", "move")
-  const bulkTagIdField = createFieldId("actions", "tag")
-  const hasBulkSelection = selectedBookmarkIds.length > 0
   const lastSyncLabel = formatTimestamp(workspace.summary.lastSyncedAt, locale)
-  const hasAdvancedRefinements = Boolean(selectedAuthorHandle) || Boolean(selectedTagId)
   const hasActiveRefinements =
     Boolean(query.trim()) ||
     Boolean(selectedAuthorHandle) ||
@@ -1787,12 +1494,6 @@ function OptionsScreen() {
   }
 
   useEffect(() => {
-    if (hasAdvancedRefinements) {
-      setShowAdvancedFilters(true)
-    }
-  }, [hasAdvancedRefinements])
-
-  useEffect(() => {
     if (!editingListId) {
       return
     }
@@ -1868,8 +1569,6 @@ function OptionsScreen() {
                 workspace={workspace}
                 locale={locale}
                 themePreference={themePreference}
-                setLocale={setLocale}
-                setThemePreference={setThemePreference}
                 copy={copy}
                 lastSyncLabel={lastSyncLabel}
                 selectedListId={selectedListId}
@@ -1881,8 +1580,6 @@ function OptionsScreen() {
                 onStartListRename={handleStartListRename}
                 onCommitListRename={handleCommitListRename}
                 onCancelListRename={handleCancelListRename}
-                showPreferencesPanel={showPreferencesPanel}
-                setShowPreferencesPanel={setShowPreferencesPanel}
               />
 
               <BookmarkResultsPane
@@ -1892,18 +1589,10 @@ function OptionsScreen() {
                 selectedListId={selectedListId}
                 currentScopeLabel={currentScopeLabel}
                 searchId={searchId}
-                authorId={authorId}
-                tagId={tagId}
                 sortId={sortId}
                 timeId={timeId}
-                moveId={moveId}
-                bulkTagIdField={bulkTagIdField}
                 query={query}
                 setQuery={setQuery}
-                selectedAuthorHandle={selectedAuthorHandle}
-                setSelectedAuthorHandle={setSelectedAuthorHandle}
-                selectedTagId={selectedTagId}
-                setSelectedTagId={setSelectedTagId}
                 sortOrder={sortOrder}
                 setSortOrder={setSortOrder}
                 timeRange={timeRange}
@@ -1916,18 +1605,9 @@ function OptionsScreen() {
                 setSelectedBookmarkId={setSelectedBookmarkId}
                 selectedBookmarkIds={selectedBookmarkIds}
                 setSelectedBookmarkIds={setSelectedBookmarkIds}
-                bulkListId={bulkListId}
-                setBulkListId={setBulkListId}
-                bulkTagId={bulkTagId}
-                setBulkTagId={setBulkTagId}
-                showAdvancedFilters={showAdvancedFilters}
-                setShowAdvancedFilters={setShowAdvancedFilters}
                 visibleBookmarks={visibleBookmarks}
-                authorOptions={authorOptions}
                 activeRefinementChips={activeRefinementChips}
                 hasActiveRefinements={hasActiveRefinements}
-                hasAdvancedRefinements={hasAdvancedRefinements}
-                hasBulkSelection={hasBulkSelection}
                 bookmarkListByBookmarkId={bookmarkListByBookmarkId}
                 tagNamesByBookmarkId={tagNamesByBookmarkId}
                 listNamesById={listNamesById}

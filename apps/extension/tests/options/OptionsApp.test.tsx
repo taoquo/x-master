@@ -7,7 +7,7 @@ import { OptionsApp } from "../../src/options/OptionsApp.tsx"
 import { upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
 import { createList, moveBookmarkToList } from "../../src/lib/storage/listsStore.ts"
-import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
+import { saveSettings } from "../../src/lib/storage/settings.ts"
 import { attachTagToBookmark, createTag } from "../../src/lib/storage/tagsStore.ts"
 import { render, settle } from "../helpers/render.tsx"
 import { installChromeRuntimeHarness } from "../helpers/runtime.ts"
@@ -21,14 +21,6 @@ function findButton(container: HTMLDivElement, label: string) {
 
 function findListButton(container: HTMLDivElement, listId: string) {
   return container.querySelector(`[data-list-button="${listId}"]`) as HTMLButtonElement | null
-}
-
-function findInputByLabel(container: HTMLDivElement, labelText: string) {
-  const label = Array.from(container.querySelectorAll("label")).find((node) => node.textContent?.includes(labelText))
-  assert.ok(label)
-  const inputId = label.getAttribute("for")
-  assert.ok(inputId)
-  return container.querySelector(`#${inputId}`) as HTMLInputElement | HTMLSelectElement
 }
 
 function getBookmarkCards(container: HTMLDivElement) {
@@ -65,7 +57,7 @@ function setInputValue(
   element.dispatchEvent(new dom.Event("input", { bubbles: true }))
 }
 
-test("OptionsApp renders in Chinese by default and updates locale/theme preferences", async () => {
+test("OptionsApp renders in Chinese by default and keeps demo shell active", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
 
@@ -119,36 +111,10 @@ test("OptionsApp renders in Chinese by default and updates locale/theme preferen
   assert.match(container.textContent ?? "", /详情/)
   assert.match(container.textContent ?? "", /偏好设置/)
 
-  const togglePreferencesButton = findByTestId(container, "toggle-preferences-panel") as HTMLButtonElement | null
-  assert.ok(togglePreferencesButton)
+  assert.equal(findByTestId(container, "toggle-preferences-panel"), null)
   assert.equal(findByTestId(container, "workspace-preferences-inline"), null)
-
-  await act(async () => {
-    togglePreferencesButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
-  })
-  await settle()
-
-  const localeSelect = findInputByLabel(container, "语言") as HTMLSelectElement
-  await act(async () => {
-    setSelectValue(localeSelect, "en", dom.window)
-  })
-  await settle()
-
-  assert.match(container.textContent ?? "", /Bookmarks/)
-  assert.match(container.textContent ?? "", /Lists/)
-  assert.match(container.textContent ?? "", /Details/)
-  assert.match(container.textContent ?? "", /Config/)
-
-  const themeSelect = findInputByLabel(container, "Theme") as HTMLSelectElement
-  await act(async () => {
-    setSelectValue(themeSelect, "dark", dom.window)
-  })
-  await settle()
-
-  const settings = await getSettings()
-  assert.equal(settings.locale, "en")
-  assert.equal(settings.themePreference, "dark")
-  assert.equal(dom.window.document.documentElement.dataset.theme, "dark")
+  assert.equal(container.querySelector(".options-advanced-panel"), null)
+  assert.equal(container.querySelector(".options-bulk-panel"), null)
 
   const researchButton = findListButton(container, researchList.id)
   assert.ok(researchButton)
@@ -186,17 +152,15 @@ test("OptionsApp uses the shared badge and status surface language", async () =>
   await settle()
 
   const statusBadge = container.querySelector('[data-testid="lists-sidebar"] .status-success') as HTMLElement | null
-  const preferencesToggle = findByTestId(container, "toggle-preferences-panel") as HTMLButtonElement | null
   const inspectorEmptyState = container.querySelector('[data-testid="workspace-inspector"] .workspace-empty-state') as HTMLElement | null
 
   assert.ok(statusBadge)
-  assert.ok(preferencesToggle)
   assert.ok(inspectorEmptyState)
   assert.equal(dom.window.document.documentElement.dataset.theme, "dark")
   assert.match(statusBadge.className, /workspace-badge/)
   assert.doesNotMatch(inspectorEmptyState.className, /panel-elevated/)
   assert.doesNotMatch(inspectorEmptyState.className, /panel-surface/)
-  assert.match(preferencesToggle.textContent ?? "", /偏好设置/)
+  assert.match(findByTestId(container, "lists-sidebar")?.textContent ?? "", /偏好设置/)
 })
 
 test("OptionsApp renders the Figma shell with editorial rails", async () => {
@@ -249,7 +213,42 @@ test("OptionsApp renders the Figma shell with editorial rails", async () => {
   assert.match(container.textContent ?? "", /归档/)
 })
 
-test("OptionsApp supports bulk list moves and tag creation on the inspector", async () => {
+test("OptionsApp renders the demo shell and hides legacy options panels", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-demo-1",
+      tweetUrl: "https://x.com/alice/status/tweet-demo-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Demo shell bookmark",
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const { container } = render(React.createElement(OptionsApp))
+  await settle()
+
+  assert.ok(findByTestId(container, "lists-sidebar"))
+  assert.ok(findByTestId(container, "library-workspace"))
+  assert.ok(findByTestId(container, "workspace-inspector"))
+  assert.match(container.textContent ?? "", /工作区/)
+  assert.match(container.textContent ?? "", /资料库/)
+  assert.match(container.textContent ?? "", /全部书签/)
+  assert.match(container.textContent ?? "", /筛选/)
+
+  assert.equal(findByTestId(container, "toggle-preferences-panel"), null)
+  assert.equal(findButton(container, "高级筛选") ?? findButton(container, "Advanced filters"), undefined)
+  assert.equal(findButton(container, "选中当前可见项") ?? findButton(container, "Select visible"), undefined)
+  assert.equal(findByTestId(container, "workspace-preferences-inline"), null)
+  assert.equal(container.querySelector(".options-advanced-panel"), null)
+  assert.equal(container.querySelector(".options-bulk-panel"), null)
+})
+
+test("OptionsApp supports tag creation on the inspector without legacy bulk panel", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
 
@@ -276,7 +275,6 @@ test("OptionsApp supports bulk list moves and tag creation on the inspector", as
     }
   ])
 
-  const researchList = await createList({ name: "Research" })
   const importantTag = await createTag({ name: "Important" })
   await saveSettings({
     schemaVersion: 3,
@@ -295,32 +293,8 @@ test("OptionsApp supports bulk list moves and tag creation on the inspector", as
   const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
-  const selectVisibleButton = findButton(container, "Select visible")
-  assert.ok(selectVisibleButton)
-  await act(async () => {
-    selectVisibleButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
-  })
-
-  const moveSelect = findInputByLabel(container, "Move selected to") as HTMLSelectElement
-  await act(async () => {
-    setSelectValue(moveSelect, researchList.id, dom.window)
-  })
-
-  const moveButton = findButton(container, "Move selected")
-  assert.ok(moveButton)
-  await act(async () => {
-    moveButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
-  })
-  await settle()
-
-  const researchButton = findListButton(container, researchList.id)
-  assert.ok(researchButton)
-  await act(async () => {
-    researchButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
-  })
-  await settle()
-
-  assert.equal(getBookmarkCards(container).length, 2)
+  assert.equal(container.querySelector(".options-bulk-panel"), null)
+  assert.ok(getBookmarkCards(container).length >= 1)
 
   const firstCard = getBookmarkCards(container)[0]
   await act(async () => {
@@ -805,19 +779,18 @@ test("OptionsApp renders a single tags summary and preferences inside the left s
   assert.ok(findByTestId(container, "workspace-overview"))
   const sidebar = findByTestId(container, "lists-sidebar")
   const summaryStrip = findByTestId(container, "workspace-summary-strip")
-  const preferencesToggle = findByTestId(container, "toggle-preferences-panel")
 
   assert.ok(sidebar)
   assert.ok(summaryStrip)
-  assert.ok(preferencesToggle)
   assert.match(summaryStrip.textContent ?? "", /总标签数/)
   assert.match(summaryStrip.textContent ?? "", /未分类/)
   assert.equal(sidebar.contains(summaryStrip), true)
-  assert.equal(sidebar.contains(preferencesToggle), true)
+  assert.match(sidebar.textContent ?? "", /偏好设置/)
+  assert.equal(findByTestId(container, "toggle-preferences-panel"), null)
   assert.equal(findByTestId(container, "workspace-preferences-inline"), null)
 })
 
-test("OptionsApp expands the preferences panel on demand", async () => {
+test("OptionsApp does not expose expandable inline preferences in demo shell", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
 
@@ -835,21 +808,12 @@ test("OptionsApp expands the preferences panel on demand", async () => {
     classificationRules: []
   })
 
-  const { container, dom } = render(React.createElement(OptionsApp))
+  const { container } = render(React.createElement(OptionsApp))
   await settle()
 
   assert.match(container.textContent ?? "", /深色/)
-
-  const preferencesToggle = findByTestId(container, "toggle-preferences-panel") as HTMLButtonElement | null
-  assert.ok(preferencesToggle)
+  assert.equal(findByTestId(container, "toggle-preferences-panel"), null)
   assert.equal(findByTestId(container, "workspace-preferences-inline"), null)
-
-  await act(async () => {
-    preferencesToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
-  })
-  await settle()
-
-  assert.ok(findByTestId(container, "workspace-preferences-inline"))
 })
 
 test("OptionsApp shows load errors in the workspace area", async () => {
