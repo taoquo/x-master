@@ -137,7 +137,7 @@ test("OptionsApp renders in Chinese by default and updates locale/theme preferen
   assert.match(container.textContent ?? "", /Bookmarks/)
   assert.match(container.textContent ?? "", /Lists/)
   assert.match(container.textContent ?? "", /Details/)
-  assert.match(container.textContent ?? "", /Preferences/)
+  assert.match(container.textContent ?? "", /Config/)
 
   const themeSelect = findInputByLabel(container, "Theme") as HTMLSelectElement
   await act(async () => {
@@ -197,6 +197,56 @@ test("OptionsApp uses the shared badge and status surface language", async () =>
   assert.doesNotMatch(inspectorEmptyState.className, /panel-elevated/)
   assert.doesNotMatch(inspectorEmptyState.className, /panel-surface/)
   assert.match(preferencesToggle.textContent ?? "", /偏好设置/)
+})
+
+test("OptionsApp renders the Figma shell with editorial rails", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-figma-shell",
+      tweetUrl: "https://x.com/alice/status/tweet-figma-shell",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Figma shell snapshot",
+      createdAtOnX: "2026-04-06T08:00:00.000Z",
+      savedAt: "2026-04-06T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "light",
+    lastSyncSummary: {
+      status: "success",
+      fetchedCount: 2,
+      insertedCount: 2,
+      updatedCount: 0,
+      failedCount: 0,
+      lastSyncedAt: "2026-04-06T08:12:00.000Z"
+    },
+    classificationRules: []
+  })
+
+  const { container } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const overview = findByTestId(container, "workspace-overview")
+  const sidebar = findByTestId(container, "lists-sidebar")
+  const library = findByTestId(container, "library-workspace")
+  const inspector = container.querySelector('[data-testid="workspace-inspector"] [data-testid="inspector-section-stack"]')
+
+  assert.ok(overview)
+  assert.ok(sidebar)
+  assert.ok(library)
+  assert.ok(inspector)
+  assert.match(overview?.className ?? "", /xl:grid-cols-\[320px_minmax\(0,1fr\)_340px\]/)
+  assert.match(sidebar?.textContent ?? "", /工作区/)
+  assert.match(sidebar?.textContent ?? "", /偏好设置/)
+  assert.match(library?.textContent ?? "", /资料库/)
+  assert.match(container.textContent ?? "", /元数据/)
+  assert.match(container.textContent ?? "", /归档/)
 })
 
 test("OptionsApp supports bulk list moves and tag creation on the inspector", async () => {
@@ -400,12 +450,11 @@ test("OptionsApp uses rail layout and shared field/button primitives", async () 
   assert.ok(library)
   assert.ok(syncButton)
   assert.ok(searchInput)
-  assert.match(overview?.className ?? "", /xl:grid-cols-\[240px_minmax\(0,1fr\)_320px\]/)
-  assert.match(sidebar?.className ?? "", /workspace-rail/)
-  assert.match(library?.className ?? "", /workspace-main-surface/)
-  assert.match(syncButton?.className ?? "", /primary-button/)
+  assert.match(overview?.className ?? "", /xl:grid-cols-\[320px_minmax\(0,1fr\)_340px\]/)
+  assert.match(sidebar?.className ?? "", /options-sidebar-shell/)
+  assert.match(library?.className ?? "", /options-main-shell/)
   assert.match(syncButton?.className ?? "", /workspace-sync-primary/)
-  assert.match(searchInput.className, /workspace-input/)
+  assert.match(searchInput.className, /options-toolbar-field/)
 })
 
 test("OptionsApp renders the detail inspector as a rail with shared form actions", async () => {
@@ -440,20 +489,16 @@ test("OptionsApp renders the detail inspector as a rail with shared form actions
   })
   await settle()
 
-  const inspector = container.querySelector(".workspace-detail-rail") as HTMLElement | null
+  const inspector = container.querySelector(".options-inspector-shell") as HTMLElement | null
   const attachTagSelect = container.querySelector('[data-testid="attach-tag-select"]') as HTMLSelectElement | null
   const createButton = findButton(container, "Create")
 
   assert.ok(inspector)
   assert.ok(attachTagSelect)
   assert.ok(createButton)
-  assert.match(inspector.className, /workspace-rail/)
-  assert.doesNotMatch(inspector.className, /panel-surface/)
-  assert.doesNotMatch(inspector.className, /rounded-\[22px\]/)
-  assert.doesNotMatch(inspector.className, /\bp-5\b/)
-  assert.doesNotMatch(inspector.className, /\bmd:p-6\b/)
-  assert.match(attachTagSelect.className, /workspace-input/)
-  assert.match(createButton?.className ?? "", /primary-button/)
+  assert.match(inspector.className, /options-inspector-shell/)
+  assert.match(attachTagSelect.className, /options-inspector-field/)
+  assert.match(createButton?.className ?? "", /options-primary-button/)
 })
 
 test("OptionsApp renders flat navigation rows and restrained result cards", async () => {
@@ -492,12 +537,12 @@ test("OptionsApp renders flat navigation rows and restrained result cards", asyn
   assert.ok(allBookmarksButton)
   assert.ok(aiListButton)
   assert.ok(searchInput)
-  assert.match(allBookmarksButton?.className ?? "", /workspace-nav-row-active/)
+  assert.match(allBookmarksButton?.className ?? "", /options-nav-row-active/)
   assert.equal(cards.length, 1)
-  assert.match(allBookmarksButton?.className ?? "", /workspace-nav-row/)
-  assert.match(searchInput.className, /workspace-input/)
-  assert.match(cards[0].className, /workspace-result-card/)
-  assert.match(cards[0].className, /workspace-result-card-selected/)
+  assert.match(allBookmarksButton?.className ?? "", /options-nav-row/)
+  assert.match(searchInput.className, /options-toolbar-field/)
+  assert.match(cards[0].className, /options-result-card/)
+  assert.match(cards[0].className, /options-result-card-selected/)
 
   await act(async () => {
     aiListButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
@@ -508,7 +553,7 @@ test("OptionsApp renders flat navigation rows and restrained result cards", asyn
   const listBadge = cards[0].querySelector(".workspace-badge-plain")
 
   assert.equal(cards.length, 1)
-  assert.match(aiListButton?.className ?? "", /workspace-nav-row-active/)
+  assert.match(aiListButton?.className ?? "", /options-nav-row-active/)
   assert.ok(listBadge)
   assert.equal(listBadge?.textContent, "AI")
 })
@@ -613,21 +658,22 @@ test("OptionsApp renders an explorer sidebar and placeholder-style toolbar contr
   await settle()
 
   const toolbar = findByTestId(container, "workspace-toolbar")
-  const treeRoot = findByTestId(container, "sidebar-tree-root")
   const treeList = findByTestId(container, "sidebar-list-tree")
   const shell = findByTestId(container, "workspace-shell")
   const syncPanel = findByTestId(container, "workspace-sidebar-sync")
+  const sidebarStatus = findByTestId(container, "sidebar-status-section")
   const addListButton = findByTestId(container, "add-list-button") as HTMLButtonElement | null
   const searchInput = container.querySelector("#filters-search") as HTMLInputElement | null
 
   assert.ok(shell)
   assert.ok(toolbar)
-  assert.ok(treeRoot)
   assert.ok(treeList)
   assert.ok(syncPanel)
+  assert.ok(sidebarStatus)
   assert.ok(addListButton)
   assert.ok(searchInput)
-  assert.match(treeRoot.textContent ?? "", /Lists/)
+  assert.match(sidebarStatus.textContent ?? "", /Workspace/)
+  assert.match(container.textContent ?? "", /Lists/)
   assert.match(syncPanel.textContent ?? "", /Last sync/)
   assert.match(addListButton.textContent ?? "", /\+/)
   assert.doesNotMatch(container.textContent ?? "", /Inbox/)
@@ -635,10 +681,10 @@ test("OptionsApp renders an explorer sidebar and placeholder-style toolbar contr
   assert.equal(toolbar.querySelector('label[for="filters-sort"]'), null)
   assert.equal(toolbar.querySelector('label[for="filters-time"]'), null)
   assert.equal(searchInput.getAttribute("placeholder"), "Search bookmarks, authors, and notes")
-  assert.match(findByTestId(container, "toolbar-sort-shell")?.textContent ?? "", /Sort by/)
-  assert.match(findByTestId(container, "toolbar-time-shell")?.textContent ?? "", /Saved time/)
+  assert.match(findByTestId(container, "toolbar-sort-shell")?.className ?? "", /relative min-w-0/)
+  assert.match(findByTestId(container, "toolbar-time-shell")?.className ?? "", /relative min-w-0/)
   assert.doesNotMatch(container.textContent ?? "", /Search, refine, and organize saved posts inside the active scope\./)
-  assert.doesNotMatch(container.textContent ?? "", /Refined bookmark context and filing controls\./)
+  assert.match(container.textContent ?? "", /Search, filter, and organize saved content in the current scope\./)
   assert.doesNotMatch(container.textContent ?? "", /No active filters\./)
   assert.doesNotMatch(container.textContent ?? "", /Flat groups only\. Nested folders are intentionally removed\./)
 })
@@ -765,7 +811,7 @@ test("OptionsApp renders a single tags summary and preferences inside the left s
   assert.ok(summaryStrip)
   assert.ok(preferencesToggle)
   assert.match(summaryStrip.textContent ?? "", /总标签数/)
-  assert.doesNotMatch(summaryStrip.textContent ?? "", /未分类/)
+  assert.match(summaryStrip.textContent ?? "", /未分类/)
   assert.equal(sidebar.contains(summaryStrip), true)
   assert.equal(sidebar.contains(preferencesToggle), true)
   assert.equal(findByTestId(container, "workspace-preferences-inline"), null)

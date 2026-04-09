@@ -40,6 +40,10 @@ function formatTimestamp(value: string | undefined, locale: Locale) {
   }).format(parsed)
 }
 
+function getSectionOverline(locale: Locale, zhLabel: string, enLabel: string) {
+  return locale === "zh-CN" ? `${zhLabel} ${enLabel}` : enLabel
+}
+
 function getOptionsCopy(locale: Locale) {
   if (locale === "zh-CN") {
     return {
@@ -278,15 +282,7 @@ function createFieldId(scope: string, name: string) {
 }
 
 function BackgroundScene() {
-  return (
-    <>
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute right-0 top-0 h-80 w-80 rounded-full bg-[radial-gradient(circle,rgba(113,112,255,0.12),transparent_68%)] blur-3xl" />
-        <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-[radial-gradient(circle,rgba(94,106,210,0.08),transparent_72%)] blur-3xl" />
-      </div>
-      <div className="pointer-events-none fixed inset-0 -z-10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent_45%)]" />
-    </>
-  )
+  return null
 }
 
 function LoadingPanel({ title }: { title: string }) {
@@ -411,11 +407,11 @@ function FieldBlock({
 }) {
   return (
     <div className={cn("space-y-2", className)}>
-      <label htmlFor={htmlFor} className={cn("block text-[12px] font-medium leading-4 text-slate-600", labelClassName)}>
+      <label htmlFor={htmlFor} className={cn("block text-[12px] font-normal leading-4 text-[var(--text-secondary)]", labelClassName)}>
         {label}
       </label>
       {children}
-      {description ? <p className="workspace-meta">{description}</p> : null}
+      {description ? <p className="options-meta-copy">{description}</p> : null}
     </div>
   )
 }
@@ -504,16 +500,13 @@ function ToolbarSelectField({
 }) {
   return (
     <div data-testid={shellTestId} className="relative min-w-0">
-      <span className="pointer-events-none absolute left-4 top-2.5 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-500">
-        {label}
-      </span>
       <SelectField
         id={id}
         ariaLabel={label}
         value={value}
         onChange={onChange}
         options={options}
-        className="workspace-field px-4 pb-3 pt-7"
+        className="options-toolbar-field px-4 pr-10"
       />
     </div>
   )
@@ -555,11 +548,11 @@ function ToggleChip({
 
 function PreviewMedia({ bookmark, index }: { bookmark: BookmarkRecord; index: number }) {
   const palettes = [
-    "from-[#191a1b] via-[#23252a] to-[#2b2d31]",
-    "from-[#101114] via-[#1c1d22] to-[#2a2d3b]",
-    "from-[#17181b] via-[#242730] to-[#31354b]",
-    "from-[#161820] via-[#20293b] to-[#2f4467]",
-    "from-[#16171c] via-[#252236] to-[#3d3b58]"
+    "from-[#f0efeb] via-[#ecebe7] to-[#e6e4de]",
+    "from-[#efede7] via-[#ebe8e2] to-[#e4e1da]",
+    "from-[#f2f0ea] via-[#ece9e2] to-[#e8e4dc]",
+    "from-[#efece5] via-[#e8e4dd] to-[#dfdbd3]",
+    "from-[#f5f3ee] via-[#ece8e0] to-[#e2ddd5]"
   ]
   const palette = palettes[index % palettes.length]
   const mediaUrl = bookmark.media?.[0]?.url
@@ -577,16 +570,16 @@ function PreviewMedia({ bookmark, index }: { bookmark: BookmarkRecord; index: nu
           className="h-full w-full object-cover"
         />
       ) : null}
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(8,9,10,0.04),rgba(8,9,10,0.38))]" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(26,26,26,0.06))]" />
       {mediaUrl ? (
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-black/28 text-white backdrop-blur-xl">
-            <AppIcon name="play" size={28} />
+          <div className="flex h-12 w-12 items-center justify-center rounded-[8px] border border-black/10 bg-white/75 text-[var(--text-tertiary)]">
+            <AppIcon name="image" size={20} />
           </div>
         </div>
       ) : (
         <div className="absolute inset-x-4 bottom-4">
-          <div className="max-w-[18ch] text-[0.98rem] font-medium leading-6 tracking-[-0.02em] text-white/82">
+          <div className="max-w-[18ch] text-[0.88rem] leading-6 tracking-[-0.01em] text-[var(--text-secondary)]">
             {truncateText(bookmark.text, 42)}
           </div>
         </div>
@@ -623,8 +616,8 @@ function BookmarkCard({
       data-bookmark-card={bookmark.tweetId}
       onClick={onSelect}
       className={cn(
-        "workspace-result-card group relative flex min-h-[220px] flex-col overflow-hidden p-4",
-        selected && "workspace-result-card-selected"
+        "options-result-card group relative flex min-h-[220px] flex-col overflow-hidden p-4",
+        selected && "options-result-card-selected"
       )}>
       <div className="absolute right-4 top-4 z-10">
         <input
@@ -636,32 +629,32 @@ function BookmarkCard({
             onToggle()
           }}
           onClick={(event) => event.stopPropagation()}
-          className="h-5 w-5 rounded border-white/80 bg-white/80"
+          className="h-4 w-4 rounded border-[var(--border-subtle)] bg-white"
         />
       </div>
 
       <PreviewMedia bookmark={bookmark} index={index} />
 
       <div className="mt-3 flex items-start gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-slate-950 text-sm font-medium text-white">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--tag-bg)] text-sm font-medium text-[var(--text-primary)]">
           {bookmark.authorName.slice(0, 2).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="truncate text-[0.95rem] font-medium text-slate-900">{bookmark.authorName}</div>
-              <div className="workspace-meta truncate">@{bookmark.authorHandle}</div>
+              <div className="truncate text-[0.95rem] font-medium text-[var(--text-primary)]">{bookmark.authorName}</div>
+              <div className="options-meta-copy truncate">@{bookmark.authorHandle}</div>
             </div>
-            <div className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[10px] tracking-[0.08em] text-slate-500">
+            <div className="shrink-0 text-[11px] tracking-[0.02em] text-[var(--text-tertiary)]">
               {formatTimestamp(bookmark.savedAt, locale)}
             </div>
           </div>
-          <p className="mt-3 text-[0.875rem] leading-[1.55rem] text-slate-600">{truncateText(bookmark.text, 62)}</p>
+          <p className="mt-3 text-[0.83rem] leading-[1.7] text-[var(--text-secondary)]">{truncateText(bookmark.text, 62)}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <span className="workspace-badge workspace-badge-plain">{currentListName}</span>
-            {bookmark.media?.length ? <span className="chip-button workspace-chip !cursor-default !px-3 !py-1.5">{copy.hasMedia}</span> : null}
+            {bookmark.media?.length ? <span className="chip-button options-chip !cursor-default !px-3 !py-1.5">{copy.hasMedia}</span> : null}
             {currentTagNames.slice(0, 2).map((tagName) => (
-              <span key={tagName} className="chip-button workspace-chip !cursor-default !px-3 !py-1.5">
+              <span key={tagName} className="chip-button options-chip !cursor-default !px-3 !py-1.5">
                 {tagName}
               </span>
             ))}
@@ -736,56 +729,30 @@ function BookmarkInspector({
 
   return (
     <SurfaceCard
-      title={copy.detailsTitle}
       chrome="bare"
-      className="workspace-rail workspace-detail-rail xl:sticky xl:top-6 xl:h-[calc(100dvh-3rem)] xl:max-h-[calc(100dvh-3rem)]">
+      className="options-inspector-shell xl:h-[100dvh]">
       <div
         ref={inspectorScrollRef}
         data-testid="inspector-section-stack"
-        className="scroll-shell flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
-        <section data-testid="inspector-meta-section" className="workspace-inspector-section">
-          <div className="workspace-section-kicker">{copy.bookmarkFocus}</div>
-          <h3 className="workspace-heading-md">{copy.bookmarkFocus}</h3>
-          <div className="mt-3 overflow-hidden rounded-[1.8rem]">
-            <PreviewMedia bookmark={bookmark} index={0} />
-          </div>
-
-          <div className="mt-5 flex items-start gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/80 bg-slate-950 text-white shadow-soft">
-              {bookmark.authorName.slice(0, 2).toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <div className="text-[1.05rem] font-semibold leading-5 tracking-[-0.02em] text-slate-900">{bookmark.authorName}</div>
-              <div className="workspace-meta">@{bookmark.authorHandle}</div>
-            </div>
-          </div>
-
-          <p className="mt-4 max-w-[34ch] text-[0.95rem] leading-6 text-slate-600">{truncateText(bookmark.text, 148)}</p>
-
-          <div className="workspace-meta mt-3">
-            {formatTimestamp(bookmark.createdAtOnX, locale)}
-          </div>
-
-          <button
-            type="button"
-            className="glass-button mt-6 w-full justify-center"
-            onClick={() => window.open(bookmark.tweetUrl, "_blank", "noopener,noreferrer")}>
-            <AppIcon name="external" size={16} />
-            <span>{copy.openOnX}</span>
-          </button>
+        className="scroll-shell flex min-h-0 flex-1 flex-col gap-10 overflow-y-auto">
+        <section data-testid="inspector-meta-section" className="options-inspector-header">
+          <div className="options-overline">{getSectionOverline(locale, "元数据", "Metadata")}</div>
+          <h2 className="options-display-title-xs mt-3">{copy.detailsTitle}</h2>
+          <p className="options-body-copy mt-3">
+            {locale === "zh-CN" ? "查看书签上下文并完成归档操作。" : "Review bookmark context and complete archival actions."}
+          </p>
         </section>
 
-        <section data-testid="inspector-tags-section" className="workspace-inspector-section">
-          <div className="workspace-section-kicker">{copy.tagsTitle}</div>
-          <h3 className="workspace-heading-md">{copy.tagsTitle}</h3>
+        <section data-testid="inspector-tags-section" className="options-inspector-section">
+          <div className="options-section-kicker">{getSectionOverline(locale, "标签", "Tags")}</div>
           <div data-testid="current-tags" className="mt-4 flex flex-wrap gap-2">
-            {!currentTags.length ? <span className="text-sm text-slate-600">{copy.noTagsYet}</span> : null}
+            {!currentTags.length ? <span className="options-meta-copy">{copy.noTagsYet}</span> : null}
             {currentTags.map((tag) => (
               <button
                 key={tag.id}
                 type="button"
                 onClick={() => void onDetachTag(tag.id)}
-                className="chip-button">
+                className="chip-button options-tag-pill">
                 <span>{tag.name}</span>
                 <AppIcon name="close" size={12} />
               </button>
@@ -803,26 +770,25 @@ function BookmarkInspector({
                   { value: "", label: copy.selectTag },
                   ...availableTagOptions.map((tag) => ({ value: tag.id, label: tag.name }))
                 ]}
-                className="workspace-input workspace-field"
+                className="options-inspector-field"
               />
             </FieldBlock>
             <button
               type="button"
               onClick={() => void onAttachTag(selectedTagId)}
               disabled={isSavingTags || !selectedTagId}
-              className="primary-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
-              <AppIcon name="tag" size={16} />
+              className="options-secondary-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
+              <AppIcon name="tag" size={14} />
               <span>{copy.addTag}</span>
             </button>
           </div>
         </section>
 
-        <section data-testid="inspector-assignment-section" className="workspace-inspector-section">
-          <div className="workspace-section-kicker">{copy.assignmentTitle}</div>
-          <h3 className="workspace-heading-md">{copy.assignmentTitle}</h3>
+        <section data-testid="inspector-assignment-section" className="options-inspector-section">
+          <div className="options-section-kicker">{getSectionOverline(locale, "归档", "Archival")}</div>
           <div className="mt-4 grid gap-4">
             <FieldBlock label={copy.bookmarkFocus} htmlFor={focusId}>
-              <ReadonlyField id={focusId} value={truncateText(bookmark.text, 90)} />
+              <ReadonlyField id={focusId} value={truncateText(bookmark.text, 90)} className="options-readonly-field" />
             </FieldBlock>
 
             <FieldBlock label={copy.primaryList} htmlFor={listSelectId}>
@@ -834,15 +800,22 @@ function BookmarkInspector({
                   { value: INBOX_LIST_ID, label: copy.noList },
                   ...lists.map((list) => ({ value: list.id, label: list.name }))
                 ]}
-                className="workspace-field"
+                className="options-inspector-field"
               />
             </FieldBlock>
+
+            <button
+              type="button"
+              className="options-secondary-button justify-center"
+              onClick={() => window.open(bookmark.tweetUrl, "_blank", "noopener,noreferrer")}>
+              <AppIcon name="external" size={14} />
+              <span>{copy.openOnX}</span>
+            </button>
           </div>
         </section>
 
-        <section data-testid="inspector-create-tag-section" className="workspace-inspector-section">
-          <div className="workspace-section-kicker">{copy.createTagLabel}</div>
-          <h3 className="workspace-heading-md">{copy.createTagLabel}</h3>
+        <section data-testid="inspector-create-tag-section" className="options-inspector-section">
+          <div className="options-section-kicker">{getSectionOverline(locale, "创建标签", "Create")}</div>
           <div className="mt-4 grid gap-4">
             <FieldBlock
               label={copy.createTagLabel}
@@ -852,9 +825,10 @@ function BookmarkInspector({
                 value={newTagName}
                 placeholder="research"
                 onChange={setNewTagName}
-                className="workspace-field"
+                className="options-inspector-field"
               />
             </FieldBlock>
+            <p className="options-meta-copy">{locale === "zh-CN" ? "一步创建新标签并附加到当前书签。" : "Create one tag and attach it to the current bookmark."}</p>
             <button
               type="button"
               onClick={() =>
@@ -863,26 +837,25 @@ function BookmarkInspector({
                 })
               }
               disabled={isSavingTags || !newTagName.trim()}
-              className="primary-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
+              className="primary-button options-primary-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
               <AppIcon name="sparkle" size={16} />
               <span>{copy.create}</span>
             </button>
           </div>
         </section>
 
-        <section className="workspace-inspector-section">
-          <div className="workspace-section-kicker">{copy.tagLibrary}</div>
-          <h3 className="workspace-heading-md">{copy.tagLibrary}</h3>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {!tags.length ? <span className="text-sm text-slate-600">{copy.noTagsCreated}</span> : null}
+        <section className="options-inspector-section">
+          <div className="options-section-kicker">{getSectionOverline(locale, "标签库", "Library")}</div>
+          <div className="mt-4 grid gap-1">
+            {!tags.length ? <span className="options-meta-copy">{copy.noTagsCreated}</span> : null}
             {tags.map((tag) => (
               <button
                 key={tag.id}
                 type="button"
                 onClick={() => void onDeleteTag(tag.id)}
-                className="chip-button">
+                className="options-library-row">
                 <span>{tag.name}</span>
-                <AppIcon name="trash" size={12} />
+                <AppIcon name="trash" size={11} />
               </button>
             ))}
           </div>
@@ -936,154 +909,164 @@ function WorkspaceSidebar({
   return (
     <aside
       data-testid="lists-sidebar"
-      className="panel-surface workspace-rail flex min-h-[420px] min-w-0 flex-col overflow-hidden rounded-[24px] p-0 xl:sticky xl:top-6 xl:h-[calc(100dvh-3rem)] xl:max-h-[calc(100dvh-3rem)]">
-      <section data-testid="sidebar-status-section" className="border-b border-white/45 px-5 py-5 md:px-6">
+      className="options-sidebar-shell flex min-h-[420px] min-w-0 flex-col overflow-hidden">
+      <section data-testid="sidebar-status-section" className="options-sidebar-hero">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="workspace-title-xl max-w-[8ch] text-slate-950">
-            {copy.pageTitle}
-          </h1>
+          <div className="options-overline">{getSectionOverline(locale, "工作区", "Workspace")}</div>
           <StatusBadge status={workspace.summary.status} />
         </div>
 
-        <div data-testid="workspace-sidebar-sync" className="mt-4 grid gap-3">
-          <div className="workspace-meta rounded-[1.2rem] border border-white/60 bg-white/20 px-4 py-3 backdrop-blur-xl">
+        <h1 className="options-display-title mt-4">
+          {copy.pageTitle}
+        </h1>
+
+        <p className="options-body-copy mt-3 max-w-[24ch]">
+          {locale === "zh-CN"
+            ? "在列表、标签和最近同步之间搜索、排序并整理已保存内容。"
+            : "Search, sort, and organize saved items across lists, tags, and recent syncs."}
+        </p>
+
+        <div data-testid="workspace-sidebar-sync" className="mt-5 grid gap-3">
+          <div className="options-meta-copy">
             {copy.lastSync} {lastSyncLabel}
           </div>
+
           <button
             type="button"
             onClick={() => void workspace.handleSync()}
             disabled={workspace.isSyncing}
-            className="primary-button workspace-sync-primary">
+            className="workspace-sync-primary">
             <AppIcon name="sync" size={16} />
             <span>{workspace.isSyncing ? copy.syncing : copy.syncNow}</span>
           </button>
-          <InlineMessage message={workspace.commandError} />
-        </div>
 
-        <div data-testid="workspace-summary-strip" className="mt-4">
-          <div className="flex items-center justify-between rounded-[1.1rem] border border-white/45 bg-white/10 px-3.5 py-3">
-            <p className="text-[11px] font-medium tracking-[0.08em] text-slate-500">{copy.totalTags}</p>
-            <div className="text-[1rem] font-semibold tracking-[-0.03em] text-slate-800">{workspace.tags.length}</div>
-          </div>
+          <InlineMessage message={workspace.commandError} className="!rounded-[6px] !border-[var(--border-subtle)] !bg-[var(--tag-bg)] !px-3 !py-2 !text-[12px]" />
         </div>
       </section>
 
-      <section data-testid="sidebar-lists-section" className="flex min-h-0 flex-1 flex-col">
-        <div data-testid="sidebar-lists-scroll" className="scroll-shell min-h-0 flex-1 overflow-y-auto px-4 py-3 md:px-5">
-          <div data-testid="sidebar-tree-root" className="workspace-tree-shell">
-            <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-slate-500/70" aria-hidden="true" />
-                <span className="truncate text-[12px] font-medium tracking-[0.06em] text-slate-600">{copy.listsTitle}</span>
-              </div>
-              <button
-                type="button"
-                data-testid="add-list-button"
-                aria-label={copy.newList}
-                onClick={() => void onCreateList()}
-                disabled={workspace.isSavingLists}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-[0.9rem] border border-white/60 bg-white/22 text-lg leading-none text-slate-700 transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-white/40 active:translate-y-[1px] disabled:cursor-not-allowed disabled:opacity-60">
-                +
-              </button>
-            </div>
-          </div>
+      <section data-testid="workspace-summary-strip" className="options-sidebar-stats">
+        <div className="options-stat-card">
+          <p className="options-overline !tracking-[0.12em]">{copy.totalTags}</p>
+          <div className="options-stat-value">{workspace.stats.totalBookmarks}</div>
+          <p className="options-meta-copy">{copy.currentLocalInventory}</p>
+        </div>
 
-          <div data-testid="sidebar-list-tree" className="workspace-tree-branch">
-            <div className="space-y-1.5">
-              <button
-                type="button"
-                data-list-button="all"
-                onClick={() => setSelectedListId("")}
-                className={cn(
-                  "workspace-nav-row w-full text-left text-[0.92rem] text-slate-700",
-                  selectedListId === "" && "workspace-nav-row-active"
-                )}>
-                <span>{copy.allBookmarks}</span>
-                <span className="font-mono text-[12px]">{workspace.stats.totalBookmarks}</span>
-                <span className="h-8 w-8" aria-hidden="true" />
-              </button>
+        <div className="options-stat-card">
+          <p className="options-overline !tracking-[0.12em]">{copy.unclassified}</p>
+          <div className="options-stat-value">{workspace.stats.unclassifiedCount}</div>
+          <p className="options-meta-copy">{copy.unclassifiedHint}</p>
+        </div>
+      </section>
 
-              {visibleListCounts.map((list) => {
-                const isSelected = selectedListId === list.listId
-                return (
-                  <div key={list.listId} className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                    {editingListId === list.listId ? (
-                      <div className="workspace-nav-row workspace-nav-row-active w-full text-[0.92rem]">
-                        <input
-                          data-testid="inline-list-name-input"
-                          value={editingListName}
-                          autoFocus
-                          onChange={(event) => setEditingListName(event.currentTarget.value)}
-                          onBlur={(event) => void onCommitListRename(event.currentTarget.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault()
-                              void onCommitListRename(event.currentTarget.value)
-                            }
+      <section data-testid="sidebar-lists-section" className="options-sidebar-lists">
+        <div className="flex items-center justify-between gap-3 px-6 pb-4 pt-6">
+          <div className="options-overline">{getSectionOverline(locale, "列表", "Lists")}</div>
+          <button
+            type="button"
+            data-testid="add-list-button"
+            aria-label={copy.newList}
+            onClick={() => void onCreateList()}
+            disabled={workspace.isSavingLists}
+            className="options-icon-button">
+            +
+          </button>
+        </div>
 
-                            if (event.key === "Escape") {
-                              event.preventDefault()
-                              onCancelListRename()
-                            }
-                          }}
-                          className="field-shell h-9 w-full rounded-[10px] border-white/30 bg-white/10 px-3 text-[0.92rem]"
-                        />
-                        <span className="font-mono text-[12px]">{list.count}</span>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        data-list-button={list.listId}
-                        onClick={() => setSelectedListId(list.listId)}
-                        onDoubleClick={() => onStartListRename(list.listId, list.name)}
-                        className={cn(
-                          "workspace-nav-row w-full text-left text-[0.92rem] text-slate-700",
-                          isSelected && "workspace-nav-row-active"
-                        )}>
-                        <span className="truncate">{list.name}</span>
-                        <span className="font-mono text-[12px]">{list.count}</span>
-                      </button>
-                    )}
+        <div data-testid="sidebar-lists-scroll" className="scroll-shell min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+          <div data-testid="sidebar-list-tree" className="space-y-1">
+            <button
+              type="button"
+              data-list-button="all"
+              onClick={() => setSelectedListId("")}
+              className={cn(
+                "options-nav-row w-full text-left",
+                selectedListId === "" && "options-nav-row-active"
+              )}>
+              <span>{copy.allBookmarks}</span>
+              <span className="options-nav-count">{workspace.stats.totalBookmarks}</span>
+            </button>
+
+            {visibleListCounts.map((list) => {
+              const isSelected = selectedListId === list.listId
+              return (
+                <div key={list.listId} className="group grid grid-cols-[minmax(0,1fr)_20px] items-center gap-2">
+                  {editingListId === list.listId ? (
+                    <div className="options-nav-row options-nav-row-active">
+                      <input
+                        data-testid="inline-list-name-input"
+                        value={editingListName}
+                        autoFocus
+                        onChange={(event) => setEditingListName(event.currentTarget.value)}
+                        onBlur={(event) => void onCommitListRename(event.currentTarget.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault()
+                            void onCommitListRename(event.currentTarget.value)
+                          }
+
+                          if (event.key === "Escape") {
+                            event.preventDefault()
+                            onCancelListRename()
+                          }
+                        }}
+                        className="field-shell h-8 w-full rounded-[6px] border-[var(--border-subtle)] bg-[var(--side-bg)] px-2 text-[13px]"
+                      />
+                      <span className="options-nav-count">{list.count}</span>
+                    </div>
+                  ) : (
                     <button
                       type="button"
-                      aria-label={`${copy.deleteLabel} ${list.name}`}
-                      onClick={() => void workspace.handleDeleteList(list.listId)}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-[0.8rem] text-slate-500 opacity-70 transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-white/55 hover:text-slate-900 hover:opacity-100 active:translate-y-[1px]">
-                      <AppIcon name="trash" size={12} />
+                      data-list-button={list.listId}
+                      onClick={() => setSelectedListId(list.listId)}
+                      onDoubleClick={() => onStartListRename(list.listId, list.name)}
+                      className={cn(
+                        "options-nav-row w-full text-left",
+                        isSelected && "options-nav-row-active"
+                      )}>
+                      <span className="truncate">{list.name}</span>
+                      <span className="options-nav-count">{list.count}</span>
                     </button>
-                  </div>
-                )
-              })}
-            </div>
+                  )}
+
+                  <button
+                    type="button"
+                    aria-label={`${copy.deleteLabel} ${list.name}`}
+                    onClick={() => void workspace.handleDeleteList(list.listId)}
+                    className="options-row-action">
+                    <AppIcon name="trash" size={11} />
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </div>
       </section>
 
-      <section data-testid="sidebar-footer-section" className="border-t border-white/45 px-4 py-4 md:px-5">
-        <div className="px-1 md:px-0">
+      <section data-testid="sidebar-footer-section" className="options-sidebar-config">
+        <div className="px-6 py-6">
           <button
             type="button"
             data-testid="toggle-preferences-panel"
             onClick={() => setShowPreferencesPanel((current) => !current)}
             className="flex w-full items-start justify-between gap-3 text-left">
             <div className="min-w-0">
-              <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-500">{copy.preferencesTitle}</div>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
-                <span className="rounded-full border border-white/55 bg-white/16 px-2.5 py-1">
+              <div className="options-overline">{getSectionOverline(locale, "偏好设置", "Config")}</div>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
+                <span className="options-footer-chip">
                   {copy.languageLabel} {getLocaleSummaryLabel(locale)}
                 </span>
-                <span className="rounded-full border border-white/55 bg-white/16 px-2.5 py-1">
+                <span className="options-footer-chip">
                   {copy.themeLabel} {getThemeSummaryLabel(themePreference, locale)}
                 </span>
               </div>
             </div>
-            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[1rem] border border-white/55 bg-white/16 text-slate-700">
+            <span className="options-icon-button shrink-0">
               <AppIcon name={showPreferencesPanel ? "close" : "info"} size={14} />
             </span>
           </button>
 
           {showPreferencesPanel ? (
-            <div className="mt-4 border-t border-white/45 pt-4">
+            <div className="mt-4 border-t border-[var(--border-subtle)] pt-4">
               <PreferencesPanel
                 locale={locale}
                 themePreference={themePreference}
@@ -1101,6 +1084,7 @@ function WorkspaceSidebar({
 }
 
 function WorkspaceToolbar({
+  locale,
   copy,
   loadError,
   currentScopeLabel,
@@ -1137,6 +1121,7 @@ function WorkspaceToolbar({
   clearAllRefinements,
   onSelectVisible
 }: {
+  locale: Locale
   copy: OptionsCopy
   loadError: string | null
   currentScopeLabel: string
@@ -1174,30 +1159,32 @@ function WorkspaceToolbar({
   onSelectVisible: () => void
 }) {
   return (
-    <div data-testid="library-header-section" className="border-b border-white/45 px-5 py-5 md:px-6 md:py-6">
-      <div className="flex flex-col gap-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+    <div data-testid="library-header-section" className="options-main-header">
+      <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <div className="workspace-overline">{copy.libraryTitle}</div>
-            <h2 className="workspace-title-lg mt-2 truncate text-slate-900">{currentScopeLabel}</h2>
+            <div className="options-overline">{copy.libraryTitle} Archive</div>
+            <h2 className="options-display-title-sm mt-3 truncate">{currentScopeLabel}</h2>
+            <p className="options-body-copy mt-4 max-w-[54ch]">
+              {loadError
+                ? ""
+                : locale === "zh-CN"
+                  ? "在当前范围内搜索、筛选并整理已保存内容。当前没有启用筛选时，可添加作者、标签、时间或内容条件。"
+                  : "Search, filter, and organize saved content in the current scope. Add author, tag, date, or content filters when needed."}
+            </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="workspace-meta rounded-full border border-white/60 bg-white/26 px-3 py-1.5 backdrop-blur-xl">
-              {visibleBookmarksCount} {copy.results}
-            </span>
-            {hasBulkSelection ? (
-              <span className="workspace-meta rounded-full border border-white/60 bg-white/26 px-3 py-1.5 backdrop-blur-xl">
-                {selectedBookmarkIdsCount} {copy.selected}
-              </span>
-            ) : null}
+          <div className="text-right">
+            <div className="options-results-value">{visibleBookmarksCount}</div>
+            <div className="options-overline mt-1">{copy.results}</div>
+            {hasBulkSelection ? <div className="options-meta-copy mt-2">{selectedBookmarkIdsCount} {copy.selected}</div> : null}
           </div>
         </div>
 
-        <InlineMessage message={loadError} className="mb-1" />
+        <InlineMessage message={loadError} className="!rounded-[6px] !border-[var(--border-subtle)] !bg-[var(--tag-bg)] !px-3 !py-2 !text-[12px]" />
 
-        <div data-testid="workspace-toolbar" className="grid gap-3 xl:grid-cols-[minmax(0,1.8fr)_220px_220px]">
+        <div data-testid="workspace-toolbar" className="options-toolbar-grid">
           <div className="relative min-w-0">
-            <AppIcon name="search" size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+            <AppIcon name="search" size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
             <TextInputField
               id={searchId}
               ariaLabel={copy.search}
@@ -1205,7 +1192,7 @@ function WorkspaceToolbar({
               value={query}
               placeholder={copy.searchPlaceholder}
               onChange={setQuery}
-              className="workspace-input workspace-field pl-11 pr-4 placeholder:text-slate-500"
+              className="workspace-input options-toolbar-field pl-11 pr-4"
             />
           </div>
 
@@ -1244,21 +1231,21 @@ function WorkspaceToolbar({
               checked={onlyWithMedia}
               label={copy.hasMedia}
               onChange={setOnlyWithMedia}
-              className="workspace-chip !px-3.5 !py-2"
+              className="options-chip"
             />
             <ToggleChip
               checked={onlyLongform}
               label={copy.longform}
               onChange={setOnlyLongform}
-              className="workspace-chip !px-3.5 !py-2"
+              className="options-chip"
             />
             <button
               type="button"
               onClick={() => setShowAdvancedFilters((current) => !current)}
-              className={cn("chip-button workspace-chip !px-3.5 !py-2", showAdvancedFilters && "chip-button-active")}>
+              className={cn("chip-button options-chip", showAdvancedFilters && "chip-button-active")}>
               <span>{showAdvancedFilters ? copy.hideAdvancedFilters : copy.advancedFilters}</span>
               {hasAdvancedRefinements ? (
-                <span className={cn("rounded-full px-2 py-0.5 text-xs", showAdvancedFilters ? "bg-white/20 text-white" : "bg-slate-900 text-white")}>
+                <span className={cn("rounded-full px-2 py-0.5 text-xs", showAdvancedFilters ? "bg-black/10 text-[var(--text-primary)]" : "bg-[var(--text-primary)] text-white")}>
                   {Number(Boolean(selectedAuthorHandle)) + Number(Boolean(selectedTagId))}
                 </span>
               ) : null}
@@ -1267,20 +1254,20 @@ function WorkspaceToolbar({
               type="button"
               onClick={onSelectVisible}
               disabled={visibleBookmarksCount === 0}
-              className="chip-button workspace-chip !px-3.5 !py-2 disabled:cursor-not-allowed disabled:opacity-60">
+              className="chip-button options-chip disabled:cursor-not-allowed disabled:opacity-60">
               <span>{copy.selectVisible}</span>
             </button>
           </div>
 
           {showAdvancedFilters ? (
-            <div className="panel-elevated grid gap-3 rounded-[1.5rem] p-4 md:grid-cols-2">
+            <div className="options-advanced-panel">
               <FieldBlock label={copy.author} htmlFor={authorId}>
                 <SelectField
                   id={authorId}
                   value={selectedAuthorHandle}
                   onChange={setSelectedAuthorHandle}
                   options={[{ value: "", label: copy.allAuthors }, ...authorOptions]}
-                  className="workspace-field"
+                  className="options-toolbar-field"
                 />
               </FieldBlock>
               <FieldBlock label={copy.tag} htmlFor={tagId}>
@@ -1289,7 +1276,7 @@ function WorkspaceToolbar({
                   value={selectedTagId}
                   onChange={setSelectedTagId}
                   options={[{ value: "", label: copy.allTags }, ...tags.map((tag) => ({ value: tag.id, label: tag.name }))]}
-                  className="workspace-field"
+                  className="options-toolbar-field"
                 />
               </FieldBlock>
             </div>
@@ -1302,7 +1289,7 @@ function WorkspaceToolbar({
                   key={chip.key}
                   type="button"
                   onClick={() => clearRefinement(chip.key)}
-                  className="chip-button workspace-chip !px-3 !py-1.5 !text-xs">
+                  className="chip-button options-chip !px-3 !py-1.5 !text-xs">
                   <span>{chip.label}</span>
                   <AppIcon name="close" size={12} />
                 </button>
@@ -1311,7 +1298,7 @@ function WorkspaceToolbar({
               <button
                 type="button"
                 onClick={clearAllRefinements}
-                className="ml-auto inline-flex min-h-[40px] items-center justify-center rounded-full border border-white/60 bg-white/30 px-4 text-sm font-medium text-slate-700 backdrop-blur-xl transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-white/45 active:translate-y-[1px]">
+                className="options-clear-button ml-auto">
                 <span>{copy.clearAll}</span>
               </button>
             </div>
@@ -1420,9 +1407,10 @@ function BookmarkResultsPane({
   clearAllRefinements: () => void
 }) {
   return (
-    <section data-testid="library-workspace" className="panel-surface workspace-main-surface min-h-[420px] min-w-0 overflow-hidden rounded-[24px] p-0 xl:h-[calc(100dvh-3rem)]">
+    <section data-testid="library-workspace" className="options-main-shell min-h-[420px] min-w-0 overflow-hidden p-0 xl:h-[100dvh]">
       <div className="flex h-full min-h-0 flex-col">
         <WorkspaceToolbar
+          locale={locale}
           copy={copy}
           loadError={workspace.loadError}
           currentScopeLabel={currentScopeLabel}
@@ -1461,14 +1449,14 @@ function BookmarkResultsPane({
         />
 
         {hasBulkSelection ? (
-          <div className="border-b border-white/45 px-5 py-4 md:px-6">
-            <div className="panel-elevated rounded-[1.5rem] p-4">
+          <div className="border-b border-[var(--border-subtle)] px-12 py-5">
+            <div className="options-bulk-panel">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm font-medium text-slate-900">{selectedBookmarkIds.length} {copy.selectedCount}</div>
+                <div className="text-sm font-medium text-[var(--text-primary)]">{selectedBookmarkIds.length} {copy.selectedCount}</div>
                 <button
                   type="button"
                   onClick={() => setSelectedBookmarkIds([])}
-                  className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-white/60 bg-white/30 px-4 text-sm font-medium text-slate-700 backdrop-blur-xl transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-white/45 active:translate-y-[1px]">
+                  className="options-clear-button">
                   <span>{copy.clearSelection}</span>
                 </button>
               </div>
@@ -1484,7 +1472,7 @@ function BookmarkResultsPane({
                       { value: INBOX_LIST_ID, label: copy.noList },
                       ...getVisibleLists(workspace.lists).map((list) => ({ value: list.id, label: list.name }))
                     ]}
-                    className="workspace-field"
+                    className="options-toolbar-field"
                   />
                 </FieldBlock>
                 <button
@@ -1496,7 +1484,7 @@ function BookmarkResultsPane({
                     })
                   }
                   disabled={workspace.isSavingLists || !bulkListId || !hasBulkSelection}
-                  className="inline-flex min-h-[50px] items-center justify-center rounded-full border border-slate-900/90 bg-slate-950 px-5 text-sm font-medium text-white shadow-[0_18px_44px_-26px_rgba(15,23,42,0.45)] transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-slate-800 active:translate-y-[1px] active:scale-[0.985] self-end disabled:cursor-not-allowed disabled:opacity-60">
+                  className="primary-button options-primary-button self-end disabled:cursor-not-allowed disabled:opacity-60">
                   <span>{copy.moveSelected}</span>
                 </button>
                 <FieldBlock label={copy.tagSelectedWith} htmlFor={bulkTagIdField}>
@@ -1508,7 +1496,7 @@ function BookmarkResultsPane({
                       { value: "", label: copy.chooseTag },
                       ...workspace.tags.map((tag) => ({ value: tag.id, label: tag.name }))
                     ]}
-                    className="workspace-field"
+                    className="options-toolbar-field"
                   />
                 </FieldBlock>
                 <button
@@ -1520,7 +1508,7 @@ function BookmarkResultsPane({
                     })
                   }
                   disabled={workspace.isSavingTags || !bulkTagId || !hasBulkSelection}
-                  className="inline-flex min-h-[50px] items-center justify-center rounded-full border border-white/60 bg-white/30 px-5 text-sm font-medium text-slate-700 backdrop-blur-xl transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-white/45 active:translate-y-[1px] self-end disabled:cursor-not-allowed disabled:opacity-60">
+                  className="options-clear-button self-end disabled:cursor-not-allowed disabled:opacity-60">
                   <span>{copy.applyTag}</span>
                 </button>
               </div>
@@ -1528,14 +1516,14 @@ function BookmarkResultsPane({
           </div>
         ) : null}
 
-        <div data-testid="library-results-summary" className="workspace-summary-bar flex items-center justify-between gap-3 px-5 py-4 md:px-6">
-          <span className="workspace-meta">{copy.showing} {visibleBookmarks.length} {copy.of} {workspace.bookmarks.length}</span>
-          {selectedListId ? <span className="workspace-meta">{copy.scopedTo} {currentScopeLabel}</span> : null}
+        <div data-testid="library-results-summary" className="options-results-summary flex items-center justify-between gap-3 px-12 py-5">
+          <span className="options-meta-copy">{copy.showing} {visibleBookmarks.length} {copy.of} {workspace.bookmarks.length}</span>
+          {selectedListId ? <span className="options-meta-copy">{copy.scopedTo} {currentScopeLabel}</span> : null}
         </div>
 
-        <div data-testid="library-results-scroll" className="scroll-shell min-h-0 flex-1 overflow-y-auto px-5 pb-5 pr-6 md:px-6">
+        <div data-testid="library-results-scroll" className="scroll-shell min-h-0 flex-1 overflow-y-auto px-12 pb-12 pt-8">
           {visibleBookmarks.length ? (
-            <div data-testid="results-stack" className="grid content-start gap-4 sm:grid-cols-2 2xl:grid-cols-2">
+            <div data-testid="results-stack" className="grid content-start gap-8 sm:grid-cols-2 2xl:grid-cols-2">
               {visibleBookmarks.map((bookmark, index) => {
                 const currentTagNames = tagNamesByBookmarkId.get(bookmark.tweetId) ?? []
                 const currentListName = getDisplayListName(
@@ -1581,21 +1569,23 @@ function BookmarkResultsPane({
   )
 }
 
-function SidebarLoading({ copy }: { copy: OptionsCopy }) {
+function SidebarLoading({ copy: _copy }: { copy: OptionsCopy }) {
   return (
-    <SurfaceCard title={copy.pageTitle} className="min-h-[420px] xl:sticky xl:top-6 xl:h-[calc(100dvh-3rem)]">
-      <div className="space-y-4">
-        <div className="h-10 animate-pulse rounded-2xl bg-white/55" />
+    <SurfaceCard chrome="bare" className="options-sidebar-shell min-h-[420px] xl:h-[100dvh]">
+      <div className="space-y-4 px-8 py-10">
+        <div className="h-4 animate-pulse rounded-[4px] bg-[var(--tag-bg)]" />
+        <div className="h-12 animate-pulse rounded-[4px] bg-[var(--tag-bg)]" />
+        <div className="h-10 animate-pulse rounded-[6px] bg-[var(--tag-bg)]" />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-          <div className="h-28 animate-pulse rounded-[1.6rem] bg-white/55" />
-          <div className="h-28 animate-pulse rounded-[1.6rem] bg-white/55" />
+          <div className="h-24 animate-pulse rounded-[6px] bg-[var(--tag-bg)]" />
+          <div className="h-24 animate-pulse rounded-[6px] bg-[var(--tag-bg)]" />
         </div>
         <div className="space-y-2">
-          <div className="h-11 animate-pulse rounded-2xl bg-white/55" />
-          <div className="h-11 animate-pulse rounded-2xl bg-white/55" />
-          <div className="h-11 animate-pulse rounded-2xl bg-white/55" />
+          <div className="h-10 animate-pulse rounded-[4px] bg-[var(--tag-bg)]" />
+          <div className="h-10 animate-pulse rounded-[4px] bg-[var(--tag-bg)]" />
+          <div className="h-10 animate-pulse rounded-[4px] bg-[var(--tag-bg)]" />
         </div>
-        <div className="h-28 animate-pulse rounded-[1.6rem] bg-white/55" />
+        <div className="h-20 animate-pulse rounded-[4px] bg-[var(--tag-bg)]" />
       </div>
     </SurfaceCard>
   )
@@ -1861,11 +1851,11 @@ function OptionsScreen() {
   return (
     <>
       <BackgroundScene />
-      <main className="min-h-[100dvh] px-4 py-6 md:px-8 lg:px-10">
-        <div data-testid="workspace-shell" className="mx-auto max-w-[1400px]">
+      <main className="min-h-[100dvh]">
+        <div data-testid="workspace-shell" className="w-full">
           <div
             data-testid="workspace-overview"
-            className="grid gap-6 xl:min-h-0 xl:h-[calc(100dvh-3rem)] xl:grid-cols-[240px_minmax(0,1fr)_320px] xl:items-start">
+            className="grid gap-0 xl:min-h-0 xl:h-[100dvh] xl:grid-cols-[320px_minmax(0,1fr)_340px] xl:items-stretch">
           {workspace.isLoading && !workspace.bookmarks.length ? (
             <>
               <SidebarLoading copy={copy} />
