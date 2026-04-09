@@ -16,7 +16,6 @@ import { useWorkspaceData } from "./hooks/useWorkspaceData.ts"
 import { EmptyState, StatusBadge, SurfaceCard } from "../ui/components.tsx"
 import { ExtensionUiProvider, useExtensionUi } from "../ui/provider.tsx"
 import { AppIcon } from "../ui/icons.tsx"
-import { themeOptions } from "../ui/i18n.ts"
 
 function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ")
@@ -128,7 +127,9 @@ function getOptionsCopy(locale: Locale) {
       deleteLabel: "删除",
       selectBookmark: "选择",
       currentLocalInventory: "当前本地库存。",
-      waitingForTags: "仍在等待标签覆盖。"
+      waitingForTags: "仍在等待标签覆盖。",
+      preferencesLabel: "偏好设置",
+      infoLabel: "信息"
     }
   }
 
@@ -214,7 +215,9 @@ function getOptionsCopy(locale: Locale) {
     deleteLabel: "Delete",
     selectBookmark: "Select",
     currentLocalInventory: "Current local inventory.",
-    waitingForTags: "Still waiting for tag coverage."
+    waitingForTags: "Still waiting for tag coverage.",
+    preferencesLabel: "Preferences",
+    infoLabel: "Info"
   }
 }
 
@@ -239,26 +242,8 @@ function getListIdByBookmarkId(bookmarkId: string, bookmarkListByBookmarkId: Map
   return bookmarkListByBookmarkId.get(bookmarkId) ?? INBOX_LIST_ID
 }
 
-function normalizeListName(value: string) {
-  return value.trim().toLocaleLowerCase()
-}
-
 function getVisibleLists(lists: ListRecord[]) {
   return lists.filter((list) => list.id !== INBOX_LIST_ID)
-}
-
-function getNextAvailableListName(baseName: string, lists: ListRecord[]) {
-  const visibleNames = new Set(getVisibleLists(lists).map((list) => normalizeListName(list.name)))
-  if (!visibleNames.has(normalizeListName(baseName))) {
-    return baseName
-  }
-
-  let index = 2
-  while (visibleNames.has(normalizeListName(`${baseName} ${index}`))) {
-    index += 1
-  }
-
-  return `${baseName} ${index}`
 }
 
 function getDisplayListName(listId: string, listNamesById: Map<string, string>, copy: OptionsCopy) {
@@ -267,6 +252,18 @@ function getDisplayListName(listId: string, listNamesById: Map<string, string>, 
   }
 
   return listNamesById.get(listId) ?? copy.noList
+}
+
+function getNextThemePreference(themePreference: "system" | "light" | "dark"): "system" | "light" | "dark" {
+  if (themePreference === "system") {
+    return "dark"
+  }
+
+  if (themePreference === "dark") {
+    return "light"
+  }
+
+  return "system"
 }
 
 function createFieldId(scope: string, name: string) {
@@ -314,15 +311,6 @@ function InlineMessage({
       {message}
     </div>
   )
-}
-
-function getLocaleSummaryLabel(locale: Locale) {
-  return locale === "zh-CN" ? "中文" : "English"
-}
-
-function getThemeSummaryLabel(themePreference: "system" | "light" | "dark", locale: Locale) {
-  const option = themeOptions.find((entry) => entry.value === themePreference)
-  return option ? option.label[locale] : themePreference
 }
 
 function FieldBlock({
@@ -806,37 +794,30 @@ function WorkspaceSidebar({
   themePreference,
   copy,
   lastSyncLabel,
-  selectedListId,
-  setSelectedListId,
-  editingListId,
-  editingListName,
-  setEditingListName,
-  onCreateList,
-  onStartListRename,
-  onCommitListRename,
-  onCancelListRename
+  activeTagId,
+  onTagSelect,
+  setLocale,
+  setThemePreference
 }: {
   workspace: ReturnType<typeof useWorkspaceData>
   locale: Locale
   themePreference: "system" | "light" | "dark"
   copy: OptionsCopy
   lastSyncLabel: string
-  selectedListId: string
-  setSelectedListId: React.Dispatch<React.SetStateAction<string>>
-  editingListId: string | null
-  editingListName: string
-  setEditingListName: React.Dispatch<React.SetStateAction<string>>
-  onCreateList: () => Promise<void>
-  onStartListRename: (listId: string, name: string) => void
-  onCommitListRename: (nextName?: string) => Promise<void>
-  onCancelListRename: () => void
+  activeTagId: string
+  onTagSelect: (tagId: string) => void
+  setLocale: (locale: Locale) => Promise<void>
+  setThemePreference: (themePreference: "system" | "light" | "dark") => Promise<void>
 }) {
-  const visibleListCounts = workspace.stats.listCounts.filter((list) => list.listId !== INBOX_LIST_ID)
+  const tagCountById = workspace.bookmarkTags.reduce((map, bookmarkTag) => {
+    map.set(bookmarkTag.tagId, (map.get(bookmarkTag.tagId) ?? 0) + 1)
+    return map
+  }, new Map<string, number>())
 
   return (
     <aside
       data-testid="lists-sidebar"
-      className="options-sidebar-shell flex min-h-[420px] min-w-0 flex-col overflow-hidden">
+      className="options-demo-sidebar options-sidebar-shell flex min-h-[420px] min-w-0 flex-col overflow-hidden">
       <section data-testid="sidebar-status-section" className="options-sidebar-hero">
         <div className="flex flex-wrap items-center gap-3">
           <div className="options-overline">{getSectionOverline(locale, "工作区", "Workspace")}</div>
@@ -871,32 +852,9 @@ function WorkspaceSidebar({
         </div>
       </section>
 
-      <section data-testid="workspace-summary-strip" className="options-sidebar-stats">
-        <div className="options-stat-card">
-          <p className="options-overline !tracking-[0.12em]">{copy.totalTags}</p>
-          <div className="options-stat-value">{workspace.stats.totalBookmarks}</div>
-          <p className="options-meta-copy">{copy.currentLocalInventory}</p>
-        </div>
-
-        <div className="options-stat-card">
-          <p className="options-overline !tracking-[0.12em]">{copy.unclassified}</p>
-          <div className="options-stat-value">{workspace.stats.unclassifiedCount}</div>
-          <p className="options-meta-copy">{copy.unclassifiedHint}</p>
-        </div>
-      </section>
-
       <section data-testid="sidebar-lists-section" className="options-sidebar-lists">
-        <div className="flex items-center justify-between gap-3 px-6 pb-4 pt-6">
-          <div className="options-overline">{getSectionOverline(locale, "列表", "Lists")}</div>
-          <button
-            type="button"
-            data-testid="add-list-button"
-            aria-label={copy.newList}
-            onClick={() => void onCreateList()}
-            disabled={workspace.isSavingLists}
-            className="options-icon-button">
-            +
-          </button>
+        <div className="px-6 pb-4 pt-6">
+          <div className="options-overline">{getSectionOverline(locale, "标签", "Tags")}</div>
         </div>
 
         <div data-testid="sidebar-lists-scroll" className="scroll-shell min-h-0 flex-1 overflow-y-auto px-6 pb-6">
@@ -904,65 +862,30 @@ function WorkspaceSidebar({
             <button
               type="button"
               data-list-button="all"
-              onClick={() => setSelectedListId("")}
+              onClick={() => onTagSelect("all")}
               className={cn(
                 "options-nav-row w-full text-left",
-                selectedListId === "" && "options-nav-row-active"
+                activeTagId === "all" && "options-nav-row-active"
               )}>
               <span>{copy.allBookmarks}</span>
               <span className="options-nav-count">{workspace.stats.totalBookmarks}</span>
             </button>
 
-            {visibleListCounts.map((list) => {
-              const isSelected = selectedListId === list.listId
+            {workspace.tags.map((tag) => {
+              const isSelected = activeTagId === tag.id
               return (
-                <div key={list.listId} className="group grid grid-cols-[minmax(0,1fr)_20px] items-center gap-2">
-                  {editingListId === list.listId ? (
-                    <div className="options-nav-row options-nav-row-active">
-                      <input
-                        data-testid="inline-list-name-input"
-                        value={editingListName}
-                        autoFocus
-                        onChange={(event) => setEditingListName(event.currentTarget.value)}
-                        onBlur={(event) => void onCommitListRename(event.currentTarget.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault()
-                            void onCommitListRename(event.currentTarget.value)
-                          }
-
-                          if (event.key === "Escape") {
-                            event.preventDefault()
-                            onCancelListRename()
-                          }
-                        }}
-                        className="field-shell h-8 w-full rounded-[6px] border-[var(--border-subtle)] bg-[var(--side-bg)] px-2 text-[13px]"
-                      />
-                      <span className="options-nav-count">{list.count}</span>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      data-list-button={list.listId}
-                      onClick={() => setSelectedListId(list.listId)}
-                      onDoubleClick={() => onStartListRename(list.listId, list.name)}
-                      className={cn(
-                        "options-nav-row w-full text-left",
-                        isSelected && "options-nav-row-active"
-                      )}>
-                      <span className="truncate">{list.name}</span>
-                      <span className="options-nav-count">{list.count}</span>
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    aria-label={`${copy.deleteLabel} ${list.name}`}
-                    onClick={() => void workspace.handleDeleteList(list.listId)}
-                    className="options-row-action">
-                    <AppIcon name="trash" size={11} />
-                  </button>
-                </div>
+                <button
+                  key={tag.id}
+                  type="button"
+                  data-list-button={tag.id}
+                  onClick={() => onTagSelect(tag.id)}
+                  className={cn(
+                    "options-nav-row w-full text-left",
+                    isSelected && "options-nav-row-active"
+                  )}>
+                  <span className="truncate">{tag.name}</span>
+                  <span className="options-nav-count">{tagCountById.get(tag.id) ?? 0}</span>
+                </button>
               )
             })}
           </div>
@@ -971,14 +894,37 @@ function WorkspaceSidebar({
 
       <section data-testid="sidebar-footer-section" className="options-sidebar-config">
         <div className="px-6 py-6">
-          <div className="options-overline">{getSectionOverline(locale, "偏好设置", "Config")}</div>
+          <div className="options-overline">{copy.preferencesLabel}</div>
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
-            <span className="options-footer-chip">
-              {copy.languageLabel} {getLocaleSummaryLabel(locale)}
-            </span>
-            <span className="options-footer-chip">
-              {copy.themeLabel} {getThemeSummaryLabel(themePreference, locale)}
-            </span>
+            <button
+              type="button"
+              data-testid="footer-settings-button"
+              aria-label={copy.preferencesLabel}
+              className="options-footer-icon-button">
+              <AppIcon name="bookmark" size={14} />
+            </button>
+            <button
+              type="button"
+              data-testid="footer-locale-toggle"
+              onClick={() => void setLocale(locale === "zh-CN" ? "en" : "zh-CN")}
+              className="options-footer-chip">
+              中/EN
+            </button>
+            <button
+              type="button"
+              data-testid="footer-theme-toggle"
+              onClick={() => void setThemePreference(getNextThemePreference(themePreference))}
+              className="options-footer-icon-button"
+              aria-label={copy.themeLabel}>
+              {themePreference === "dark" ? "L" : "D"}
+            </button>
+            <button
+              type="button"
+              data-testid="footer-info-button"
+              aria-label={copy.infoLabel}
+              className="options-footer-icon-button">
+              <AppIcon name="info" size={14} />
+            </button>
           </div>
         </div>
       </section>
@@ -1310,9 +1256,10 @@ function SidebarLoading({ copy: _copy }: { copy: OptionsCopy }) {
 
 function OptionsScreen() {
   const workspace = useWorkspaceData()
-  const { locale, themePreference } = useExtensionUi()
+  const { locale, themePreference, setLocale, setThemePreference } = useExtensionUi()
   const copy = getOptionsCopy(locale)
   const [selectedListId, setSelectedListId] = useState("")
+  const [activeTagId, setActiveTagId] = useState("all")
   const [query, setQuery] = useState("")
   const [selectedAuthorHandle, setSelectedAuthorHandle] = useState("")
   const [selectedTagId, setSelectedTagId] = useState("")
@@ -1322,9 +1269,6 @@ function OptionsScreen() {
   const [onlyLongform, setOnlyLongform] = useState(false)
   const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | undefined>(undefined)
   const [selectedBookmarkIds, setSelectedBookmarkIds] = useState<string[]>([])
-  const [editingListId, setEditingListId] = useState<string | null>(null)
-  const [editingListName, setEditingListName] = useState("")
-  const [pendingCreatedListId, setPendingCreatedListId] = useState<string | null>(null)
 
   const bookmarkListByBookmarkId = useMemo(
     () => new Map(workspace.bookmarkLists.map((bookmarkList) => [bookmarkList.bookmarkId, bookmarkList.listId])),
@@ -1335,7 +1279,11 @@ function OptionsScreen() {
   const visibleLists = useMemo(() => getVisibleLists(workspace.lists), [workspace.lists])
   const visibleBookmarks = useMemo(
     () =>
-      applyBookmarkFilters(workspace.bookmarks, {
+      applyBookmarkFilters(activeTagId === "all"
+        ? workspace.bookmarks
+        : workspace.bookmarks.filter((bookmark) =>
+            workspace.bookmarkTags.some((bookmarkTag) => bookmarkTag.bookmarkId === bookmark.tweetId && bookmarkTag.tagId === activeTagId)
+          ), {
         query,
         bookmarkLists: workspace.bookmarkLists,
         selectedListId: selectedListId || undefined,
@@ -1358,6 +1306,7 @@ function OptionsScreen() {
       selectedTagId,
       sortOrder,
       timeRange,
+      activeTagId,
       workspace.bookmarkLists,
       workspace.bookmarkTags,
       workspace.bookmarks
@@ -1383,6 +1332,12 @@ function OptionsScreen() {
       setSelectedListId("")
     }
   }, [selectedListId, workspace.lists])
+
+  useEffect(() => {
+    if (activeTagId !== "all" && !workspace.tags.some((tag) => tag.id === activeTagId)) {
+      setActiveTagId("all")
+    }
+  }, [activeTagId, workspace.tags])
 
   const selectedBookmark =
     visibleBookmarks.find((bookmark) => bookmark.tweetId === selectedBookmarkId) ??
@@ -1423,7 +1378,11 @@ function OptionsScreen() {
     timeRange !== "all" ||
     onlyWithMedia ||
     onlyLongform
-  const currentScopeLabel = selectedListId ? getDisplayListName(selectedListId, listNamesById, copy) : copy.allBookmarks
+  const currentScopeLabel = selectedListId
+    ? getDisplayListName(selectedListId, listNamesById, copy)
+    : activeTagId === "all"
+      ? copy.allBookmarks
+      : workspace.tags.find((tag) => tag.id === activeTagId)?.name ?? copy.allBookmarks
   const activeRefinementChips = [
     query.trim() ? { key: "query", label: `${copy.searchPrefix}: ${truncateText(query.trim(), 24)}` } : null,
     selectedAuthorHandle
@@ -1493,62 +1452,6 @@ function OptionsScreen() {
     setOnlyLongform(false)
   }
 
-  useEffect(() => {
-    if (!editingListId) {
-      return
-    }
-
-    const editingList = workspace.lists.find((list) => list.id === editingListId)
-    if (!editingList) {
-      setEditingListId(null)
-      setEditingListName("")
-    }
-  }, [editingListId, workspace.lists])
-
-  function handleStartListRename(listId: string, name: string) {
-    setEditingListId(listId)
-    setEditingListName(name)
-  }
-
-  async function handleCreateListInline() {
-    const defaultListName = getNextAvailableListName(copy.newList, workspace.lists)
-    const list = await workspace.handleCreateList(defaultListName)
-    if (!list) {
-      return
-    }
-
-    setEditingListId(list.id)
-    setEditingListName(list.name)
-    setPendingCreatedListId(list.id)
-  }
-
-  async function handleCommitListRename(nextNameOverride?: string) {
-    if (!editingListId) {
-      return
-    }
-
-    const nextName = (nextNameOverride ?? editingListName).trim() || copy.newList
-    const listId = editingListId
-
-    try {
-      await workspace.handleRenameList(listId, nextName)
-      if (pendingCreatedListId === listId) {
-        setSelectedListId(listId)
-      }
-      setEditingListId(null)
-      setEditingListName("")
-      setPendingCreatedListId(null)
-    } catch {
-      // Keep the input active so the user can correct the name.
-    }
-  }
-
-  function handleCancelListRename() {
-    setEditingListId(null)
-    setEditingListName("")
-    setPendingCreatedListId(null)
-  }
-
   return (
     <>
       <BackgroundScene />
@@ -1571,15 +1474,10 @@ function OptionsScreen() {
                 themePreference={themePreference}
                 copy={copy}
                 lastSyncLabel={lastSyncLabel}
-                selectedListId={selectedListId}
-                setSelectedListId={setSelectedListId}
-                editingListId={editingListId}
-                editingListName={editingListName}
-                setEditingListName={setEditingListName}
-                onCreateList={handleCreateListInline}
-                onStartListRename={handleStartListRename}
-                onCommitListRename={handleCommitListRename}
-                onCancelListRename={handleCancelListRename}
+                activeTagId={activeTagId}
+                onTagSelect={setActiveTagId}
+                setLocale={setLocale}
+                setThemePreference={setThemePreference}
               />
 
               <BookmarkResultsPane

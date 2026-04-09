@@ -537,6 +537,14 @@
     color: var(--text-primary);
   }
 
+  .options-demo-sidebar {
+    display: flex;
+    min-height: 100dvh;
+    flex-direction: column;
+    border-right: 1px solid var(--border-subtle);
+    background: var(--side-bg);
+  }
+
   .options-sidebar-hero,
   .options-sidebar-stats,
   .options-sidebar-config {
@@ -818,6 +826,23 @@
     background: var(--surface-bg);
     padding: 7px 13px;
     color: var(--text-secondary);
+  }
+
+  .options-footer-icon-button {
+    display: inline-flex;
+    min-height: 32px;
+    min-width: 32px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    background: var(--surface-bg);
+    color: var(--text-secondary);
+  }
+
+  .options-footer-icon-button:hover {
+    background: var(--button-secondary-hover);
+    color: var(--text-primary);
   }
 
   .options-inspector-field,

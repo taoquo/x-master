@@ -6,8 +6,8 @@ import { act } from "react"
 import { OptionsApp } from "../../src/options/OptionsApp.tsx"
 import { upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
-import { createList, moveBookmarkToList } from "../../src/lib/storage/listsStore.ts"
-import { saveSettings } from "../../src/lib/storage/settings.ts"
+import { createList } from "../../src/lib/storage/listsStore.ts"
+import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
 import { attachTagToBookmark, createTag } from "../../src/lib/storage/tagsStore.ts"
 import { render, settle } from "../helpers/render.tsx"
 import { installChromeRuntimeHarness } from "../helpers/runtime.ts"
@@ -44,20 +44,7 @@ function setSelectValue(
   element.dispatchEvent(new dom.Event("change", { bubbles: true }))
 }
 
-function setInputValue(
-  element: HTMLInputElement,
-  value: string,
-  dom: {
-    HTMLInputElement: typeof HTMLInputElement
-    Event: typeof Event
-  }
-) {
-  const descriptor = Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, "value")
-  descriptor?.set?.call(element, value)
-  element.dispatchEvent(new dom.Event("input", { bubbles: true }))
-}
-
-test("OptionsApp renders in Chinese by default and keeps demo shell active", async () => {
+test("OptionsApp renders the Chinese locale shell and keeps demo shell active", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
 
@@ -84,8 +71,6 @@ test("OptionsApp renders in Chinese by default and keeps demo shell active", asy
     }
   ])
 
-  const researchList = await createList({ name: "Research" })
-  await moveBookmarkToList({ bookmarkId: "tweet-2", listId: researchList.id })
   const tag = await createTag({ name: "AI" })
   await attachTagToBookmark({ bookmarkId: "tweet-2", tagId: tag.id })
   await saveSettings({
@@ -107,7 +92,7 @@ test("OptionsApp renders in Chinese by default and keeps demo shell active", asy
   await settle()
 
   assert.match(container.textContent ?? "", /书签/)
-  assert.match(container.textContent ?? "", /列表/)
+  assert.match(container.textContent ?? "", /标签/)
   assert.match(container.textContent ?? "", /详情/)
   assert.match(container.textContent ?? "", /偏好设置/)
 
@@ -116,11 +101,11 @@ test("OptionsApp renders in Chinese by default and keeps demo shell active", asy
   assert.equal(container.querySelector(".options-advanced-panel"), null)
   assert.equal(container.querySelector(".options-bulk-panel"), null)
 
-  const researchButton = findListButton(container, researchList.id)
-  assert.ok(researchButton)
+  const tagButton = findListButton(container, tag.id)
+  assert.ok(tagButton)
 
   await act(async () => {
-    researchButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    tagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
 
@@ -248,6 +233,180 @@ test("OptionsApp renders the demo shell and hides legacy options panels", async 
   assert.equal(container.querySelector(".options-bulk-panel"), null)
 })
 
+test("OptionsApp uses demo tag navigation and footer preference toggles", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  const tag = await createTag({ name: "AI" })
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-demo-tag",
+      tweetUrl: "https://x.com/alice/status/tweet-demo-tag",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Tagged bookmark",
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await attachTagToBookmark({ bookmarkId: "tweet-demo-tag", tagId: tag.id })
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "light",
+    lastSyncSummary: {
+      status: "idle",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 0
+    },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const sidebar = findByTestId(container, "lists-sidebar")
+  assert.ok(sidebar)
+  assert.match(sidebar.textContent ?? "", /全部书签/)
+  assert.match(sidebar.textContent ?? "", /AI/)
+
+  const localeToggle = findByTestId(container, "footer-locale-toggle") as HTMLButtonElement | null
+  const themeToggle = findByTestId(container, "footer-theme-toggle") as HTMLButtonElement | null
+  assert.ok(localeToggle)
+  assert.ok(themeToggle)
+  assert.equal(localeToggle.textContent?.trim(), "中/EN")
+
+  await act(async () => {
+    localeToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.match(container.textContent ?? "", /Bookmarks/)
+  assert.equal(localeToggle.textContent?.trim(), "中/EN")
+  const localeSettings = await getSettings()
+  assert.equal(localeSettings.locale, "en")
+
+  await act(async () => {
+    themeToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const themeSettings = await getSettings()
+  assert.equal(themeSettings.themePreference, "system")
+})
+
+test("OptionsApp theme toggle keeps system preference reachable", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: {
+      status: "idle",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 0
+    },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const themeToggle = findByTestId(container, "footer-theme-toggle") as HTMLButtonElement | null
+  assert.ok(themeToggle)
+
+  await act(async () => {
+    themeToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+  assert.equal((await getSettings()).themePreference, "dark")
+
+  await act(async () => {
+    themeToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+  assert.equal((await getSettings()).themePreference, "light")
+
+  await act(async () => {
+    themeToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+  assert.equal((await getSettings()).themePreference, "system")
+})
+
+test("OptionsApp falls back to all bookmarks when the active tag is deleted", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-tagged",
+      tweetUrl: "https://x.com/alice/status/tweet-tagged",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Tagged bookmark",
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-untagged",
+      tweetUrl: "https://x.com/bob/status/tweet-untagged",
+      authorName: "Bob",
+      authorHandle: "bob",
+      text: "Untagged bookmark",
+      createdAtOnX: "2026-04-09T08:20:00.000Z",
+      savedAt: "2026-04-09T08:30:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  const tag = await createTag({ name: "AI" })
+  await attachTagToBookmark({ bookmarkId: "tweet-tagged", tagId: tag.id })
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "light",
+    lastSyncSummary: {
+      status: "idle",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 0
+    },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const tagButton = findListButton(container, tag.id)
+  assert.ok(tagButton)
+  await act(async () => {
+    tagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+  assert.equal(getBookmarkCards(container).length, 1)
+
+  const deleteTagButton = Array.from(container.querySelectorAll(".options-library-row")).find((row) =>
+    row.textContent?.includes("AI")
+  ) as HTMLButtonElement | undefined
+  assert.ok(deleteTagButton)
+  await act(async () => {
+    deleteTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const allButton = findListButton(container, "all")
+  assert.ok(allButton)
+  assert.match(allButton.className, /options-nav-row-active/)
+  assert.match(container.textContent ?? "", /All bookmarks/)
+  assert.equal(getBookmarkCards(container).length, 2)
+})
+
 test("OptionsApp supports tag creation on the inspector without legacy bulk panel", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
@@ -322,7 +481,7 @@ test("OptionsApp supports tag creation on the inspector without legacy bulk pane
 
 })
 
-test("OptionsApp creates a list inline and commits the edited name on Enter", async () => {
+test("OptionsApp filters results by selected sidebar tag", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
 
@@ -336,10 +495,21 @@ test("OptionsApp creates a list inline and commits the edited name on Enter", as
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
       rawPayload: {}
+    },
+    {
+      tweetId: "tweet-2",
+      tweetUrl: "https://x.com/bob/status/tweet-2",
+      authorName: "Bob",
+      authorHandle: "bob",
+      text: "Prompt engineering notes",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T02:00:00.000Z",
+      rawPayload: {}
     }
   ])
 
-  await createList({ name: "Research" })
+  const aiTag = await createTag({ name: "AI" })
+  await attachTagToBookmark({ bookmarkId: "tweet-2", tagId: aiTag.id })
   await saveSettings({
     schemaVersion: 3,
     locale: "en",
@@ -368,35 +538,19 @@ test("OptionsApp creates a list inline and commits the edited name on Enter", as
   assert.ok(findByTestId(container, "results-stack"))
   assert.ok(findByTestId(container, "inspector-section-stack"))
   assert.equal(findByTestId(container, "inline-list-name-input"), null)
+  assert.equal(getBookmarkCards(container).length, 2)
 
-  const addListButton = findByTestId(container, "add-list-button") as HTMLButtonElement | null
-  assert.ok(addListButton)
+  const aiTagButton = findListButton(container, aiTag.id)
+  assert.ok(aiTagButton)
 
   await act(async () => {
-    addListButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    aiTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
 
-  const inlineEditor = findByTestId(container, "inline-list-name-input") as HTMLInputElement | null
-  assert.ok(inlineEditor)
-  assert.equal(inlineEditor.value, "New list")
-  assert.match(container.textContent ?? "", /Showing 1 of 1/)
-  assert.doesNotMatch(container.textContent ?? "", /Scoped to New list/)
-
-  await act(async () => {
-    setInputValue(inlineEditor, "Reading", dom.window)
-  })
-  await settle()
-
-  await act(async () => {
-    inlineEditor.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
-  })
-  await settle()
-
-  assert.equal(findByTestId(container, "inline-list-name-input"), null)
-  assert.match(container.textContent ?? "", /Reading/)
-  assert.match(container.textContent ?? "", /Showing 0 of 1/)
-  assert.match(container.textContent ?? "", /Scoped to Reading/)
+  const cards = getBookmarkCards(container)
+  assert.equal(cards.length, 1)
+  assert.match(cards[0].textContent ?? "", /Prompt engineering notes/)
 })
 
 test("OptionsApp uses rail layout and shared field/button primitives", async () => {
@@ -490,8 +644,8 @@ test("OptionsApp renders flat navigation rows and restrained result cards", asyn
       rawPayload: {}
     }
   ])
-  const aiList = await createList({ name: "AI" })
-  await moveBookmarkToList({ bookmarkId: "tweet-1", listId: aiList.id })
+  const aiTag = await createTag({ name: "AI" })
+  await attachTagToBookmark({ bookmarkId: "tweet-1", tagId: aiTag.id })
   await saveSettings({
     schemaVersion: 3,
     locale: "en",
@@ -504,12 +658,12 @@ test("OptionsApp renders flat navigation rows and restrained result cards", asyn
   await settle()
 
   const allBookmarksButton = findListButton(container, "all")
-  const aiListButton = findListButton(container, aiList.id)
+  const aiTagButton = findListButton(container, aiTag.id)
   const searchInput = container.querySelector("#filters-search") as HTMLInputElement | null
   let cards = getBookmarkCards(container)
 
   assert.ok(allBookmarksButton)
-  assert.ok(aiListButton)
+  assert.ok(aiTagButton)
   assert.ok(searchInput)
   assert.match(allBookmarksButton?.className ?? "", /options-nav-row-active/)
   assert.equal(cards.length, 1)
@@ -519,7 +673,7 @@ test("OptionsApp renders flat navigation rows and restrained result cards", asyn
   assert.match(cards[0].className, /options-result-card-selected/)
 
   await act(async () => {
-    aiListButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    aiTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
 
@@ -527,12 +681,12 @@ test("OptionsApp renders flat navigation rows and restrained result cards", asyn
   const listBadge = cards[0].querySelector(".workspace-badge-plain")
 
   assert.equal(cards.length, 1)
-  assert.match(aiListButton?.className ?? "", /options-nav-row-active/)
+  assert.match(aiTagButton?.className ?? "", /options-nav-row-active/)
   assert.ok(listBadge)
-  assert.equal(listBadge?.textContent, "AI")
+  assert.equal(listBadge?.textContent, "No list")
 })
 
-test("OptionsApp supports double-click rename and keeps duplicate names blocked", async () => {
+test("OptionsApp does not expose list rename controls in tag navigation", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
 
@@ -549,8 +703,7 @@ test("OptionsApp supports double-click rename and keeps duplicate names blocked"
     }
   ])
 
-  const researchList = await createList({ name: "Research" })
-  await createList({ name: "Archive" })
+  await createTag({ name: "Research" })
   await saveSettings({
     schemaVersion: 3,
     locale: "en",
@@ -565,35 +718,12 @@ test("OptionsApp supports double-click rename and keeps duplicate names blocked"
     classificationRules: []
   })
 
-  const { container, dom } = render(React.createElement(OptionsApp))
+  const { container } = render(React.createElement(OptionsApp))
   await settle()
 
-  const researchButton = findListButton(container, researchList.id)
-  assert.ok(researchButton)
-
-  await act(async () => {
-    researchButton.dispatchEvent(new dom.window.MouseEvent("dblclick", { bubbles: true }))
-  })
-  await settle()
-
-  const inlineEditor = findByTestId(container, "inline-list-name-input") as HTMLInputElement | null
-  assert.ok(inlineEditor)
-  assert.equal(inlineEditor.value, "Research")
-
-  await act(async () => {
-    setInputValue(inlineEditor, "Archive", dom.window)
-  })
-  await settle()
-
-  await act(async () => {
-    inlineEditor.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
-  })
-  await settle()
-
-  assert.ok(findByTestId(container, "inline-list-name-input"))
-  assert.match(container.textContent ?? "", /already exists/i)
-  assert.match(container.textContent ?? "", /Research/)
-  assert.match(container.textContent ?? "", /Archive/)
+  assert.equal(findByTestId(container, "inline-list-name-input"), null)
+  assert.equal(findByTestId(container, "add-list-button"), null)
+  assert.match(findByTestId(container, "lists-sidebar")?.textContent ?? "", /Research/)
 })
 
 test("OptionsApp renders an explorer sidebar and placeholder-style toolbar controls", async () => {
@@ -636,7 +766,6 @@ test("OptionsApp renders an explorer sidebar and placeholder-style toolbar contr
   const shell = findByTestId(container, "workspace-shell")
   const syncPanel = findByTestId(container, "workspace-sidebar-sync")
   const sidebarStatus = findByTestId(container, "sidebar-status-section")
-  const addListButton = findByTestId(container, "add-list-button") as HTMLButtonElement | null
   const searchInput = container.querySelector("#filters-search") as HTMLInputElement | null
 
   assert.ok(shell)
@@ -644,12 +773,10 @@ test("OptionsApp renders an explorer sidebar and placeholder-style toolbar contr
   assert.ok(treeList)
   assert.ok(syncPanel)
   assert.ok(sidebarStatus)
-  assert.ok(addListButton)
   assert.ok(searchInput)
   assert.match(sidebarStatus.textContent ?? "", /Workspace/)
-  assert.match(container.textContent ?? "", /Lists/)
+  assert.match(container.textContent ?? "", /Tags/)
   assert.match(syncPanel.textContent ?? "", /Last sync/)
-  assert.match(addListButton.textContent ?? "", /\+/)
   assert.doesNotMatch(container.textContent ?? "", /Inbox/)
   assert.equal(toolbar.querySelector('label[for="filters-search"]'), null)
   assert.equal(toolbar.querySelector('label[for="filters-sort"]'), null)
@@ -778,14 +905,14 @@ test("OptionsApp renders a single tags summary and preferences inside the left s
 
   assert.ok(findByTestId(container, "workspace-overview"))
   const sidebar = findByTestId(container, "lists-sidebar")
-  const summaryStrip = findByTestId(container, "workspace-summary-strip")
 
   assert.ok(sidebar)
-  assert.ok(summaryStrip)
-  assert.match(summaryStrip.textContent ?? "", /总标签数/)
-  assert.match(summaryStrip.textContent ?? "", /未分类/)
-  assert.equal(sidebar.contains(summaryStrip), true)
+  assert.equal(findByTestId(container, "workspace-summary-strip"), null)
   assert.match(sidebar.textContent ?? "", /偏好设置/)
+  assert.ok(findByTestId(container, "footer-settings-button"))
+  assert.ok(findByTestId(container, "footer-locale-toggle"))
+  assert.ok(findByTestId(container, "footer-theme-toggle"))
+  assert.ok(findByTestId(container, "footer-info-button"))
   assert.equal(findByTestId(container, "toggle-preferences-panel"), null)
   assert.equal(findByTestId(container, "workspace-preferences-inline"), null)
 })
@@ -811,7 +938,7 @@ test("OptionsApp does not expose expandable inline preferences in demo shell", a
   const { container } = render(React.createElement(OptionsApp))
   await settle()
 
-  assert.match(container.textContent ?? "", /深色/)
+  assert.ok(findByTestId(container, "footer-theme-toggle"))
   assert.equal(findByTestId(container, "toggle-preferences-panel"), null)
   assert.equal(findByTestId(container, "workspace-preferences-inline"), null)
 })
