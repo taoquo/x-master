@@ -297,6 +297,128 @@ test("OptionsApp uses demo tag navigation and footer preference toggles", async 
   assert.equal(themeSettings.themePreference, "system")
 })
 
+test("OptionsApp switches between grid and list views and shows demo filter popover", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-grid-media",
+      tweetUrl: "https://x.com/alice/status/tweet-grid-media",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Bookmark with media",
+      media: [{ type: "photo", url: "https://example.com/image.jpg" }],
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      metrics: { likes: 2, replies: 0, retweets: 0 },
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-grid-long",
+      tweetUrl: "https://x.com/bob/status/tweet-grid-long",
+      authorName: "Bob",
+      authorHandle: "bob",
+      text: "L".repeat(360),
+      createdAtOnX: "2026-04-09T07:20:00.000Z",
+      savedAt: "2026-04-09T08:30:00.000Z",
+      metrics: { likes: 99, replies: 0, retweets: 0 },
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-grid-created",
+      tweetUrl: "https://x.com/carol/status/tweet-grid-created",
+      authorName: "Carol",
+      authorHandle: "carol",
+      text: "Newest created bookmark",
+      createdAtOnX: "2026-04-09T09:20:00.000Z",
+      savedAt: "2026-04-09T08:20:00.000Z",
+      metrics: { likes: 5, replies: 0, retweets: 0 },
+      rawPayload: {}
+    }
+  ])
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const resultsStack = findByTestId(container, "results-stack")
+  const listToggle = findByTestId(container, "view-toggle-list") as HTMLButtonElement | null
+  const gridToggle = findByTestId(container, "view-toggle-grid") as HTMLButtonElement | null
+  const filterTrigger = findByTestId(container, "filter-trigger") as HTMLButtonElement | null
+  const sortTrigger = findByTestId(container, "sort-trigger")
+
+  assert.ok(resultsStack)
+  assert.ok(listToggle)
+  assert.ok(gridToggle)
+  assert.ok(filterTrigger)
+  assert.ok(sortTrigger)
+  assert.match(resultsStack?.className ?? "", /options-results-grid/)
+  assert.match(sortTrigger?.textContent ?? "", /最近保存/)
+  assert.match(getBookmarkCards(container)[0]?.textContent ?? "", /Bob/)
+
+  await act(async () => {
+    ;(sortTrigger as HTMLButtonElement).dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+  assert.match(sortTrigger?.textContent ?? "", /最早保存/)
+  assert.match(getBookmarkCards(container)[0]?.textContent ?? "", /Alice/)
+
+  await act(async () => {
+    ;(sortTrigger as HTMLButtonElement).dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+  assert.match(sortTrigger?.textContent ?? "", /最近发布/)
+  assert.match(getBookmarkCards(container)[0]?.textContent ?? "", /Carol/)
+
+  await act(async () => {
+    ;(sortTrigger as HTMLButtonElement).dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+  assert.match(sortTrigger?.textContent ?? "", /最多喜欢/)
+  assert.match(getBookmarkCards(container)[0]?.textContent ?? "", /Bob/)
+
+  await act(async () => {
+    filterTrigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const popover = findByTestId(container, "filter-popover")
+  const unreadToggle = container.querySelector('[data-testid="filter-option-unread"] input') as HTMLInputElement | null
+  const archivedToggle = container.querySelector('[data-testid="filter-option-archived"] input') as HTMLInputElement | null
+  const hasMediaToggle = container.querySelector('[data-testid="filter-option-media"] input') as HTMLInputElement | null
+
+  assert.ok(popover)
+  assert.ok(unreadToggle)
+  assert.ok(archivedToggle)
+  assert.ok(hasMediaToggle)
+  assert.equal(unreadToggle.disabled, true)
+  assert.equal(archivedToggle.disabled, true)
+  assert.match(popover?.textContent ?? "", /包含媒体/)
+  assert.match(popover?.textContent ?? "", /长文/)
+  assert.match(popover?.textContent ?? "", /未读/)
+  assert.match(popover?.textContent ?? "", /已归档/)
+
+  await act(async () => {
+    hasMediaToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.match(findByTestId(container, "active-filters-row")?.textContent ?? "", /活跃筛选/)
+  assert.match(findByTestId(container, "active-filters-row")?.textContent ?? "", /包含媒体/)
+  assert.match(findByTestId(container, "library-results-summary")?.textContent ?? "", /结果/)
+
+  await act(async () => {
+    listToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+  assert.match(findByTestId(container, "results-stack")?.className ?? "", /options-results-list/)
+
+  await act(async () => {
+    gridToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+  assert.match(findByTestId(container, "results-stack")?.className ?? "", /options-results-grid/)
+})
+
 test("OptionsApp theme toggle keeps system preference reachable", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
@@ -726,7 +848,7 @@ test("OptionsApp does not expose list rename controls in tag navigation", async 
   assert.match(findByTestId(container, "lists-sidebar")?.textContent ?? "", /Research/)
 })
 
-test("OptionsApp renders an explorer sidebar and placeholder-style toolbar controls", async () => {
+test("OptionsApp renders an explorer sidebar and demo toolbar controls", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
 
@@ -782,10 +904,12 @@ test("OptionsApp renders an explorer sidebar and placeholder-style toolbar contr
   assert.equal(toolbar.querySelector('label[for="filters-sort"]'), null)
   assert.equal(toolbar.querySelector('label[for="filters-time"]'), null)
   assert.equal(searchInput.getAttribute("placeholder"), "Search bookmarks, authors, and notes")
-  assert.match(findByTestId(container, "toolbar-sort-shell")?.className ?? "", /relative min-w-0/)
-  assert.match(findByTestId(container, "toolbar-time-shell")?.className ?? "", /relative min-w-0/)
+  assert.ok(findByTestId(container, "filter-trigger"))
+  assert.ok(findByTestId(container, "sort-trigger"))
+  assert.ok(findByTestId(container, "view-toggle-grid"))
+  assert.ok(findByTestId(container, "view-toggle-list"))
   assert.doesNotMatch(container.textContent ?? "", /Search, refine, and organize saved posts inside the active scope\./)
-  assert.match(container.textContent ?? "", /Search, filter, and organize saved content in the current scope\./)
+  assert.match(container.textContent ?? "", /Active filters/)
   assert.doesNotMatch(container.textContent ?? "", /No active filters\./)
   assert.doesNotMatch(container.textContent ?? "", /Flat groups only\. Nested folders are intentionally removed\./)
 })

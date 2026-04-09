@@ -7,9 +7,10 @@ import type {
   TagRecord
 } from "../lib/types.ts"
 import {
-  applyBookmarkFilters,
+  filterBookmarks,
+  filterBookmarksByFlags,
+  sortBookmarks,
   type BookmarkSortOrder,
-  type SavedTimeRange
 } from "../lib/search/searchBookmarks.ts"
 import { INBOX_LIST_ID } from "../lib/storage/listsStore.ts"
 import { useWorkspaceData } from "./hooks/useWorkspaceData.ts"
@@ -68,6 +69,9 @@ function getOptionsCopy(locale: Locale) {
       libraryDescription: "",
       search: "搜索",
       searchPlaceholder: "搜索书签、作者和备注",
+      filters: "筛选",
+      latestSaved: "最近保存",
+      activeFilters: "活跃筛选",
       sortBy: "排序方式",
       newestSaved: "最近保存",
       oldestSaved: "最早保存",
@@ -80,6 +84,8 @@ function getOptionsCopy(locale: Locale) {
       last90Days: "最近 90 天",
       hasMedia: "包含媒体",
       longform: "长文",
+      unread: "未读",
+      archived: "已归档",
       author: "作者",
       allAuthors: "所有作者",
       tag: "标签",
@@ -156,6 +162,9 @@ function getOptionsCopy(locale: Locale) {
     libraryDescription: "",
     search: "Search",
     searchPlaceholder: "Search bookmarks, authors, and notes",
+    filters: "Filters",
+    latestSaved: "Recently saved",
+    activeFilters: "Active filters",
     sortBy: "Sort by",
     newestSaved: "Newest saved",
     oldestSaved: "Oldest saved",
@@ -168,6 +177,8 @@ function getOptionsCopy(locale: Locale) {
     last90Days: "Last 90 days",
     hasMedia: "Has media",
     longform: "Longform",
+    unread: "Unread",
+    archived: "Archived",
     author: "Author",
     allAuthors: "All authors",
     tag: "Tag",
@@ -268,6 +279,27 @@ function getNextThemePreference(themePreference: "system" | "light" | "dark"): "
 
 function createFieldId(scope: string, name: string) {
   return `${scope}-${name}`
+}
+
+const SORT_ORDER_SEQUENCE: BookmarkSortOrder[] = ["saved-desc", "saved-asc", "created-desc", "likes-desc"]
+
+function getSortLabel(copy: OptionsCopy, sortOrder: BookmarkSortOrder) {
+  switch (sortOrder) {
+    case "saved-asc":
+      return copy.oldestSaved
+    case "created-desc":
+      return copy.newestPublished
+    case "likes-desc":
+      return copy.mostLiked
+    case "saved-desc":
+    default:
+      return copy.latestSaved
+  }
+}
+
+function getNextSortOrder(sortOrder: BookmarkSortOrder): BookmarkSortOrder {
+  const currentIndex = SORT_ORDER_SEQUENCE.indexOf(sortOrder)
+  return SORT_ORDER_SEQUENCE[(currentIndex + 1) % SORT_ORDER_SEQUENCE.length]
 }
 
 function BackgroundScene() {
@@ -406,66 +438,11 @@ function TextInputField({
   )
 }
 
-function ToolbarSelectField({
-  shellTestId,
-  label,
-  id,
-  value,
-  onChange,
-  options
-}: {
-  shellTestId: string
-  label: string
-  id: string
-  value: string
-  onChange: (value: string) => void
-  options: Array<{ value: string; label: string }>
-}) {
-  return (
-    <div data-testid={shellTestId} className="relative min-w-0">
-      <SelectField
-        id={id}
-        ariaLabel={label}
-        value={value}
-        onChange={onChange}
-        options={options}
-        className="options-toolbar-field px-4 pr-10"
-      />
-    </div>
-  )
-}
-
 function ReadonlyField({ value, className, id }: { value: string; className?: string; id?: string }) {
   return (
     <div id={id} className={cn("readonly-field workspace-body", className)}>
       <span className="truncate">{value}</span>
     </div>
-  )
-}
-
-function ToggleChip({
-  checked,
-  label,
-  onChange,
-  className,
-  activeClassName
-}: {
-  checked: boolean
-  label: string
-  onChange: (checked: boolean) => void
-  className?: string
-  activeClassName?: string
-}) {
-  return (
-    <label className={cn("chip-button", className, checked && (activeClassName ?? "chip-button-active"))}>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.currentTarget.checked)}
-        className="sr-only"
-      />
-      <span>{label}</span>
-    </label>
   )
 }
 
@@ -933,21 +910,19 @@ function WorkspaceSidebar({
 }
 
 function WorkspaceToolbar({
-  locale,
   copy,
   loadError,
   currentScopeLabel,
   visibleBookmarksCount,
-  hasActiveRefinements,
   query,
   setQuery,
   searchId,
-  sortId,
   sortOrder,
   setSortOrder,
-  timeId,
-  timeRange,
-  setTimeRange,
+  viewMode,
+  setViewMode,
+  filterPopoverOpen,
+  setFilterPopoverOpen,
   onlyWithMedia,
   setOnlyWithMedia,
   onlyLongform,
@@ -956,21 +931,19 @@ function WorkspaceToolbar({
   clearRefinement,
   clearAllRefinements
 }: {
-  locale: Locale
   copy: OptionsCopy
   loadError: string | null
   currentScopeLabel: string
   visibleBookmarksCount: number
-  hasActiveRefinements: boolean
   query: string
   setQuery: React.Dispatch<React.SetStateAction<string>>
   searchId: string
-  sortId: string
   sortOrder: BookmarkSortOrder
   setSortOrder: React.Dispatch<React.SetStateAction<BookmarkSortOrder>>
-  timeId: string
-  timeRange: SavedTimeRange
-  setTimeRange: React.Dispatch<React.SetStateAction<SavedTimeRange>>
+  viewMode: "grid" | "list"
+  setViewMode: React.Dispatch<React.SetStateAction<"grid" | "list">>
+  filterPopoverOpen: boolean
+  setFilterPopoverOpen: React.Dispatch<React.SetStateAction<boolean>>
   onlyWithMedia: boolean
   setOnlyWithMedia: React.Dispatch<React.SetStateAction<boolean>>
   onlyLongform: boolean
@@ -981,18 +954,11 @@ function WorkspaceToolbar({
 }) {
   return (
     <div data-testid="library-header-section" className="options-main-header">
-      <div className="flex flex-col gap-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <div className="options-overline">{copy.libraryTitle} Archive</div>
             <h2 className="options-display-title-sm mt-3 truncate">{currentScopeLabel}</h2>
-            <p className="options-body-copy mt-4 max-w-[54ch]">
-              {loadError
-                ? ""
-                : locale === "zh-CN"
-                  ? "在当前范围内搜索、筛选并整理已保存内容。当前没有启用筛选时，可添加作者、标签、时间或内容条件。"
-                  : "Search, filter, and organize saved content in the current scope. Add author, tag, date, or content filters when needed."}
-            </p>
           </div>
           <div className="text-right">
             <div className="options-results-value">{visibleBookmarksCount}</div>
@@ -1016,53 +982,81 @@ function WorkspaceToolbar({
             />
           </div>
 
-          <ToolbarSelectField
-            shellTestId="toolbar-sort-shell"
-            label={copy.sortBy}
-            id={sortId}
-            value={sortOrder}
-            onChange={(value) => setSortOrder(value as BookmarkSortOrder)}
-            options={[
-              { value: "saved-desc", label: copy.newestSaved },
-              { value: "saved-asc", label: copy.oldestSaved },
-              { value: "created-desc", label: copy.newestPublished },
-              { value: "likes-desc", label: copy.mostLiked }
-            ]}
-          />
+          <div className="options-toolbar-inline">
+            <div className="relative">
+              <button
+                type="button"
+                data-testid="filter-trigger"
+                className="options-toolbar-action"
+                aria-expanded={filterPopoverOpen}
+                onClick={() => setFilterPopoverOpen((current) => !current)}>
+                <AppIcon name="filter" size={14} />
+                <span>{copy.filters}</span>
+              </button>
 
-          <ToolbarSelectField
-            shellTestId="toolbar-time-shell"
-            label={copy.savedTime}
-            id={timeId}
-            value={timeRange}
-            onChange={(value) => setTimeRange(value as SavedTimeRange)}
-            options={[
-              { value: "all", label: copy.anyTime },
-              { value: "7d", label: copy.last7Days },
-              { value: "30d", label: copy.last30Days },
-              { value: "90d", label: copy.last90Days }
-            ]}
-          />
+              {filterPopoverOpen ? (
+                <div data-testid="filter-popover" className="options-filter-popover">
+                  <label data-testid="filter-option-media" className="options-filter-row">
+                    <input
+                      type="checkbox"
+                      checked={onlyWithMedia}
+                      onChange={(event) => setOnlyWithMedia(event.currentTarget.checked)}
+                    />
+                    <span>{copy.hasMedia}</span>
+                  </label>
+                  <label data-testid="filter-option-longform" className="options-filter-row">
+                    <input
+                      type="checkbox"
+                      checked={onlyLongform}
+                      onChange={(event) => setOnlyLongform(event.currentTarget.checked)}
+                    />
+                    <span>{copy.longform}</span>
+                  </label>
+                  <label data-testid="filter-option-unread" className="options-filter-row is-disabled">
+                    <input type="checkbox" disabled />
+                    <span>{copy.unread}</span>
+                  </label>
+                  <label data-testid="filter-option-archived" className="options-filter-row is-disabled">
+                    <input type="checkbox" disabled />
+                    <span>{copy.archived}</span>
+                  </label>
+                </div>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              data-testid="sort-trigger"
+              className="options-toolbar-action"
+              onClick={() => setSortOrder((current) => getNextSortOrder(current))}>
+              <span>{getSortLabel(copy, sortOrder)}</span>
+            </button>
+
+            <div className="options-view-toggle-group">
+              <button
+                type="button"
+                data-testid="view-toggle-grid"
+                className={cn("options-view-toggle", viewMode === "grid" && "is-active")}
+                aria-pressed={viewMode === "grid"}
+                onClick={() => setViewMode("grid")}>
+                Grid
+              </button>
+              <button
+                type="button"
+                data-testid="view-toggle-list"
+                className={cn("options-view-toggle", viewMode === "list" && "is-active")}
+                aria-pressed={viewMode === "list"}
+                onClick={() => setViewMode("list")}>
+                List
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="grid gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <ToggleChip
-              checked={onlyWithMedia}
-              label={copy.hasMedia}
-              onChange={setOnlyWithMedia}
-              className="options-chip"
-            />
-            <ToggleChip
-              checked={onlyLongform}
-              label={copy.longform}
-              onChange={setOnlyLongform}
-              className="options-chip"
-            />
-          </div>
-
-          {hasActiveRefinements ? (
-            <div className="flex flex-wrap items-center gap-2">
+        <div data-testid="active-filters-row" className="options-active-filters">
+          <span className="options-meta-copy">{copy.activeFilters}</span>
+          {activeRefinementChips.length ? (
+            <>
               {activeRefinementChips.map((chip) => (
                 <button
                   key={chip.key}
@@ -1073,15 +1067,16 @@ function WorkspaceToolbar({
                   <AppIcon name="close" size={12} />
                 </button>
               ))}
-
               <button
                 type="button"
                 onClick={clearAllRefinements}
-                className="options-clear-button ml-auto">
+                className="options-clear-button">
                 <span>{copy.clearAll}</span>
               </button>
-            </div>
-          ) : null}
+            </>
+          ) : (
+            <span className="options-meta-copy">-</span>
+          )}
         </div>
       </div>
     </div>
@@ -1095,14 +1090,14 @@ function BookmarkResultsPane({
   selectedListId,
   currentScopeLabel,
   searchId,
-  sortId,
-  timeId,
   query,
   setQuery,
   sortOrder,
   setSortOrder,
-  timeRange,
-  setTimeRange,
+  viewMode,
+  setViewMode,
+  filterPopoverOpen,
+  setFilterPopoverOpen,
   onlyWithMedia,
   setOnlyWithMedia,
   onlyLongform,
@@ -1113,7 +1108,6 @@ function BookmarkResultsPane({
   setSelectedBookmarkIds,
   visibleBookmarks,
   activeRefinementChips,
-  hasActiveRefinements,
   bookmarkListByBookmarkId,
   tagNamesByBookmarkId,
   listNamesById,
@@ -1126,14 +1120,14 @@ function BookmarkResultsPane({
   selectedListId: string
   currentScopeLabel: string
   searchId: string
-  sortId: string
-  timeId: string
   query: string
   setQuery: React.Dispatch<React.SetStateAction<string>>
   sortOrder: BookmarkSortOrder
   setSortOrder: React.Dispatch<React.SetStateAction<BookmarkSortOrder>>
-  timeRange: SavedTimeRange
-  setTimeRange: React.Dispatch<React.SetStateAction<SavedTimeRange>>
+  viewMode: "grid" | "list"
+  setViewMode: React.Dispatch<React.SetStateAction<"grid" | "list">>
+  filterPopoverOpen: boolean
+  setFilterPopoverOpen: React.Dispatch<React.SetStateAction<boolean>>
   onlyWithMedia: boolean
   setOnlyWithMedia: React.Dispatch<React.SetStateAction<boolean>>
   onlyLongform: boolean
@@ -1144,7 +1138,6 @@ function BookmarkResultsPane({
   setSelectedBookmarkIds: React.Dispatch<React.SetStateAction<string[]>>
   visibleBookmarks: BookmarkRecord[]
   activeRefinementChips: Array<{ key: string; label: string }>
-  hasActiveRefinements: boolean
   bookmarkListByBookmarkId: Map<string, string>
   tagNamesByBookmarkId: Map<string, string[]>
   listNamesById: Map<string, string>
@@ -1155,21 +1148,19 @@ function BookmarkResultsPane({
     <section data-testid="library-workspace" className="options-main-shell min-h-[420px] min-w-0 overflow-hidden p-0 xl:h-[100dvh]">
       <div className="flex h-full min-h-0 flex-col">
         <WorkspaceToolbar
-          locale={locale}
           copy={copy}
           loadError={workspace.loadError}
           currentScopeLabel={currentScopeLabel}
           visibleBookmarksCount={visibleBookmarks.length}
-          hasActiveRefinements={hasActiveRefinements}
           query={query}
           setQuery={setQuery}
           searchId={searchId}
-          sortId={sortId}
           sortOrder={sortOrder}
           setSortOrder={setSortOrder}
-          timeId={timeId}
-          timeRange={timeRange}
-          setTimeRange={setTimeRange}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+          filterPopoverOpen={filterPopoverOpen}
+          setFilterPopoverOpen={setFilterPopoverOpen}
           onlyWithMedia={onlyWithMedia}
           setOnlyWithMedia={setOnlyWithMedia}
           onlyLongform={onlyLongform}
@@ -1180,13 +1171,18 @@ function BookmarkResultsPane({
         />
 
         <div data-testid="library-results-summary" className="options-results-summary flex items-center justify-between gap-3 px-12 py-5">
-          <span className="options-meta-copy">{copy.showing} {visibleBookmarks.length} {copy.of} {workspace.bookmarks.length}</span>
+          <span className="options-meta-copy">{visibleBookmarks.length} {copy.results}</span>
           {selectedListId ? <span className="options-meta-copy">{copy.scopedTo} {currentScopeLabel}</span> : null}
         </div>
 
         <div data-testid="library-results-scroll" className="scroll-shell min-h-0 flex-1 overflow-y-auto px-12 pb-12 pt-8">
           {visibleBookmarks.length ? (
-            <div data-testid="results-stack" className="grid content-start gap-8 sm:grid-cols-2 2xl:grid-cols-2">
+            <div
+              data-testid="results-stack"
+              className={cn(
+                "content-start gap-8",
+                viewMode === "grid" ? "options-results-grid grid sm:grid-cols-2 2xl:grid-cols-2" : "options-results-list flex flex-col"
+              )}>
               {visibleBookmarks.map((bookmark, index) => {
                 const currentTagNames = tagNamesByBookmarkId.get(bookmark.tweetId) ?? []
                 const currentListName = getDisplayListName(
@@ -1261,10 +1257,9 @@ function OptionsScreen() {
   const [selectedListId, setSelectedListId] = useState("")
   const [activeTagId, setActiveTagId] = useState("all")
   const [query, setQuery] = useState("")
-  const [selectedAuthorHandle, setSelectedAuthorHandle] = useState("")
-  const [selectedTagId, setSelectedTagId] = useState("")
   const [sortOrder, setSortOrder] = useState<BookmarkSortOrder>("saved-desc")
-  const [timeRange, setTimeRange] = useState<SavedTimeRange>("all")
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [filterPopoverOpen, setFilterPopoverOpen] = useState(false)
   const [onlyWithMedia, setOnlyWithMedia] = useState(false)
   const [onlyLongform, setOnlyLongform] = useState(false)
   const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | undefined>(undefined)
@@ -1278,36 +1273,30 @@ function OptionsScreen() {
   const listNamesById = useMemo(() => new Map(workspace.lists.map((list) => [list.id, list.name])), [workspace.lists])
   const visibleLists = useMemo(() => getVisibleLists(workspace.lists), [workspace.lists])
   const visibleBookmarks = useMemo(
-    () =>
-      applyBookmarkFilters(activeTagId === "all"
+    () => {
+      const scopedBookmarks = activeTagId === "all"
         ? workspace.bookmarks
         : workspace.bookmarks.filter((bookmark) =>
             workspace.bookmarkTags.some((bookmarkTag) => bookmarkTag.bookmarkId === bookmark.tweetId && bookmarkTag.tagId === activeTagId)
-          ), {
-        query,
-        bookmarkLists: workspace.bookmarkLists,
-        selectedListId: selectedListId || undefined,
-        bookmarkTags: workspace.bookmarkTags,
-        selectedAuthorHandles: selectedAuthorHandle ? [selectedAuthorHandle] : [],
-        authorMatchMode: "any",
-        selectedTagIds: selectedTagId ? [selectedTagId] : [],
-        tagMatchMode: "all",
-        timeRange,
-        onlyWithMedia,
-        onlyLongform,
+          )
+
+      return sortBookmarks(
+        filterBookmarksByFlags(
+          filterBookmarks(scopedBookmarks, query),
+          {
+            onlyWithMedia,
+            onlyLongform
+          }
+        ),
         sortOrder
-      }),
+      )
+    },
     [
       onlyLongform,
       onlyWithMedia,
       query,
-      selectedAuthorHandle,
-      selectedListId,
-      selectedTagId,
       sortOrder,
-      timeRange,
       activeTagId,
-      workspace.bookmarkLists,
       workspace.bookmarkTags,
       workspace.bookmarks
     ]
@@ -1344,18 +1333,6 @@ function OptionsScreen() {
     workspace.bookmarks.find((bookmark) => bookmark.tweetId === selectedBookmarkId) ??
     null
 
-  const authorOptions = useMemo(() => {
-    const values = new Map<string, string>()
-
-    for (const bookmark of workspace.bookmarks) {
-      values.set(bookmark.authorHandle, `${bookmark.authorName} (@${bookmark.authorHandle})`)
-    }
-
-    return [...values.entries()]
-      .sort((left, right) => left[1].localeCompare(right[1]))
-      .map(([value, label]) => ({ value, label }))
-  }, [workspace.bookmarks])
-
   const tagNamesByBookmarkId = useMemo(() => {
     const map = new Map<string, string[]>()
 
@@ -1368,16 +1345,7 @@ function OptionsScreen() {
   }, [tagsById, workspace.bookmarkTags, workspace.bookmarks])
 
   const searchId = createFieldId("filters", "search")
-  const sortId = createFieldId("filters", "sort")
-  const timeId = createFieldId("filters", "time")
   const lastSyncLabel = formatTimestamp(workspace.summary.lastSyncedAt, locale)
-  const hasActiveRefinements =
-    Boolean(query.trim()) ||
-    Boolean(selectedAuthorHandle) ||
-    Boolean(selectedTagId) ||
-    timeRange !== "all" ||
-    onlyWithMedia ||
-    onlyLongform
   const currentScopeLabel = selectedListId
     ? getDisplayListName(selectedListId, listNamesById, copy)
     : activeTagId === "all"
@@ -1385,29 +1353,6 @@ function OptionsScreen() {
       : workspace.tags.find((tag) => tag.id === activeTagId)?.name ?? copy.allBookmarks
   const activeRefinementChips = [
     query.trim() ? { key: "query", label: `${copy.searchPrefix}: ${truncateText(query.trim(), 24)}` } : null,
-    selectedAuthorHandle
-      ? {
-          key: "author",
-          label: `${copy.authorPrefix}: ${authorOptions.find((option) => option.value === selectedAuthorHandle)?.label ?? selectedAuthorHandle}`
-        }
-      : null,
-    selectedTagId
-      ? {
-          key: "tag",
-          label: `${copy.tagPrefix}: ${workspace.tags.find((tag) => tag.id === selectedTagId)?.name ?? selectedTagId}`
-        }
-      : null,
-    timeRange !== "all"
-      ? {
-          key: "time",
-          label:
-            timeRange === "7d"
-              ? copy.last7Days
-              : timeRange === "30d"
-                ? copy.last30Days
-                : copy.last90Days
-        }
-      : null,
     onlyWithMedia ? { key: "media", label: copy.hasMedia } : null,
     onlyLongform ? { key: "longform", label: copy.longform } : null
   ].filter(Boolean) as Array<{ key: string; label: string }>
@@ -1415,21 +1360,6 @@ function OptionsScreen() {
   function clearRefinement(key: string) {
     if (key === "query") {
       setQuery("")
-      return
-    }
-
-    if (key === "author") {
-      setSelectedAuthorHandle("")
-      return
-    }
-
-    if (key === "tag") {
-      setSelectedTagId("")
-      return
-    }
-
-    if (key === "time") {
-      setTimeRange("all")
       return
     }
 
@@ -1445,9 +1375,6 @@ function OptionsScreen() {
 
   function clearAllRefinements() {
     setQuery("")
-    setSelectedAuthorHandle("")
-    setSelectedTagId("")
-    setTimeRange("all")
     setOnlyWithMedia(false)
     setOnlyLongform(false)
   }
@@ -1487,14 +1414,14 @@ function OptionsScreen() {
                 selectedListId={selectedListId}
                 currentScopeLabel={currentScopeLabel}
                 searchId={searchId}
-                sortId={sortId}
-                timeId={timeId}
                 query={query}
                 setQuery={setQuery}
                 sortOrder={sortOrder}
                 setSortOrder={setSortOrder}
-                timeRange={timeRange}
-                setTimeRange={setTimeRange}
+                viewMode={viewMode}
+                setViewMode={setViewMode}
+                filterPopoverOpen={filterPopoverOpen}
+                setFilterPopoverOpen={setFilterPopoverOpen}
                 onlyWithMedia={onlyWithMedia}
                 setOnlyWithMedia={setOnlyWithMedia}
                 onlyLongform={onlyLongform}
@@ -1505,7 +1432,6 @@ function OptionsScreen() {
                 setSelectedBookmarkIds={setSelectedBookmarkIds}
                 visibleBookmarks={visibleBookmarks}
                 activeRefinementChips={activeRefinementChips}
-                hasActiveRefinements={hasActiveRefinements}
                 bookmarkListByBookmarkId={bookmarkListByBookmarkId}
                 tagNamesByBookmarkId={tagNamesByBookmarkId}
                 listNamesById={listNamesById}
