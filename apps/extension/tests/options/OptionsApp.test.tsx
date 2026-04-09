@@ -178,7 +178,7 @@ test("OptionsApp renders the Figma shell with editorial rails", async () => {
     classificationRules: []
   })
 
-  const { container } = render(React.createElement(OptionsApp))
+  const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
   const overview = findByTestId(container, "workspace-overview")
@@ -194,8 +194,16 @@ test("OptionsApp renders the Figma shell with editorial rails", async () => {
   assert.match(sidebar?.textContent ?? "", /工作区/)
   assert.match(sidebar?.textContent ?? "", /偏好设置/)
   assert.match(library?.textContent ?? "", /资料库/)
+  assert.match(container.textContent ?? "", /选择一个书签以查看详情/)
+
+  const firstCard = getBookmarkCards(container)[0]
+  await act(async () => {
+    firstCard.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
   assert.match(container.textContent ?? "", /元数据/)
-  assert.match(container.textContent ?? "", /归档/)
+  assert.match(container.textContent ?? "", /内容摘要/)
 })
 
 test("OptionsApp renders the demo shell and hides legacy options panels", async () => {
@@ -276,7 +284,7 @@ test("OptionsApp uses demo tag navigation and footer preference toggles", async 
   const themeToggle = findByTestId(container, "footer-theme-toggle") as HTMLButtonElement | null
   assert.ok(localeToggle)
   assert.ok(themeToggle)
-  assert.equal(localeToggle.textContent?.trim(), "中/EN")
+  assert.equal(localeToggle.textContent?.trim(), "中")
 
   await act(async () => {
     localeToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
@@ -284,7 +292,7 @@ test("OptionsApp uses demo tag navigation and footer preference toggles", async 
   await settle()
 
   assert.match(container.textContent ?? "", /Bookmarks/)
-  assert.equal(localeToggle.textContent?.trim(), "中/EN")
+  assert.equal(localeToggle.textContent?.trim(), "EN")
   const localeSettings = await getSettings()
   assert.equal(localeSettings.locale, "en")
 
@@ -419,6 +427,55 @@ test("OptionsApp switches between grid and list views and shows demo filter popo
   assert.match(findByTestId(container, "results-stack")?.className ?? "", /options-results-grid/)
 })
 
+test("OptionsApp renders the demo inspector and localized copy", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-inspector",
+      tweetUrl: "https://x.com/alice/status/tweet-inspector",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Inspector content summary",
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "light",
+    lastSyncSummary: {
+      status: "idle",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 0
+    },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  assert.match(container.textContent ?? "", /选择一个书签以查看详情/)
+
+  const card = getBookmarkCards(container)[0] as HTMLElement
+  await act(async () => {
+    card.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.match(container.textContent ?? "", /元数据/)
+  assert.match(container.textContent ?? "", /详情/)
+  assert.match(container.textContent ?? "", /Alice/)
+  assert.match(container.textContent ?? "", /@alice/)
+  assert.match(container.textContent ?? "", /内容摘要/)
+  assert.match(container.textContent ?? "", /在 X 中打开/)
+  assert.match(container.textContent ?? "", /添加标签/)
+})
+
 test("OptionsApp theme toggle keeps system preference reachable", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
@@ -461,33 +518,47 @@ test("OptionsApp theme toggle keeps system preference reachable", async () => {
   assert.equal((await getSettings()).themePreference, "system")
 })
 
-test("OptionsApp falls back to all bookmarks when the active tag is deleted", async () => {
+test("OptionsApp applies demo multi-tag AND filtering and falls back to all", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await upsertBookmarks([
     {
-      tweetId: "tweet-tagged",
-      tweetUrl: "https://x.com/alice/status/tweet-tagged",
+      tweetId: "tweet-ai",
+      tweetUrl: "https://x.com/alice/status/tweet-ai",
       authorName: "Alice",
       authorHandle: "alice",
-      text: "Tagged bookmark",
+      text: "AI only bookmark",
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
       rawPayload: {}
     },
     {
-      tweetId: "tweet-untagged",
+      tweetId: "tweet-both",
       tweetUrl: "https://x.com/bob/status/tweet-untagged",
       authorName: "Bob",
       authorHandle: "bob",
-      text: "Untagged bookmark",
+      text: "AI and Design bookmark",
       createdAtOnX: "2026-04-09T08:20:00.000Z",
       savedAt: "2026-04-09T08:30:00.000Z",
       rawPayload: {}
+    },
+    {
+      tweetId: "tweet-design",
+      tweetUrl: "https://x.com/carol/status/tweet-design",
+      authorName: "Carol",
+      authorHandle: "carol",
+      text: "Design only bookmark",
+      createdAtOnX: "2026-04-09T08:40:00.000Z",
+      savedAt: "2026-04-09T08:50:00.000Z",
+      rawPayload: {}
     }
   ])
-  const tag = await createTag({ name: "AI" })
-  await attachTagToBookmark({ bookmarkId: "tweet-tagged", tagId: tag.id })
+  const aiTag = await createTag({ name: "AI" })
+  const designTag = await createTag({ name: "Design" })
+  await attachTagToBookmark({ bookmarkId: "tweet-ai", tagId: aiTag.id })
+  await attachTagToBookmark({ bookmarkId: "tweet-both", tagId: aiTag.id })
+  await attachTagToBookmark({ bookmarkId: "tweet-both", tagId: designTag.id })
+  await attachTagToBookmark({ bookmarkId: "tweet-design", tagId: designTag.id })
   await saveSettings({
     schemaVersion: 3,
     locale: "en",
@@ -505,31 +576,52 @@ test("OptionsApp falls back to all bookmarks when the active tag is deleted", as
   const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
-  const tagButton = findListButton(container, tag.id)
-  assert.ok(tagButton)
-  await act(async () => {
-    tagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
-  })
-  await settle()
-  assert.equal(getBookmarkCards(container).length, 1)
+  const aiTagButton = findListButton(container, aiTag.id)
+  const designTagButton = findListButton(container, designTag.id)
+  assert.ok(aiTagButton)
+  assert.ok(designTagButton)
 
-  const deleteTagButton = Array.from(container.querySelectorAll(".options-library-row")).find((row) =>
-    row.textContent?.includes("AI")
-  ) as HTMLButtonElement | undefined
-  assert.ok(deleteTagButton)
   await act(async () => {
-    deleteTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    aiTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
+
+  let cards = getBookmarkCards(container)
+  assert.equal(cards.length, 2)
+  assert.match(container.textContent ?? "", /AI/)
+
+  await act(async () => {
+    designTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  cards = getBookmarkCards(container)
+  assert.equal(cards.length, 1)
+  assert.match(cards[0].textContent ?? "", /AI and Design bookmark/)
+  assert.match(container.textContent ?? "", /AI \+ Design/)
 
   const allButton = findListButton(container, "all")
   assert.ok(allButton)
+  await act(async () => {
+    aiTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  cards = getBookmarkCards(container)
+  assert.equal(cards.length, 2)
+  assert.match(cards[0].textContent ?? "", /Design/)
+
+  await act(async () => {
+    designTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
   assert.match(allButton.className, /options-nav-row-active/)
   assert.match(container.textContent ?? "", /All bookmarks/)
-  assert.equal(getBookmarkCards(container).length, 2)
+  assert.equal(getBookmarkCards(container).length, 3)
 })
 
-test("OptionsApp supports tag creation on the inspector without legacy bulk panel", async () => {
+test("OptionsApp supports adding existing tags in the inspector without legacy bulk panel", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
 
@@ -707,7 +799,7 @@ test("OptionsApp uses rail layout and shared field/button primitives", async () 
   assert.match(searchInput.className, /options-toolbar-field/)
 })
 
-test("OptionsApp renders the detail inspector as a rail with shared form actions", async () => {
+test("OptionsApp renders the detail inspector with metadata, summary, and tag actions", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await upsertBookmarks([
@@ -741,14 +833,16 @@ test("OptionsApp renders the detail inspector as a rail with shared form actions
 
   const inspector = container.querySelector(".options-inspector-shell") as HTMLElement | null
   const attachTagSelect = container.querySelector('[data-testid="attach-tag-select"]') as HTMLSelectElement | null
-  const createButton = findButton(container, "Create")
+  const openOnXButton = findButton(container, "Open on X")
 
   assert.ok(inspector)
   assert.ok(attachTagSelect)
-  assert.ok(createButton)
+  assert.ok(openOnXButton)
   assert.match(inspector.className, /options-inspector-shell/)
   assert.match(attachTagSelect.className, /options-inspector-field/)
-  assert.match(createButton?.className ?? "", /options-primary-button/)
+  assert.match(container.textContent ?? "", /Metadata/)
+  assert.match(container.textContent ?? "", /Summary/)
+  assert.match(container.textContent ?? "", /Add tag/)
 })
 
 test("OptionsApp renders flat navigation rows and restrained result cards", async () => {
@@ -792,6 +886,15 @@ test("OptionsApp renders flat navigation rows and restrained result cards", asyn
   assert.match(allBookmarksButton?.className ?? "", /options-nav-row/)
   assert.match(searchInput.className, /options-toolbar-field/)
   assert.match(cards[0].className, /options-result-card/)
+  assert.doesNotMatch(cards[0].className, /options-result-card-selected/)
+  assert.equal(cards[0].querySelector('input[type="checkbox"]'), null)
+
+  await act(async () => {
+    cards[0].dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  cards = getBookmarkCards(container)
   assert.match(cards[0].className, /options-result-card-selected/)
 
   await act(async () => {
@@ -806,6 +909,50 @@ test("OptionsApp renders flat navigation rows and restrained result cards", asyn
   assert.match(aiTagButton?.className ?? "", /options-nav-row-active/)
   assert.ok(listBadge)
   assert.equal(listBadge?.textContent, "No list")
+})
+
+test("OptionsApp exposes sidebar tag create and delete actions like the demo", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "light",
+    lastSyncSummary: { status: "idle", fetchedCount: 0, insertedCount: 0, updatedCount: 0, failedCount: 0 },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const originalPrompt = dom.window.prompt
+  dom.window.prompt = () => "灵感"
+
+  const createTagButton = findByTestId(container, "sidebar-create-tag") as HTMLButtonElement | null
+  assert.ok(createTagButton)
+
+  await act(async () => {
+    createTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.match(findByTestId(container, "lists-sidebar")?.textContent ?? "", /灵感/)
+
+  const deleteTagButton = findByTestId(container, "sidebar-delete-tag") as HTMLButtonElement | null
+  assert.ok(deleteTagButton)
+
+  const originalConfirm = dom.window.confirm
+  dom.window.confirm = () => true
+
+  await act(async () => {
+    deleteTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  dom.window.prompt = originalPrompt
+  dom.window.confirm = originalConfirm
+
+  assert.doesNotMatch(findByTestId(container, "lists-sidebar")?.textContent ?? "", /灵感/)
 })
 
 test("OptionsApp does not expose list rename controls in tag navigation", async () => {
@@ -903,7 +1050,7 @@ test("OptionsApp renders an explorer sidebar and demo toolbar controls", async (
   assert.equal(toolbar.querySelector('label[for="filters-search"]'), null)
   assert.equal(toolbar.querySelector('label[for="filters-sort"]'), null)
   assert.equal(toolbar.querySelector('label[for="filters-time"]'), null)
-  assert.equal(searchInput.getAttribute("placeholder"), "Search bookmarks, authors, and notes")
+  assert.equal(searchInput.getAttribute("placeholder"), "Search bookmarks, authors and notes...")
   assert.ok(findByTestId(container, "filter-trigger"))
   assert.ok(findByTestId(container, "sort-trigger"))
   assert.ok(findByTestId(container, "view-toggle-grid"))
@@ -945,7 +1092,7 @@ test("OptionsApp keeps sidebar lists and library results in separate scroll regi
     classificationRules: []
   })
 
-  const { container } = render(React.createElement(OptionsApp))
+  const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
   const sidebar = findByTestId(container, "lists-sidebar")
@@ -959,10 +1106,15 @@ test("OptionsApp keeps sidebar lists and library results in separate scroll regi
   const librarySummary = findByTestId(container, "library-results-summary")
   const toolbar = findByTestId(container, "workspace-toolbar")
   const resultsScroll = findByTestId(container, "library-results-scroll")
-  const inspectorMeta = findByTestId(container, "inspector-meta-section")
+  const firstCard = getBookmarkCards(container)[0]
+  await act(async () => {
+    firstCard.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const inspectorMeta = findByTestId(container, "inspector-metadata-section")
+  const inspectorSummary = findByTestId(container, "inspector-summary-section")
   const inspectorTags = findByTestId(container, "inspector-tags-section")
-  const inspectorAssignment = findByTestId(container, "inspector-assignment-section")
-  const inspectorCreateTag = findByTestId(container, "inspector-create-tag-section")
 
   assert.ok(sidebar)
   assert.ok(sidebarStatus)
@@ -976,9 +1128,8 @@ test("OptionsApp keeps sidebar lists and library results in separate scroll regi
   assert.ok(toolbar)
   assert.ok(resultsScroll)
   assert.ok(inspectorMeta)
+  assert.ok(inspectorSummary)
   assert.ok(inspectorTags)
-  assert.ok(inspectorAssignment)
-  assert.ok(inspectorCreateTag)
   assert.equal(sidebar.contains(sidebarStatus), true)
   assert.equal(sidebar.contains(sidebarLists), true)
   assert.equal(sidebar.contains(sidebarFooter), true)

@@ -3,7 +3,6 @@ import type {
   BookmarkRecord,
   BookmarkTagRecord,
   Locale,
-  ListRecord,
   TagRecord
 } from "../lib/types.ts"
 import {
@@ -20,6 +19,10 @@ import { AppIcon } from "../ui/icons.tsx"
 
 function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ")
+}
+
+function haveSameItems(current: string[], next: string[]) {
+  return current.length === next.length && current.every((value, index) => value === next[index])
 }
 
 function formatTimestamp(value: string | undefined, locale: Locale) {
@@ -68,10 +71,10 @@ function getOptionsCopy(locale: Locale) {
       libraryTitle: "资料库",
       libraryDescription: "",
       search: "搜索",
-      searchPlaceholder: "搜索书签、作者和备注",
+      searchPlaceholder: "搜索书签、作者和备注...",
       filters: "筛选",
       latestSaved: "最近保存",
-      activeFilters: "活跃筛选",
+      activeFilters: "活跃筛选:",
       sortBy: "排序方式",
       newestSaved: "最近保存",
       oldestSaved: "最早保存",
@@ -104,7 +107,11 @@ function getOptionsCopy(locale: Locale) {
       detailsTitle: "详情",
       detailsDescription: "",
       noBookmarkSelectedTitle: "尚未选择书签",
-      noBookmarkSelectedDescription: "",
+      noBookmarkSelectedDescription: "选择一个书签以查看详情",
+      metadataTitle: "元数据",
+      detailLabel: "详情",
+      timeLabel: "时间",
+      summaryTitle: "内容摘要",
       openOnX: "在 X 中打开",
       tagsTitle: "标签",
       noTagsYet: "还没有标签。",
@@ -117,6 +124,8 @@ function getOptionsCopy(locale: Locale) {
       createTagLabel: "创建标签",
       createTagDescription: "",
       create: "创建",
+      createTagPrompt: "输入新标签名称",
+      deleteTagConfirmPrefix: "确认删除标签",
       tagLibrary: "标签库",
       noTagsCreated: "还没有创建任何标签。",
       results: "结果",
@@ -160,11 +169,11 @@ function getOptionsCopy(locale: Locale) {
     createList: "Create list",
     libraryTitle: "Library",
     libraryDescription: "",
-    search: "Search",
-    searchPlaceholder: "Search bookmarks, authors, and notes",
+      search: "Search",
+    searchPlaceholder: "Search bookmarks, authors and notes...",
     filters: "Filters",
     latestSaved: "Recently saved",
-    activeFilters: "Active filters",
+    activeFilters: "Active filters:",
     sortBy: "Sort by",
     newestSaved: "Newest saved",
     oldestSaved: "Oldest saved",
@@ -197,7 +206,11 @@ function getOptionsCopy(locale: Locale) {
     detailsTitle: "Details",
     detailsDescription: "",
     noBookmarkSelectedTitle: "No bookmark selected",
-    noBookmarkSelectedDescription: "",
+    noBookmarkSelectedDescription: "Select a bookmark to view details",
+    metadataTitle: "Metadata",
+    detailLabel: "Details",
+    timeLabel: "Time",
+    summaryTitle: "Summary",
     openOnX: "Open on X",
     tagsTitle: "Tags",
     noTagsYet: "No tags yet.",
@@ -210,6 +223,8 @@ function getOptionsCopy(locale: Locale) {
     createTagLabel: "Create tag",
     createTagDescription: "",
     create: "Create",
+    createTagPrompt: "Enter a new tag name",
+    deleteTagConfirmPrefix: "Delete tag",
     tagLibrary: "Tag library",
     noTagsCreated: "No tags created yet.",
     results: "results",
@@ -251,10 +266,6 @@ function getTagNamesForBookmark(bookmarkId: string, bookmarkTags: BookmarkTagRec
 
 function getListIdByBookmarkId(bookmarkId: string, bookmarkListByBookmarkId: Map<string, string>) {
   return bookmarkListByBookmarkId.get(bookmarkId) ?? INBOX_LIST_ID
-}
-
-function getVisibleLists(lists: ListRecord[]) {
-  return lists.filter((list) => list.id !== INBOX_LIST_ID)
 }
 
 function getDisplayListName(listId: string, listNamesById: Map<string, string>, copy: OptionsCopy) {
@@ -438,14 +449,6 @@ function TextInputField({
   )
 }
 
-function ReadonlyField({ value, className, id }: { value: string; className?: string; id?: string }) {
-  return (
-    <div id={id} className={cn("readonly-field workspace-body", className)}>
-      <span className="truncate">{value}</span>
-    </div>
-  )
-}
-
 function PreviewMedia({ bookmark, index }: { bookmark: BookmarkRecord; index: number }) {
   const palettes = [
     "from-[#f0efeb] via-[#ecebe7] to-[#e6e4de]",
@@ -494,22 +497,18 @@ function BookmarkCard({
   currentListName,
   currentTagNames,
   selected,
-  checked,
   locale,
   copy,
-  onSelect,
-  onToggle
+  onSelect
 }: {
   bookmark: BookmarkRecord
   index: number
   currentListName: string
   currentTagNames: string[]
   selected: boolean
-  checked: boolean
   locale: Locale
   copy: OptionsCopy
   onSelect: () => void
-  onToggle: () => void
 }) {
   return (
     <article
@@ -519,20 +518,6 @@ function BookmarkCard({
         "options-result-card group relative flex min-h-[220px] flex-col overflow-hidden p-4",
         selected && "options-result-card-selected"
       )}>
-      <div className="absolute right-4 top-4 z-10">
-        <input
-          type="checkbox"
-          aria-label={`${copy.selectBookmark} ${bookmark.authorHandle}`}
-          checked={checked}
-          onChange={(event) => {
-            event.stopPropagation()
-            onToggle()
-          }}
-          onClick={(event) => event.stopPropagation()}
-          className="h-4 w-4 rounded border-[var(--border-subtle)] bg-white"
-        />
-      </div>
-
       <PreviewMedia bookmark={bookmark} index={index} />
 
       <div className="mt-3 flex items-start gap-3">
@@ -567,40 +552,28 @@ function BookmarkCard({
 
 function BookmarkInspector({
   bookmark,
-  lists,
   tags,
   bookmarkTags,
-  currentListId,
   isSavingTags,
   locale,
   copy,
-  onMoveToList,
   onAttachTag,
   onDetachTag,
-  onCreateTag,
-  onDeleteTag
 }: {
   bookmark: BookmarkRecord | null
-  lists: ListRecord[]
   tags: TagRecord[]
   bookmarkTags: BookmarkTagRecord[]
-  currentListId: string
   isSavingTags: boolean
   locale: Locale
   copy: OptionsCopy
-  onMoveToList: (listId: string) => Promise<void>
   onAttachTag: (tagId: string) => Promise<void>
   onDetachTag: (tagId: string) => Promise<void>
-  onCreateTag: (name: string) => Promise<void>
-  onDeleteTag: (tagId: string) => Promise<void>
 }) {
   const [selectedTagId, setSelectedTagId] = useState("")
-  const [newTagName, setNewTagName] = useState("")
   const inspectorScrollRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     setSelectedTagId("")
-    setNewTagName("")
     if (inspectorScrollRef.current) {
       if (typeof inspectorScrollRef.current.scrollTo === "function") {
         inspectorScrollRef.current.scrollTo({ top: 0, behavior: "auto" })
@@ -612,10 +585,14 @@ function BookmarkInspector({
 
   if (!bookmark) {
     return (
-      <EmptyState
-        title={copy.noBookmarkSelectedTitle}
-        description={copy.noBookmarkSelectedDescription}
-      />
+      <SurfaceCard chrome="bare" className="options-inspector-shell xl:h-[100dvh]">
+        <div data-testid="inspector-section-stack" className="scroll-shell flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <EmptyState
+            title={copy.detailsTitle}
+            description={copy.noBookmarkSelectedDescription}
+          />
+        </div>
+      </SurfaceCard>
     )
   }
 
@@ -623,9 +600,13 @@ function BookmarkInspector({
   const availableTagOptions = tags.filter((tag) => !currentTags.some((currentTag) => currentTag.id === tag.id))
 
   const attachSelectId = createFieldId("details", "attach-tag")
-  const createTagId = createFieldId("details", "new-tag")
-  const listSelectId = createFieldId("details", "list")
-  const focusId = createFieldId("details", "focus")
+  const detailTimestamp = formatTimestamp(bookmark.createdAtOnX || bookmark.savedAt, locale)
+  const authorInitials = bookmark.authorName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || bookmark.authorHandle.slice(0, 2).toUpperCase()
 
   return (
     <SurfaceCard
@@ -635,16 +616,35 @@ function BookmarkInspector({
         ref={inspectorScrollRef}
         data-testid="inspector-section-stack"
         className="scroll-shell flex min-h-0 flex-1 flex-col gap-10 overflow-y-auto">
-        <section data-testid="inspector-meta-section" className="options-inspector-header">
-          <div className="options-overline">{getSectionOverline(locale, "元数据", "Metadata")}</div>
+        <section data-testid="inspector-metadata-section" className="options-inspector-section">
+          <div className="options-overline">{getSectionOverline(locale, copy.metadataTitle, "Metadata")}</div>
           <h2 className="options-display-title-xs mt-3">{copy.detailsTitle}</h2>
-          <p className="options-body-copy mt-3">
-            {locale === "zh-CN" ? "查看书签上下文并完成归档操作。" : "Review bookmark context and complete archival actions."}
-          </p>
+
+          <div className="options-inspector-author-row mt-6">
+            <div className="options-inspector-avatar">{authorInitials}</div>
+            <div className="min-w-0">
+              <p className="truncate text-[0.96rem] font-semibold text-[var(--text-primary)]">{bookmark.authorName}</p>
+              <p className="options-meta-copy truncate">@{bookmark.authorHandle}</p>
+            </div>
+          </div>
+
+          <p className="options-meta-copy mt-4">{detailTimestamp}</p>
+        </section>
+
+        <section data-testid="inspector-summary-section" className="options-inspector-section">
+          <div className="options-overline">{getSectionOverline(locale, copy.summaryTitle, "Summary")}</div>
+          <p className="options-body-copy mt-3">{bookmark.text}</p>
+          <button
+            type="button"
+            className="options-secondary-button mt-4 w-full justify-center"
+            onClick={() => window.open(bookmark.tweetUrl, "_blank", "noopener,noreferrer")}>
+            <AppIcon name="external" size={14} />
+            <span>{copy.openOnX}</span>
+          </button>
         </section>
 
         <section data-testid="inspector-tags-section" className="options-inspector-section">
-          <div className="options-section-kicker">{getSectionOverline(locale, "标签", "Tags")}</div>
+          <div className="options-overline">{getSectionOverline(locale, copy.tagsTitle, "Tags")}</div>
           <div data-testid="current-tags" className="mt-4 flex flex-wrap gap-2">
             {!currentTags.length ? <span className="options-meta-copy">{copy.noTagsYet}</span> : null}
             {currentTags.map((tag) => (
@@ -683,83 +683,6 @@ function BookmarkInspector({
             </button>
           </div>
         </section>
-
-        <section data-testid="inspector-assignment-section" className="options-inspector-section">
-          <div className="options-section-kicker">{getSectionOverline(locale, "归档", "Archival")}</div>
-          <div className="mt-4 grid gap-4">
-            <FieldBlock label={copy.bookmarkFocus} htmlFor={focusId}>
-              <ReadonlyField id={focusId} value={truncateText(bookmark.text, 90)} className="options-readonly-field" />
-            </FieldBlock>
-
-            <FieldBlock label={copy.primaryList} htmlFor={listSelectId}>
-              <SelectField
-                id={listSelectId}
-                value={currentListId}
-                onChange={(value) => void onMoveToList(value)}
-                options={[
-                  { value: INBOX_LIST_ID, label: copy.noList },
-                  ...lists.map((list) => ({ value: list.id, label: list.name }))
-                ]}
-                className="options-inspector-field"
-              />
-            </FieldBlock>
-
-            <button
-              type="button"
-              className="options-secondary-button justify-center"
-              onClick={() => window.open(bookmark.tweetUrl, "_blank", "noopener,noreferrer")}>
-              <AppIcon name="external" size={14} />
-              <span>{copy.openOnX}</span>
-            </button>
-          </div>
-        </section>
-
-        <section data-testid="inspector-create-tag-section" className="options-inspector-section">
-          <div className="options-section-kicker">{getSectionOverline(locale, "创建标签", "Create")}</div>
-          <div className="mt-4 grid gap-4">
-            <FieldBlock
-              label={copy.createTagLabel}
-              htmlFor={createTagId}>
-              <TextInputField
-                id={createTagId}
-                value={newTagName}
-                placeholder="research"
-                onChange={setNewTagName}
-                className="options-inspector-field"
-              />
-            </FieldBlock>
-            <p className="options-meta-copy">{locale === "zh-CN" ? "一步创建新标签并附加到当前书签。" : "Create one tag and attach it to the current bookmark."}</p>
-            <button
-              type="button"
-              onClick={() =>
-                void onCreateTag(newTagName).then(() => {
-                  setNewTagName("")
-                })
-              }
-              disabled={isSavingTags || !newTagName.trim()}
-              className="primary-button options-primary-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
-              <AppIcon name="sparkle" size={16} />
-              <span>{copy.create}</span>
-            </button>
-          </div>
-        </section>
-
-        <section className="options-inspector-section">
-          <div className="options-section-kicker">{getSectionOverline(locale, "标签库", "Library")}</div>
-          <div className="mt-4 grid gap-1">
-            {!tags.length ? <span className="options-meta-copy">{copy.noTagsCreated}</span> : null}
-            {tags.map((tag) => (
-              <button
-                key={tag.id}
-                type="button"
-                onClick={() => void onDeleteTag(tag.id)}
-                className="options-library-row">
-                <span>{tag.name}</span>
-                <AppIcon name="trash" size={11} />
-              </button>
-            ))}
-          </div>
-        </section>
       </div>
     </SurfaceCard>
   )
@@ -771,8 +694,10 @@ function WorkspaceSidebar({
   themePreference,
   copy,
   lastSyncLabel,
-  activeTagId,
-  onTagSelect,
+  activeTagIds,
+  onTagToggle,
+  onCreateTag,
+  onDeleteTag,
   setLocale,
   setThemePreference
 }: {
@@ -781,8 +706,10 @@ function WorkspaceSidebar({
   themePreference: "system" | "light" | "dark"
   copy: OptionsCopy
   lastSyncLabel: string
-  activeTagId: string
-  onTagSelect: (tagId: string) => void
+  activeTagIds: string[]
+  onTagToggle: (tagId: string) => void
+  onCreateTag: (name: string) => Promise<unknown>
+  onDeleteTag: (tagId: string) => Promise<unknown>
   setLocale: (locale: Locale) => Promise<void>
   setThemePreference: (themePreference: "system" | "light" | "dark") => Promise<void>
 }) {
@@ -790,6 +717,27 @@ function WorkspaceSidebar({
     map.set(bookmarkTag.tagId, (map.get(bookmarkTag.tagId) ?? 0) + 1)
     return map
   }, new Map<string, number>())
+
+  function handleCreateTagClick() {
+    const name = window.prompt(copy.createTagPrompt, "")
+    if (!name?.trim()) {
+      return
+    }
+
+    void onCreateTag(name)
+  }
+
+  function handleDeleteTagClick(tagId: string, tagName: string) {
+    const shouldDelete = typeof window.confirm === "function"
+      ? window.confirm(`${copy.deleteTagConfirmPrefix} “${tagName}”?`)
+      : true
+
+    if (!shouldDelete) {
+      return
+    }
+
+    void onDeleteTag(tagId)
+  }
 
   return (
     <aside
@@ -831,38 +779,82 @@ function WorkspaceSidebar({
 
       <section data-testid="sidebar-lists-section" className="options-sidebar-lists">
         <div className="px-6 pb-4 pt-6">
-          <div className="options-overline">{getSectionOverline(locale, "标签", "Tags")}</div>
+          <div className="options-sidebar-section-head">
+            <div className="options-overline">{getSectionOverline(locale, "标签", "Tags")}</div>
+            <button
+              type="button"
+              data-testid="sidebar-create-tag"
+              aria-label={copy.createTagLabel}
+              onClick={handleCreateTagClick}
+              className="options-create-tag-button">
+              <span aria-hidden="true">+</span>
+            </button>
+          </div>
         </div>
 
         <div data-testid="sidebar-lists-scroll" className="scroll-shell min-h-0 flex-1 overflow-y-auto px-6 pb-6">
           <div data-testid="sidebar-list-tree" className="space-y-1">
-            <button
-              type="button"
+            <div
+              role="button"
+              tabIndex={0}
               data-list-button="all"
-              onClick={() => onTagSelect("all")}
+              onClick={() => onTagToggle("all")}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault()
+                  onTagToggle("all")
+                }
+              }}
               className={cn(
                 "options-nav-row w-full text-left",
-                activeTagId === "all" && "options-nav-row-active"
+                activeTagIds.includes("all") && "options-nav-row-active"
               )}>
-              <span>{copy.allBookmarks}</span>
+              <span className="options-nav-row-main">
+                <AppIcon name="bookmark" size={14} className="options-nav-row-icon" />
+                <span>{copy.allBookmarks}</span>
+              </span>
               <span className="options-nav-count">{workspace.stats.totalBookmarks}</span>
-            </button>
+            </div>
 
             {workspace.tags.map((tag) => {
-              const isSelected = activeTagId === tag.id
+              const isSelected = activeTagIds.includes(tag.id)
               return (
-                <button
+                <div
                   key={tag.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   data-list-button={tag.id}
-                  onClick={() => onTagSelect(tag.id)}
+                  onClick={() => onTagToggle(tag.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault()
+                      onTagToggle(tag.id)
+                    }
+                  }}
                   className={cn(
                     "options-nav-row w-full text-left",
                     isSelected && "options-nav-row-active"
                   )}>
-                  <span className="truncate">{tag.name}</span>
-                  <span className="options-nav-count">{tagCountById.get(tag.id) ?? 0}</span>
-                </button>
+                  <span className="options-nav-row-main">
+                    <AppIcon name="tag" size={14} className="options-nav-row-icon" />
+                    <span className="truncate">{tag.name}</span>
+                  </span>
+                  <span className="options-nav-row-trailing">
+                    <span className="options-nav-count">{tagCountById.get(tag.id) ?? 0}</span>
+                    <button
+                      type="button"
+                      data-testid={isSelected ? undefined : "sidebar-delete-tag"}
+                      className="options-nav-row-delete"
+                      aria-label={`${copy.deleteLabel} ${tag.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleDeleteTagClick(tag.id, tag.name)
+                      }}
+                    >
+                      <AppIcon name="trash" size={12} />
+                    </button>
+                  </span>
+                </div>
               )
             })}
           </div>
@@ -885,7 +877,7 @@ function WorkspaceSidebar({
               data-testid="footer-locale-toggle"
               onClick={() => void setLocale(locale === "zh-CN" ? "en" : "zh-CN")}
               className="options-footer-chip">
-              中/EN
+              {locale === "zh-CN" ? "中" : "EN"}
             </button>
             <button
               type="button"
@@ -1104,8 +1096,6 @@ function BookmarkResultsPane({
   setOnlyLongform,
   selectedBookmarkId,
   setSelectedBookmarkId,
-  selectedBookmarkIds,
-  setSelectedBookmarkIds,
   visibleBookmarks,
   activeRefinementChips,
   bookmarkListByBookmarkId,
@@ -1134,8 +1124,6 @@ function BookmarkResultsPane({
   setOnlyLongform: React.Dispatch<React.SetStateAction<boolean>>
   selectedBookmarkId: string | undefined
   setSelectedBookmarkId: React.Dispatch<React.SetStateAction<string | undefined>>
-  selectedBookmarkIds: string[]
-  setSelectedBookmarkIds: React.Dispatch<React.SetStateAction<string[]>>
   visibleBookmarks: BookmarkRecord[]
   activeRefinementChips: Array<{ key: string; label: string }>
   bookmarkListByBookmarkId: Map<string, string>
@@ -1191,7 +1179,6 @@ function BookmarkResultsPane({
                   copy
                 )
                 const isSelected = selectedBookmarkId === bookmark.tweetId
-                const isChecked = selectedBookmarkIds.includes(bookmark.tweetId)
 
                 return (
                   <BookmarkCard
@@ -1201,17 +1188,9 @@ function BookmarkResultsPane({
                     currentListName={currentListName}
                     currentTagNames={currentTagNames}
                     selected={isSelected}
-                    checked={isChecked}
                     locale={locale}
                     copy={copy}
                     onSelect={() => setSelectedBookmarkId(bookmark.tweetId)}
-                    onToggle={() =>
-                      setSelectedBookmarkIds((current) =>
-                        current.includes(bookmark.tweetId)
-                          ? current.filter((bookmarkId) => bookmarkId !== bookmark.tweetId)
-                          : [...current, bookmark.tweetId]
-                      )
-                    }
                   />
                 )
               })}
@@ -1255,7 +1234,7 @@ function OptionsScreen() {
   const { locale, themePreference, setLocale, setThemePreference } = useExtensionUi()
   const copy = getOptionsCopy(locale)
   const [selectedListId, setSelectedListId] = useState("")
-  const [activeTagId, setActiveTagId] = useState("all")
+  const [activeTagIds, setActiveTagIds] = useState<string[]>(["all"])
   const [query, setQuery] = useState("")
   const [sortOrder, setSortOrder] = useState<BookmarkSortOrder>("saved-desc")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
@@ -1263,7 +1242,6 @@ function OptionsScreen() {
   const [onlyWithMedia, setOnlyWithMedia] = useState(false)
   const [onlyLongform, setOnlyLongform] = useState(false)
   const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | undefined>(undefined)
-  const [selectedBookmarkIds, setSelectedBookmarkIds] = useState<string[]>([])
 
   const bookmarkListByBookmarkId = useMemo(
     () => new Map(workspace.bookmarkLists.map((bookmarkList) => [bookmarkList.bookmarkId, bookmarkList.listId])),
@@ -1271,13 +1249,23 @@ function OptionsScreen() {
   )
   const tagsById = useMemo(() => new Map(workspace.tags.map((tag) => [tag.id, tag])), [workspace.tags])
   const listNamesById = useMemo(() => new Map(workspace.lists.map((list) => [list.id, list.name])), [workspace.lists])
-  const visibleLists = useMemo(() => getVisibleLists(workspace.lists), [workspace.lists])
+  const bookmarkTagIdsByBookmarkId = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+
+    for (const bookmarkTag of workspace.bookmarkTags) {
+      const tagIds = map.get(bookmarkTag.bookmarkId) ?? new Set<string>()
+      tagIds.add(bookmarkTag.tagId)
+      map.set(bookmarkTag.bookmarkId, tagIds)
+    }
+
+    return map
+  }, [workspace.bookmarkTags])
   const visibleBookmarks = useMemo(
     () => {
-      const scopedBookmarks = activeTagId === "all"
+      const scopedBookmarks = activeTagIds.includes("all")
         ? workspace.bookmarks
         : workspace.bookmarks.filter((bookmark) =>
-            workspace.bookmarkTags.some((bookmarkTag) => bookmarkTag.bookmarkId === bookmark.tweetId && bookmarkTag.tagId === activeTagId)
+            activeTagIds.every((tagId) => bookmarkTagIdsByBookmarkId.get(bookmark.tweetId)?.has(tagId))
           )
 
       return sortBookmarks(
@@ -1296,23 +1284,22 @@ function OptionsScreen() {
       onlyWithMedia,
       query,
       sortOrder,
-      activeTagId,
-      workspace.bookmarkTags,
+      activeTagIds,
+      bookmarkTagIdsByBookmarkId,
       workspace.bookmarks
     ]
   )
 
   useEffect(() => {
     const visibleBookmarkIds = new Set(visibleBookmarks.map((bookmark) => bookmark.tweetId))
-    setSelectedBookmarkIds((current) => current.filter((bookmarkId) => visibleBookmarkIds.has(bookmarkId)))
 
     if (!visibleBookmarks.length) {
       setSelectedBookmarkId(undefined)
       return
     }
 
-    if (!selectedBookmarkId || !visibleBookmarkIds.has(selectedBookmarkId)) {
-      setSelectedBookmarkId(visibleBookmarks[0].tweetId)
+    if (selectedBookmarkId && !visibleBookmarkIds.has(selectedBookmarkId)) {
+      setSelectedBookmarkId(undefined)
     }
   }, [selectedBookmarkId, visibleBookmarks])
 
@@ -1323,10 +1310,17 @@ function OptionsScreen() {
   }, [selectedListId, workspace.lists])
 
   useEffect(() => {
-    if (activeTagId !== "all" && !workspace.tags.some((tag) => tag.id === activeTagId)) {
-      setActiveTagId("all")
-    }
-  }, [activeTagId, workspace.tags])
+    setActiveTagIds((current) => {
+      if (current.includes("all")) {
+        return current.length === 1 ? current : ["all"]
+      }
+
+      const validTagIds = current.filter((tagId) => workspace.tags.some((tag) => tag.id === tagId))
+      const next = validTagIds.length ? validTagIds : ["all"]
+
+      return haveSameItems(current, next) ? current : next
+    })
+  }, [workspace.tags])
 
   const selectedBookmark =
     visibleBookmarks.find((bookmark) => bookmark.tweetId === selectedBookmarkId) ??
@@ -1348,9 +1342,11 @@ function OptionsScreen() {
   const lastSyncLabel = formatTimestamp(workspace.summary.lastSyncedAt, locale)
   const currentScopeLabel = selectedListId
     ? getDisplayListName(selectedListId, listNamesById, copy)
-    : activeTagId === "all"
+    : activeTagIds.includes("all")
       ? copy.allBookmarks
-      : workspace.tags.find((tag) => tag.id === activeTagId)?.name ?? copy.allBookmarks
+      : activeTagIds
+          .map((tagId) => workspace.tags.find((tag) => tag.id === tagId)?.name ?? tagId)
+          .join(" + ")
   const activeRefinementChips = [
     query.trim() ? { key: "query", label: `${copy.searchPrefix}: ${truncateText(query.trim(), 24)}` } : null,
     onlyWithMedia ? { key: "media", label: copy.hasMedia } : null,
@@ -1379,6 +1375,25 @@ function OptionsScreen() {
     setOnlyLongform(false)
   }
 
+  function handleTagToggle(tagId: string) {
+    if (tagId === "all") {
+      setActiveTagIds(["all"])
+      return
+    }
+
+    setActiveTagIds((current) => {
+      if (current.includes("all")) {
+        return [tagId]
+      }
+
+      const next = current.includes(tagId)
+        ? current.filter((currentTagId) => currentTagId !== tagId)
+        : [...current, tagId]
+
+      return next.length ? next : ["all"]
+    })
+  }
+
   return (
     <>
       <BackgroundScene />
@@ -1401,8 +1416,10 @@ function OptionsScreen() {
                 themePreference={themePreference}
                 copy={copy}
                 lastSyncLabel={lastSyncLabel}
-                activeTagId={activeTagId}
-                onTagSelect={setActiveTagId}
+                activeTagIds={activeTagIds}
+                onTagToggle={handleTagToggle}
+                onCreateTag={workspace.handleCreateTag}
+                onDeleteTag={workspace.handleDeleteTag}
                 setLocale={setLocale}
                 setThemePreference={setThemePreference}
               />
@@ -1428,8 +1445,6 @@ function OptionsScreen() {
                 setOnlyLongform={setOnlyLongform}
                 selectedBookmarkId={selectedBookmarkId}
                 setSelectedBookmarkId={setSelectedBookmarkId}
-                selectedBookmarkIds={selectedBookmarkIds}
-                setSelectedBookmarkIds={setSelectedBookmarkIds}
                 visibleBookmarks={visibleBookmarks}
                 activeRefinementChips={activeRefinementChips}
                 bookmarkListByBookmarkId={bookmarkListByBookmarkId}
@@ -1442,20 +1457,11 @@ function OptionsScreen() {
               <section data-testid="workspace-inspector">
                 <BookmarkInspector
                   bookmark={selectedBookmark}
-                  lists={visibleLists}
                   tags={workspace.tags}
                   bookmarkTags={workspace.bookmarkTags}
-                  currentListId={selectedBookmark ? getListIdByBookmarkId(selectedBookmark.tweetId, bookmarkListByBookmarkId) : INBOX_LIST_ID}
                   isSavingTags={workspace.isSavingTags}
                   locale={locale}
                   copy={copy}
-                  onMoveToList={async (listId) => {
-                    if (!selectedBookmark) {
-                      return
-                    }
-
-                    await workspace.handleMoveBookmarkToList(selectedBookmark.tweetId, listId)
-                  }}
                   onAttachTag={async (tagId) => {
                     if (!selectedBookmark) {
                       return
@@ -1469,15 +1475,6 @@ function OptionsScreen() {
                     }
 
                     await workspace.handleDetachTag(selectedBookmark.tweetId, tagId)
-                  }}
-                  onCreateTag={async (name) => {
-                    const tag = await workspace.handleCreateTag(name)
-                    if (selectedBookmark && tag) {
-                      await workspace.handleAttachTag(selectedBookmark.tweetId, tag.id)
-                    }
-                  }}
-                  onDeleteTag={async (tagId) => {
-                    await workspace.handleDeleteTag(tagId)
                   }}
                 />
               </section>
