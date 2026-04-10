@@ -1,5 +1,13 @@
-import type { BookmarkRecord } from "../types.ts"
-import { BOOKMARKS_STORE, getBookmarksDb, requestToPromise, transactionDone } from "./db.ts"
+import type { BookmarkRecord, SiteTweetDraft } from "../types.ts"
+import {
+  BOOKMARK_LISTS_STORE,
+  BOOKMARKS_STORE,
+  BOOKMARK_TAGS_STORE,
+  getBookmarksDb,
+  requestToPromise,
+  transactionDone
+} from "./db.ts"
+import type { BookmarkTagRecord } from "../types.ts"
 
 type StoredBookmark = BookmarkRecord & { updatedAt?: string; id?: string }
 
@@ -42,4 +50,50 @@ export async function getAllBookmarks() {
   return (bookmarks as StoredBookmark[]).sort((left, right) => {
     return String(right.savedAt ?? "").localeCompare(String(left.savedAt ?? ""))
   })
+}
+
+export async function upsertBookmarkSnapshot(snapshot: SiteTweetDraft): Promise<BookmarkRecord> {
+  const db = await getBookmarksDb()
+  const transaction = db.transaction(BOOKMARKS_STORE, "readwrite")
+  const store = transaction.objectStore(BOOKMARKS_STORE)
+  const existing = (await requestToPromise(store.get(snapshot.tweetId))) as StoredBookmark | undefined
+  const now = new Date().toISOString()
+
+  const nextBookmark: StoredBookmark = {
+    id: existing?.id ?? snapshot.tweetId,
+    tweetId: snapshot.tweetId,
+    tweetUrl: existing?.tweetUrl || snapshot.tweetUrl,
+    authorName: existing?.authorName || snapshot.authorName,
+    authorHandle: existing?.authorHandle || snapshot.authorHandle,
+    text: existing?.text || snapshot.text,
+    createdAtOnX: existing?.createdAtOnX || snapshot.createdAtOnX,
+    savedAt: existing?.savedAt || now,
+    media: existing?.media,
+    metrics: existing?.metrics,
+    rawPayload: existing?.rawPayload ?? { source: "site-inline-tagging" },
+    updatedAt: now
+  }
+
+  store.put(nextBookmark)
+  await transactionDone(transaction)
+
+  return nextBookmark
+}
+
+export async function removeBookmarkSnapshot(bookmarkId: string) {
+  const db = await getBookmarksDb()
+  const transaction = db.transaction([BOOKMARKS_STORE, BOOKMARK_LISTS_STORE, BOOKMARK_TAGS_STORE], "readwrite")
+  const bookmarksStore = transaction.objectStore(BOOKMARKS_STORE)
+  const bookmarkListsStore = transaction.objectStore(BOOKMARK_LISTS_STORE)
+  const bookmarkTagsStore = transaction.objectStore(BOOKMARK_TAGS_STORE)
+  const relatedBookmarkTags = (await requestToPromise(bookmarkTagsStore.index("bookmarkId").getAll(bookmarkId))) as BookmarkTagRecord[]
+
+  bookmarksStore.delete(bookmarkId)
+  bookmarkListsStore.delete(bookmarkId)
+
+  for (const bookmarkTag of relatedBookmarkTags) {
+    bookmarkTagsStore.delete(bookmarkTag.id)
+  }
+
+  await transactionDone(transaction)
 }

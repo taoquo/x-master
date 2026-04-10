@@ -13,12 +13,17 @@ function createBookmarkTagId(bookmarkId: string, tagId: string) {
 }
 
 export async function createTag({ name }: { name: string }): Promise<TagRecord> {
+  const trimmedName = name.trim()
+  if (!trimmedName) {
+    throw new Error("Tag name is required")
+  }
+
   const db = await getBookmarksDb()
   const transaction = db.transaction(TAGS_STORE, "readwrite")
   const store = transaction.objectStore(TAGS_STORE)
   const tag = {
     id: `tag-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    name: name.trim(),
+    name: trimmedName,
     createdAt: new Date().toISOString()
   }
 
@@ -64,7 +69,7 @@ export async function getAllTags(): Promise<TagRecord[]> {
   const store = transaction.objectStore(TAGS_STORE)
   const tags = await requestToPromise(store.getAll())
   await transactionDone(transaction)
-  return tags as TagRecord[]
+  return (tags as TagRecord[]).sort((left, right) => left.name.localeCompare(right.name))
 }
 
 export async function getAllBookmarkTags(): Promise<BookmarkTagRecord[]> {
@@ -76,6 +81,36 @@ export async function getAllBookmarkTags(): Promise<BookmarkTagRecord[]> {
   return bookmarkTags as BookmarkTagRecord[]
 }
 
+export async function attachBookmarkTags(relations: Array<{ bookmarkId: string; tagId: string }>) {
+  if (!relations.length) {
+    return 0
+  }
+
+  const db = await getBookmarksDb()
+  const transaction = db.transaction(BOOKMARK_TAGS_STORE, "readwrite")
+  const store = transaction.objectStore(BOOKMARK_TAGS_STORE)
+  let createdCount = 0
+
+  for (const relation of relations) {
+    const id = createBookmarkTagId(relation.bookmarkId, relation.tagId)
+    const existing = await requestToPromise(store.get(id))
+    if (existing) {
+      continue
+    }
+
+    store.put({
+      id,
+      bookmarkId: relation.bookmarkId,
+      tagId: relation.tagId,
+      createdAt: new Date().toISOString()
+    } satisfies BookmarkTagRecord)
+    createdCount += 1
+  }
+
+  await transactionDone(transaction)
+  return createdCount
+}
+
 export async function attachTagToBookmark({
   bookmarkId,
   tagId
@@ -83,22 +118,13 @@ export async function attachTagToBookmark({
   bookmarkId: string
   tagId: string
 }): Promise<BookmarkTagRecord> {
-  const db = await getBookmarksDb()
-  const transaction = db.transaction(BOOKMARK_TAGS_STORE, "readwrite")
-  const store = transaction.objectStore(BOOKMARK_TAGS_STORE)
-  const id = createBookmarkTagId(bookmarkId, tagId)
-  const existing = await requestToPromise(store.get(id))
-
-  const bookmarkTag = existing ?? {
-    id,
+  await attachBookmarkTags([{ bookmarkId, tagId }])
+  return {
+    id: createBookmarkTagId(bookmarkId, tagId),
     bookmarkId,
     tagId,
     createdAt: new Date().toISOString()
   }
-
-  store.put(bookmarkTag)
-  await transactionDone(transaction)
-  return bookmarkTag as BookmarkTagRecord
 }
 
 export async function attachTagToBookmarks({
@@ -108,29 +134,7 @@ export async function attachTagToBookmarks({
   bookmarkIds: string[]
   tagId: string
 }) {
-  if (!bookmarkIds.length) {
-    return
-  }
-
-  const db = await getBookmarksDb()
-  const transaction = db.transaction(BOOKMARK_TAGS_STORE, "readwrite")
-  const store = transaction.objectStore(BOOKMARK_TAGS_STORE)
-
-  for (const bookmarkId of bookmarkIds) {
-    const id = createBookmarkTagId(bookmarkId, tagId)
-    const existing = await requestToPromise(store.get(id))
-
-    store.put(
-      existing ?? {
-        id,
-        bookmarkId,
-        tagId,
-        createdAt: new Date().toISOString()
-      }
-    )
-  }
-
-  await transactionDone(transaction)
+  await attachBookmarkTags(bookmarkIds.map((bookmarkId) => ({ bookmarkId, tagId })))
 }
 
 export async function detachTagFromBookmark({
@@ -174,7 +178,7 @@ export async function listTagsForBookmark(bookmarkId: string): Promise<TagRecord
   const tags = await Promise.all(bookmarkTags.map((bookmarkTag) => requestToPromise(tagsStore.get(bookmarkTag.tagId))))
   await transactionDone(transaction)
 
-  return tags.filter(Boolean) as TagRecord[]
+  return (tags.filter(Boolean) as TagRecord[]).sort((left, right) => left.name.localeCompare(right.name))
 }
 
 export async function listBookmarksByTag(tagId: string): Promise<BookmarkRecord[]> {

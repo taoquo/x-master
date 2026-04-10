@@ -1,5 +1,6 @@
+import { spawn } from "node:child_process"
 import { build, context } from "esbuild"
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -7,6 +8,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const appDir = path.resolve(__dirname, "..")
 const outDir = path.join(appDir, "build", "chrome-mv3")
+const assetsDir = path.join(appDir, "assets")
 const watchMode = process.argv.includes("--watch")
 
 async function readPackageMetadata() {
@@ -21,6 +23,8 @@ async function readPackageMetadata() {
 async function writeStaticFiles() {
   const { name, version } = await readPackageMetadata()
 
+  await cp(assetsDir, path.join(outDir, "assets"), { recursive: true })
+
   await writeFile(
     path.join(outDir, "manifest.json"),
     JSON.stringify(
@@ -30,8 +34,19 @@ async function writeStaticFiles() {
         version,
         permissions: ["cookies", "storage"],
         host_permissions: ["https://x.com/*"],
+        icons: {
+          16: "assets/icons/icon-16.png",
+          32: "assets/icons/icon-32.png",
+          48: "assets/icons/icon-48.png",
+          128: "assets/icons/icon-128.png"
+        },
         action: {
-          default_title: name
+          default_title: name,
+          default_icon: {
+            16: "assets/icons/icon-16.png",
+            32: "assets/icons/icon-32.png",
+            48: "assets/icons/icon-48.png"
+          }
         },
         options_ui: {
           page: "options.html",
@@ -40,7 +55,20 @@ async function writeStaticFiles() {
         background: {
           service_worker: "background.js",
           type: "module"
-        }
+        },
+        content_scripts: [
+          {
+            matches: ["https://x.com/home", "https://x.com/i/bookmarks*"],
+            js: ["content.js"],
+            run_at: "document_idle"
+          }
+        ],
+        web_accessible_resources: [
+          {
+            resources: ["assets/icons/*", "assets/branding/*"],
+            matches: ["https://x.com/*"]
+          }
+        ]
       },
       null,
       2
@@ -55,7 +83,7 @@ async function writeStaticFiles() {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${name} Workspace</title>
-    <link rel="stylesheet" href="./options.css" />
+    <link rel="stylesheet" href="./extension.css" />
   </head>
   <body>
     <div id="root"></div>
@@ -73,7 +101,7 @@ async function writeStaticFiles() {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${name}</title>
-    <link rel="stylesheet" href="./popup.css" />
+    <link rel="stylesheet" href="./extension.css" />
   </head>
   <body>
     <div id="root"></div>
@@ -82,6 +110,56 @@ async function writeStaticFiles() {
 </html>
 `
   )
+}
+
+function resolveTailwindBin() {
+  return process.platform === "win32" ? "tailwindcss.cmd" : "tailwindcss"
+}
+
+function runTailwindBuild({ watch = false } = {}) {
+  const args = [
+    "-c",
+    path.join(appDir, "tailwind.config.cjs"),
+    "-i",
+    path.join(appDir, "src", "styles", "extension.css"),
+    "-o",
+    path.join(outDir, "extension.css")
+  ]
+
+  if (watch) {
+    args.push("--watch")
+  } else {
+    args.push("--minify")
+  }
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(resolveTailwindBin(), args, {
+      cwd: appDir,
+      stdio: watch ? "inherit" : ["ignore", "pipe", "pipe"]
+    })
+
+    if (watch) {
+      child.on("error", reject)
+      resolve(child)
+      return
+    }
+
+    let stderr = ""
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString()
+    })
+
+    child.on("error", reject)
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve(child)
+        return
+      }
+
+      reject(new Error(stderr || `Tailwind build failed with code ${code}`))
+    })
+  })
 }
 
 function createBuildOptions(entryPoint, outfile, format) {
@@ -120,9 +198,20 @@ async function buildExtension() {
     path.join(outDir, "popup.js"),
     "iife"
   )
+  const contentOptions = createBuildOptions(
+    path.join(appDir, "src", "content", "index.ts"),
+    path.join(outDir, "content.js"),
+    "iife"
+  )
 
   if (watchMode) {
-    const contexts = await Promise.all([context(optionsPageOptions), context(backgroundOptions), context(popupOptions)])
+    await runTailwindBuild({ watch: true })
+    const contexts = await Promise.all([
+      context(optionsPageOptions),
+      context(backgroundOptions),
+      context(popupOptions),
+      context(contentOptions)
+    ])
     await Promise.all(contexts.map((buildContext) => buildContext.watch()))
     await writeStaticFiles()
     console.log(`Watching extension sources and writing output to ${outDir}`)
@@ -130,7 +219,7 @@ async function buildExtension() {
     return
   }
 
-  await Promise.all([build(optionsPageOptions), build(backgroundOptions), build(popupOptions)])
+  await Promise.all([build(optionsPageOptions), build(backgroundOptions), build(popupOptions), build(contentOptions), runTailwindBuild()])
   await writeStaticFiles()
   console.log(`Built extension to ${outDir}`)
 }

@@ -13,6 +13,15 @@ export interface BookmarkRecord {
   updatedAt?: string
 }
 
+export interface SiteTweetDraft {
+  tweetId: string
+  tweetUrl: string
+  authorName: string
+  authorHandle: string
+  text: string
+  createdAtOnX: string
+}
+
 export interface TagRecord {
   id: string
   name: string
@@ -26,17 +35,27 @@ export interface BookmarkTagRecord {
   createdAt: string
 }
 
-export interface FolderRecord {
+export interface ListRecord {
   id: string
   name: string
-  parentId?: string
   createdAt: string
 }
 
-export interface BookmarkFolderRecord {
+export interface BookmarkListRecord {
   bookmarkId: string
-  folderId: string
+  listId: string
   updatedAt: string
+}
+
+export interface ClassificationRule {
+  id: string
+  name: string
+  enabled: boolean
+  authorHandles: string[]
+  keywords: string[]
+  requireMedia: boolean
+  requireLongform: boolean
+  targetTagIds: string[]
 }
 
 export interface SyncRunRecord {
@@ -61,18 +80,71 @@ export interface SyncSummary {
   errorSummary?: string
 }
 
-export interface ExtensionSettings {
-  schemaVersion: number
-  lastSyncSummary: SyncSummary
-  hasCompletedOnboarding: boolean
+export interface ListStat {
+  listId: string
+  name: string
+  count: number
 }
 
-export interface PopupData {
+export interface TagStat {
+  tagId: string
+  name: string
+  count: number
+}
+
+export interface AuthorStat {
+  authorHandle: string
+  authorName: string
+  count: number
+}
+
+export type Locale = "zh-CN" | "en"
+
+export type ThemePreference = "system" | "light" | "dark"
+
+export interface WorkspaceStats {
+  totalBookmarks: number
+  inboxCount: number
+  unclassifiedCount: number
+  listCounts: ListStat[]
+  tagCounts: TagStat[]
+  topAuthors: AuthorStat[]
+}
+
+export interface ExtensionSettings {
+  schemaVersion: number
+  locale: Locale
+  themePreference: ThemePreference
+  lastSyncSummary: SyncSummary
+  classificationRules: ClassificationRule[]
+}
+
+export interface WorkspaceData {
   bookmarks: BookmarkRecord[]
+  lists: ListRecord[]
+  bookmarkLists: BookmarkListRecord[]
   tags: TagRecord[]
   bookmarkTags: BookmarkTagRecord[]
+  classificationRules: ClassificationRule[]
   summary: SyncSummary
   latestSyncRun: SyncRunRecord | null
+  stats: WorkspaceStats
+}
+
+export interface SiteTweetTagState {
+  bookmarkId: string
+  tags: TagRecord[]
+  selectedTagIds: string[]
+  locale?: Locale
+}
+
+export interface SiteTweetCreateTagResult extends SiteTweetTagState {
+  createdTag: TagRecord
+}
+
+export interface SiteTweetBookmarkSyncResult {
+  bookmarkId: string
+  enabled: boolean
 }
 
 export function createEmptySyncSummary(): SyncSummary {

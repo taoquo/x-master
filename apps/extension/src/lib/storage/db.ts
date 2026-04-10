@@ -1,11 +1,12 @@
 const DB_NAME = "x-bookmark-manager"
-const DB_VERSION = 3
+const DB_VERSION = 5
 const BOOKMARKS_STORE = "bookmarks"
-const FOLDERS_STORE = "folders"
-const BOOKMARK_FOLDERS_STORE = "bookmark-folders"
+const LISTS_STORE = "folders"
+const BOOKMARK_LISTS_STORE = "bookmark-folders"
 const TAGS_STORE = "tags"
 const BOOKMARK_TAGS_STORE = "bookmark-tags"
 const SYNC_RUNS_STORE = "sync-runs"
+const LEGACY_KNOWLEDGE_CARDS_STORE = "knowledge-cards"
 
 type RequestResult<T> = T extends IDBRequest<infer TResult> ? TResult : never
 
@@ -23,18 +24,20 @@ function openBookmarksDb() {
     request.onupgradeneeded = () => {
       const db = request.result
 
+      if (db.objectStoreNames.contains(LEGACY_KNOWLEDGE_CARDS_STORE)) {
+        db.deleteObjectStore(LEGACY_KNOWLEDGE_CARDS_STORE)
+      }
+
       if (!db.objectStoreNames.contains(BOOKMARKS_STORE)) {
         db.createObjectStore(BOOKMARKS_STORE, { keyPath: "tweetId" })
       }
 
-      if (!db.objectStoreNames.contains(FOLDERS_STORE)) {
-        const foldersStore = db.createObjectStore(FOLDERS_STORE, { keyPath: "id" })
-        foldersStore.createIndex("parentId", "parentId", { unique: false })
+      if (!db.objectStoreNames.contains(LISTS_STORE)) {
+        db.createObjectStore(LISTS_STORE, { keyPath: "id" })
       }
 
-      if (!db.objectStoreNames.contains(BOOKMARK_FOLDERS_STORE)) {
-        const bookmarkFoldersStore = db.createObjectStore(BOOKMARK_FOLDERS_STORE, { keyPath: "bookmarkId" })
-        bookmarkFoldersStore.createIndex("folderId", "folderId", { unique: false })
+      if (!db.objectStoreNames.contains(BOOKMARK_LISTS_STORE)) {
+        db.createObjectStore(BOOKMARK_LISTS_STORE, { keyPath: "bookmarkId" })
       }
 
       if (!db.objectStoreNames.contains(TAGS_STORE)) {
@@ -110,8 +113,8 @@ export async function resetBookmarksDb() {
 
 export {
   BOOKMARKS_STORE,
-  FOLDERS_STORE,
-  BOOKMARK_FOLDERS_STORE,
+  LISTS_STORE,
+  BOOKMARK_LISTS_STORE,
   TAGS_STORE,
   BOOKMARK_TAGS_STORE,
   SYNC_RUNS_STORE,

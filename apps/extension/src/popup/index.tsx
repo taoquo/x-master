@@ -1,7 +1,3 @@
-import "@mantine/core/styles.css"
-import React from "react"
-import App from "./App.tsx"
+import { mountPopup } from "./mountPopup.tsx"
 
-export default function Popup() {
-  return <App />
-}
+mountPopup(document.getElementById("root"))

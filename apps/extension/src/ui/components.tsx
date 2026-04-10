@@ -1,10 +1,9 @@
-import React, { useMemo, useState } from "react"
-import { ActionIcon, Badge, Button, Card, Group, SimpleGrid, Stack, Text, Title, UnstyledButton } from "@mantine/core"
-import { useMediaQuery } from "@mantine/hooks"
-import type { OptionsSection } from "../options/lib/navigation.ts"
-import { getStatusColor } from "./theme.ts"
-import { isUiTestEnv } from "./testEnv.ts"
-import { AppIcon } from "./icons.tsx"
+import React from "react"
+import { getStatusClasses } from "./theme.ts"
+
+function cn(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ")
+}
 
 export function SectionHeader({
   title,
@@ -12,285 +11,113 @@ export function SectionHeader({
   actions
 }: {
   title: string
-  description: string
+  description?: string
   actions?: React.ReactNode
 }) {
   return (
-    <Group justify="space-between" align="center" wrap="wrap">
-      <Stack gap={4}>
-        <Text fw={700} size="xl" c="#18181b">
+    <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+      <div className="min-w-0 flex-1">
+        <h1 className="max-w-[10ch] font-sans text-[clamp(3rem,8vw,5rem)] leading-[0.92] tracking-[-0.06em] text-ink">
           {title}
-        </Text>
-        <Text size="sm" c="dimmed">
-          {description}
-        </Text>
-      </Stack>
-      {actions ? <Group gap="sm">{actions}</Group> : null}
-    </Group>
+        </h1>
+        {description ? (
+          <p className="mt-4 max-w-[28ch] text-lg leading-[1.35] tracking-[-0.02em] text-slate-600 md:text-xl">
+            {description}
+          </p>
+        ) : null}
+      </div>
+      {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
+    </div>
   )
 }
 
 export function SurfaceCard({
   title,
   description,
-  children
+  children,
+  className,
+  bodyClassName,
+  chrome = "default"
 }: {
   title?: string
   description?: string
   children: React.ReactNode
+  className?: string
+  bodyClassName?: string
+  chrome?: "default" | "bare"
+}) {
+  const shellClassName =
+    chrome === "bare"
+      ? "workspace-surface flex flex-col"
+      : "workspace-surface panel-surface flex flex-col rounded-[22px] p-5 md:p-6"
+
+  return (
+    <section className={cn(shellClassName, className)}>
+      {title ? (
+        <div className="mb-4 space-y-2">
+          <h2 className="workspace-heading-lg">{title}</h2>
+          {description ? <p className="workspace-copy">{description}</p> : null}
+        </div>
+      ) : null}
+      <div className={cn("flex min-h-0 flex-1 flex-col", bodyClassName)}>{children}</div>
+    </section>
+  )
+}
+
+export function MetricCard({
+  label,
+  value,
+  hint,
+  accentClassName
+}: {
+  label: string
+  value: string
+  hint: string
+  accentClassName?: string
 }) {
   return (
-    <Card padding="lg" style={{ background: "#ffffff" }}>
-      {title ? (
-        <Stack gap={4} mb="md">
-          <Title order={3}>{title}</Title>
-          {description ? <Text c="dimmed">{description}</Text> : null}
-        </Stack>
-      ) : null}
-      <Stack gap="sm">{children}</Stack>
-    </Card>
-  )
-}
-
-export function MetricCard({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <Card padding="lg" style={{ background: "#ffffff" }}>
-      <Stack gap={8}>
-        <Text size="xs" tt="uppercase" fw={700} c="#71717a">
-          {label}
-        </Text>
-        <Title order={2}>{value}</Title>
-        <Text size="sm" c="dimmed">
-          {hint}
-        </Text>
-      </Stack>
-    </Card>
-  )
-}
-
-export function EmptyState({ title, description }: { title: string; description: string }) {
-  return (
-    <Card
-      padding="lg"
-      style={{
-        borderStyle: "dashed"
-      }}>
-      <Stack gap={6}>
-        <Text fw={600}>{title}</Text>
-        <Text c="dimmed">{description}</Text>
-      </Stack>
-    </Card>
-  )
-}
-
-export function StatusBadge({ status }: { status?: string }) {
-  return (
-    <Badge variant="light" color={getStatusColor(status)}>
-      {status ?? "idle"}
-    </Badge>
-  )
-}
-
-interface WorkspaceShellProps {
-  section: OptionsSection
-  navItems: Array<{ id: OptionsSection; label: string }>
-  onSelectSection: (section: OptionsSection) => void
-  children: React.ReactNode
-}
-
-function getNavIcon(section: OptionsSection) {
-  switch (section) {
-    case "dashboard":
-      return "dashboard"
-    case "inbox":
-      return "inbox"
-    case "library":
-      return "library"
-    case "settings":
-      return "settings"
-    default:
-      return "dashboard"
-  }
-}
-
-export function WorkspaceShell({ section, navItems, onSelectSection, children }: WorkspaceShellProps) {
-  const testEnv = isUiTestEnv()
-  const autoCollapsed = useMediaQuery("(max-width: 1380px)", false, { getInitialValueInEffect: false }) ?? false
-  const [manualCollapsed, setManualCollapsed] = useState<boolean | null>(null)
-  const collapsed = testEnv ? false : manualCollapsed ?? autoCollapsed
-  const railWidth = collapsed ? 72 : 288
-
-  const navButtons = useMemo(
-    () =>
-      navItems.map((item) => {
-        const active = item.id === section
-
-        return (
-          <UnstyledButton
-            key={item.id}
-            type="button"
-            onClick={() => onSelectSection(item.id)}
-            aria-label={item.label}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: collapsed ? "center" : "space-between",
-              gap: 16,
-              minHeight: 40,
-              width: "100%",
-              padding: collapsed ? "10px 0" : "10px 12px",
-              borderRadius: 8,
-              background: active ? "#18181b" : "#ffffff",
-              color: active ? "#ffffff" : "#18181b",
-              border: active ? "1px solid #18181b" : "1px solid transparent",
-              transition: "background 120ms ease, color 120ms ease, border-color 120ms ease"
-            }}>
-            <Group gap={collapsed ? 0 : 16} wrap="nowrap" justify={collapsed ? "center" : "flex-start"}>
-              <AppIcon name={getNavIcon(item.id)} size={20} />
-              {!collapsed ? (
-                <Text size="sm" fw={500} c="inherit">
-                  {item.label}
-                </Text>
-              ) : null}
-            </Group>
-          </UnstyledButton>
-        )
-      }),
-    [collapsed, navItems, onSelectSection, section]
-  )
-
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: `${railWidth}px minmax(0, 1fr)`,
-        minHeight: "100vh",
-        background: "#fafafa"
-      }}>
-      <aside
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 18,
-          padding: 8,
-          borderRight: "1px solid #e4e4e7",
-          background: "#ffffff"
-        }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: collapsed ? "center" : "space-between",
-            gap: 12,
-            minHeight: 40,
-            padding: collapsed ? 0 : "0 4px"
-          }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: collapsed ? "center" : "space-between",
-              gap: 12,
-              flex: 1,
-              minWidth: 0,
-              padding: collapsed ? "0" : "0 8px"
-            }}>
-            <div
-              style={{
-                display: "grid",
-                placeItems: "center",
-                width: 28,
-                height: 28,
-                borderRadius: 8,
-                background: "#18181b",
-                color: "#ffffff",
-                fontSize: 13,
-                fontWeight: 700,
-                flexShrink: 0
-              }}>
-              X
-            </div>
-            {!collapsed ? (
-              <div style={{ minWidth: 0 }}>
-                <Text fw={600} size="sm" c="#18181b">
-                  X Bookmark Manager
-                </Text>
-                <Text size="xs" c="#71717a">
-                  Workspace
-                </Text>
-              </div>
-            ) : null}
-          </div>
-
-          {!testEnv ? (
-            <ActionIcon
-              type="button"
-              variant="subtle"
-              color="gray"
-              onClick={() => setManualCollapsed(!collapsed)}
-              aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}>
-              <AppIcon name={collapsed ? "chevron-right" : "chevron-left"} size={16} />
-            </ActionIcon>
-          ) : null}
+    <div className="panel-elevated relative overflow-hidden rounded-[20px] p-6">
+      <div className="relative">
+        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{label}</p>
+        <div className="mt-5 grid gap-3 md:grid-cols-[auto_minmax(0,1fr)] md:items-end">
+          <div className="font-mono text-[3.3rem] leading-none tracking-[-0.06em] text-slate-900">{value}</div>
+          <p className="max-w-[18ch] text-[0.92rem] leading-6 text-slate-600">{hint}</p>
         </div>
-
-        <nav
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 4
-          }}>
-          {navButtons}
-        </nav>
-      </aside>
-
-      <main
-        style={{
-          minWidth: 0,
-          padding: 16,
-          background: "#fafafa"
-        }}>
-        {children}
-      </main>
+        <div className={cn("mt-6 h-px rounded-full bg-[var(--accent-bg)]", accentClassName)} />
+      </div>
     </div>
   )
 }
 
-export function ActionGrid({ children }: { children: React.ReactNode }) {
+export function EmptyState({ title, description }: { title: string; description?: string }) {
   return (
-    <SimpleGrid cols={{ base: 1, md: 2, xl: 4 }} spacing="lg">
-      {children}
-    </SimpleGrid>
+    <div className="workspace-empty-state">
+      <h3 className="workspace-heading-md">{title}</h3>
+      {description ? <p className="workspace-copy">{description}</p> : null}
+    </div>
   )
 }
 
-export function ActionCard({
-  title,
-  body,
-  actionLabel,
-  onClick
-}: {
-  title: string
-  body: string
-  actionLabel: string
-  onClick: () => void
-}) {
-  return (
-    <Card
-      component="button"
-      type="button"
-      onClick={onClick}
-      padding="lg"
-      style={{ textAlign: "left", background: "#ffffff" }}>
-      <Stack gap="xs">
-        <Title order={3}>{title}</Title>
-        <Text c="dimmed">{body}</Text>
-        <Group justify="space-between">
-          <Text fw={600} size="sm">
-            {actionLabel}
-          </Text>
-        </Group>
-      </Stack>
-    </Card>
-  )
+function formatStatusLabel(status?: string) {
+  if (!status) {
+    return "IDLE"
+  }
+
+  switch (status) {
+    case "running":
+      return "SYNCING"
+    case "partial":
+      return "PARTIAL"
+    case "error":
+      return "ERROR"
+    case "success":
+      return "SUCCESS"
+    case "idle":
+    default:
+      return status.toUpperCase()
+  }
+}
+
+export function StatusBadge({ status, label }: { status?: string; label?: string }) {
+  return <span className={cn("workspace-badge", getStatusClasses(status))}>{label ?? formatStatusLabel(status)}</span>
 }

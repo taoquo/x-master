@@ -24,6 +24,7 @@ export function parseBookmarkEntries(response: any) {
       const rawResult = entry?.content?.itemContent?.tweet_results?.result
       const result = unwrapTweetResult(rawResult)
       const legacy = result?.legacy ?? {}
+      const noteTweetText = result?.note_tweet?.note_tweet_results?.result?.text
       const userLegacy = result?.core?.user_results?.result?.legacy ?? {}
       const screenName = userLegacy?.screen_name
       const restId = result?.rest_id
@@ -35,7 +36,7 @@ export function parseBookmarkEntries(response: any) {
           : `https://x.com/i/status/${restId}`,
         authorName: userLegacy?.name ?? "",
         authorHandle: screenName ?? "",
-        text: legacy?.full_text ?? result?.note_tweet?.note_tweet_results?.result?.text ?? "",
+        text: noteTweetText ?? legacy?.full_text ?? "",
         createdAtOnX: legacy?.created_at ?? "",
         savedAt: new Date().toISOString(),
         media: (legacy?.extended_entities?.media ?? []).map((item: any) => ({
@@ -48,7 +49,8 @@ export function parseBookmarkEntries(response: any) {
           retweets: legacy?.retweet_count ?? 0,
           replies: legacy?.reply_count ?? 0
         },
-        rawPayload: result
+        rawPayload: result,
+        sourceKind: noteTweetText ? "x-note-tweet" : "x-bookmark"
       }
     })
 
