@@ -1192,11 +1192,15 @@ test("OptionsApp saves inline tag drafts on blur and cancels them on escape", as
   const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
-  const createTagButton = findByTestId(container, "sidebar-create-tag") as HTMLButtonElement | null
+  let createTagButton = findByTestId(container, "sidebar-create-tag") as HTMLButtonElement | null
   assert.ok(createTagButton)
+  if (!createTagButton) {
+    throw new Error("Expected sidebar create tag button")
+  }
+  const initialCreateTagButton = createTagButton
 
   await act(async () => {
-    createTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    initialCreateTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
 
@@ -1216,6 +1220,12 @@ test("OptionsApp saves inline tag drafts on blur and cancels them on escape", as
 
   assert.match(findByTestId(container, "lists-sidebar")?.textContent ?? "", /研究/)
   assert.equal(findByTestId(container, "sidebar-create-tag-input"), null)
+
+  createTagButton = findByTestId(container, "sidebar-create-tag") as HTMLButtonElement | null
+  assert.ok(createTagButton)
+  if (!createTagButton) {
+    throw new Error("Expected sidebar create tag button after draft commit")
+  }
 
   await act(async () => {
     createTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))

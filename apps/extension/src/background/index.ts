@@ -1,12 +1,33 @@
 import { runBookmarkSync } from "./syncBookmarks.ts"
-import { getAllBookmarks } from "../lib/storage/bookmarksStore.ts"
-import { getAllBookmarkLists, getAllLists } from "../lib/storage/listsStore.ts"
+import { getAllBookmarks, removeBookmarkSnapshot, upsertBookmarkSnapshot } from "../lib/storage/bookmarksStore.ts"
+import { assignBookmarksToInboxIfMissing, getAllBookmarkLists, getAllLists } from "../lib/storage/listsStore.ts"
 import { resetLocalData } from "../lib/storage/resetLocalData.ts"
 import { getSettings } from "../lib/storage/settings.ts"
 import { getLatestSyncRun } from "../lib/storage/syncRunsStore.ts"
-import { getAllBookmarkTags, getAllTags } from "../lib/storage/tagsStore.ts"
-import { LOAD_WORKSPACE_DATA_MESSAGE, RESET_LOCAL_DATA_MESSAGE, RUN_SYNC_MESSAGE } from "../lib/runtime/messages.ts"
-import type { WorkspaceData } from "../lib/types.ts"
+import {
+  attachTagToBookmark,
+  createTag,
+  detachTagFromBookmark,
+  getAllBookmarkTags,
+  getAllTags
+} from "../lib/storage/tagsStore.ts"
+import {
+  LOAD_WORKSPACE_DATA_MESSAGE,
+  RESET_LOCAL_DATA_MESSAGE,
+  RUN_SYNC_MESSAGE,
+  SITE_TWEET_BOOKMARK_SYNC_MESSAGE,
+  SITE_TWEET_TAGGING_CREATE_TAG_MESSAGE,
+  SITE_TWEET_TAGGING_PREPARE_MESSAGE,
+  SITE_TWEET_TAGGING_SET_TAG_MESSAGE
+} from "../lib/runtime/messages.ts"
+import type {
+  Locale,
+  SiteTweetBookmarkSyncResult,
+  SiteTweetCreateTagResult,
+  SiteTweetDraft,
+  SiteTweetTagState,
+  WorkspaceData
+} from "../lib/types.ts"
 import { buildWorkspaceStats } from "../lib/workspace/stats.ts"
 
 const OPTIONS_PAGE_PATH = "options.html"
@@ -15,10 +36,31 @@ interface BackgroundDependencies {
   loadWorkspaceData: () => Promise<WorkspaceData>
   resetData: () => Promise<unknown>
   runSync: () => Promise<unknown>
+  syncSiteTweetBookmark?: (input: { tweet: SiteTweetDraft; enabled: boolean }) => Promise<SiteTweetBookmarkSyncResult>
+  prepareSiteTweetTagging?: (input: { tweet: SiteTweetDraft }) => Promise<SiteTweetTagState>
+  setSiteTweetTag?: (input: { bookmarkId: string; tagId: string; enabled: boolean }) => Promise<SiteTweetTagState>
+  createSiteTweetTag?: (input: { bookmarkId: string; name: string }) => Promise<SiteTweetCreateTagResult>
 }
 
-export function createBackgroundMessageHandler({ loadWorkspaceData, resetData, runSync }: BackgroundDependencies) {
-  return async function handleMessage(message: { type: string }) {
+type BackgroundMessage =
+  | { type: typeof LOAD_WORKSPACE_DATA_MESSAGE }
+  | { type: typeof RESET_LOCAL_DATA_MESSAGE }
+  | { type: typeof RUN_SYNC_MESSAGE }
+  | { type: typeof SITE_TWEET_BOOKMARK_SYNC_MESSAGE; tweet: SiteTweetDraft; enabled: boolean }
+  | { type: typeof SITE_TWEET_TAGGING_PREPARE_MESSAGE; tweet: SiteTweetDraft }
+  | { type: typeof SITE_TWEET_TAGGING_SET_TAG_MESSAGE; bookmarkId: string; tagId: string; enabled: boolean }
+  | { type: typeof SITE_TWEET_TAGGING_CREATE_TAG_MESSAGE; bookmarkId: string; name: string }
+
+export function createBackgroundMessageHandler({
+  loadWorkspaceData,
+  resetData,
+  runSync,
+  syncSiteTweetBookmark = async ({ tweet, enabled }) => syncSiteTweetBookmarkDefault({ tweet, enabled }),
+  prepareSiteTweetTagging = async ({ tweet }) => prepareSiteTweetTaggingDefault({ tweet }),
+  setSiteTweetTag = async ({ bookmarkId, tagId, enabled }) => setSiteTweetTagDefault({ bookmarkId, tagId, enabled }),
+  createSiteTweetTag = async ({ bookmarkId, name }) => createSiteTweetTagDefault({ bookmarkId, name })
+}: BackgroundDependencies) {
+  return async function handleMessage(message: BackgroundMessage | { type: string; [key: string]: unknown }) {
     if (message.type === LOAD_WORKSPACE_DATA_MESSAGE) {
       return loadWorkspaceData()
     }
@@ -31,7 +73,112 @@ export function createBackgroundMessageHandler({ loadWorkspaceData, resetData, r
       return runSync()
     }
 
+    if (message.type === SITE_TWEET_BOOKMARK_SYNC_MESSAGE) {
+      return syncSiteTweetBookmark({
+        tweet: message.tweet as SiteTweetDraft,
+        enabled: message.enabled as boolean
+      })
+    }
+
+    if (message.type === SITE_TWEET_TAGGING_PREPARE_MESSAGE) {
+      return prepareSiteTweetTagging({ tweet: message.tweet as SiteTweetDraft })
+    }
+
+    if (message.type === SITE_TWEET_TAGGING_SET_TAG_MESSAGE) {
+      return setSiteTweetTag({
+        bookmarkId: message.bookmarkId as string,
+        tagId: message.tagId as string,
+        enabled: message.enabled as boolean
+      })
+    }
+
+    if (message.type === SITE_TWEET_TAGGING_CREATE_TAG_MESSAGE) {
+      return createSiteTweetTag({
+        bookmarkId: message.bookmarkId as string,
+        name: message.name as string
+      })
+    }
+
     throw new Error(`Unsupported message type: ${message.type}`)
+  }
+}
+
+async function syncSiteTweetBookmarkDefault({
+  tweet,
+  enabled
+}: {
+  tweet: SiteTweetDraft
+  enabled: boolean
+}): Promise<SiteTweetBookmarkSyncResult> {
+  if (enabled) {
+    const bookmark = await upsertBookmarkSnapshot(tweet)
+    await assignBookmarksToInboxIfMissing([bookmark.tweetId])
+
+    return {
+      bookmarkId: bookmark.tweetId,
+      enabled: true
+    }
+  }
+
+  await removeBookmarkSnapshot(tweet.tweetId)
+
+  return {
+    bookmarkId: tweet.tweetId,
+    enabled: false
+  }
+}
+
+async function buildSiteTweetTagState(bookmarkId: string, locale?: Locale): Promise<SiteTweetTagState> {
+  const [tags, bookmarkTags] = await Promise.all([getAllTags(), getAllBookmarkTags()])
+  const selectedTagIds = bookmarkTags
+    .filter((bookmarkTag) => bookmarkTag.bookmarkId === bookmarkId)
+    .map((bookmarkTag) => bookmarkTag.tagId)
+
+  return {
+    bookmarkId,
+    tags,
+    selectedTagIds,
+    locale
+  }
+}
+
+async function prepareSiteTweetTaggingDefault({ tweet }: { tweet: SiteTweetDraft }): Promise<SiteTweetTagState> {
+  const [bookmark, settings] = await Promise.all([upsertBookmarkSnapshot(tweet), getSettings()])
+  return buildSiteTweetTagState(bookmark.tweetId, settings.locale)
+}
+
+async function setSiteTweetTagDefault({
+  bookmarkId,
+  tagId,
+  enabled
+}: {
+  bookmarkId: string
+  tagId: string
+  enabled: boolean
+}): Promise<SiteTweetTagState> {
+  if (enabled) {
+    await attachTagToBookmark({ bookmarkId, tagId })
+  } else {
+    await detachTagFromBookmark({ bookmarkId, tagId })
+  }
+
+  return buildSiteTweetTagState(bookmarkId)
+}
+
+async function createSiteTweetTagDefault({
+  bookmarkId,
+  name
+}: {
+  bookmarkId: string
+  name: string
+}): Promise<SiteTweetCreateTagResult> {
+  const createdTag = await createTag({ name })
+  await attachTagToBookmark({ bookmarkId, tagId: createdTag.id })
+  const state = await buildSiteTweetTagState(bookmarkId)
+
+  return {
+    ...state,
+    createdTag
   }
 }
 
@@ -93,7 +240,11 @@ const handleMessage = createBackgroundMessageHandler({
     await resetLocalData()
     return { success: true }
   },
-  runSync: runBookmarkSync
+  runSync: runBookmarkSync,
+  syncSiteTweetBookmark: syncSiteTweetBookmarkDefault,
+  prepareSiteTweetTagging: prepareSiteTweetTaggingDefault,
+  setSiteTweetTag: setSiteTweetTagDefault,
+  createSiteTweetTag: createSiteTweetTagDefault
 })
 
 if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {

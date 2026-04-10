@@ -55,7 +55,20 @@ async function writeStaticFiles() {
         background: {
           service_worker: "background.js",
           type: "module"
-        }
+        },
+        content_scripts: [
+          {
+            matches: ["https://x.com/home", "https://x.com/i/bookmarks*"],
+            js: ["content.js"],
+            run_at: "document_idle"
+          }
+        ],
+        web_accessible_resources: [
+          {
+            resources: ["assets/icons/*", "assets/branding/*"],
+            matches: ["https://x.com/*"]
+          }
+        ]
       },
       null,
       2
@@ -185,10 +198,20 @@ async function buildExtension() {
     path.join(outDir, "popup.js"),
     "iife"
   )
+  const contentOptions = createBuildOptions(
+    path.join(appDir, "src", "content", "index.ts"),
+    path.join(outDir, "content.js"),
+    "iife"
+  )
 
   if (watchMode) {
     await runTailwindBuild({ watch: true })
-    const contexts = await Promise.all([context(optionsPageOptions), context(backgroundOptions), context(popupOptions)])
+    const contexts = await Promise.all([
+      context(optionsPageOptions),
+      context(backgroundOptions),
+      context(popupOptions),
+      context(contentOptions)
+    ])
     await Promise.all(contexts.map((buildContext) => buildContext.watch()))
     await writeStaticFiles()
     console.log(`Watching extension sources and writing output to ${outDir}`)
@@ -196,7 +219,7 @@ async function buildExtension() {
     return
   }
 
-  await Promise.all([build(optionsPageOptions), build(backgroundOptions), build(popupOptions), runTailwindBuild()])
+  await Promise.all([build(optionsPageOptions), build(backgroundOptions), build(popupOptions), build(contentOptions), runTailwindBuild()])
   await writeStaticFiles()
   console.log(`Built extension to ${outDir}`)
 }

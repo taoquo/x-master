@@ -13,6 +13,15 @@ export interface BookmarkRecord {
   updatedAt?: string
 }
 
+export interface SiteTweetDraft {
+  tweetId: string
+  tweetUrl: string
+  authorName: string
+  authorHandle: string
+  text: string
+  createdAtOnX: string
+}
+
 export interface TagRecord {
   id: string
   name: string
@@ -120,6 +129,22 @@ export interface WorkspaceData {
   summary: SyncSummary
   latestSyncRun: SyncRunRecord | null
   stats: WorkspaceStats
+}
+
+export interface SiteTweetTagState {
+  bookmarkId: string
+  tags: TagRecord[]
+  selectedTagIds: string[]
+  locale?: Locale
+}
+
+export interface SiteTweetCreateTagResult extends SiteTweetTagState {
+  createdTag: TagRecord
+}
+
+export interface SiteTweetBookmarkSyncResult {
+  bookmarkId: string
+  enabled: boolean
 }
 
 export function createEmptySyncSummary(): SyncSummary {

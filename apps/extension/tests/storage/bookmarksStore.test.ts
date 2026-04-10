@@ -2,7 +2,14 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import "fake-indexeddb/auto"
 import { DB_NAME, getBookmarksDb, resetBookmarksDb } from "../../src/lib/storage/db.ts"
-import { getAllBookmarks, upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
+import {
+  getAllBookmarks,
+  removeBookmarkSnapshot,
+  upsertBookmarks,
+  upsertBookmarkSnapshot
+} from "../../src/lib/storage/bookmarksStore.ts"
+import { getAllBookmarkLists, assignBookmarksToInboxIfMissing } from "../../src/lib/storage/listsStore.ts"
+import { attachTagToBookmark, createTag, getAllBookmarkTags } from "../../src/lib/storage/tagsStore.ts"
 
 test("upsertBookmarks stores bookmarks and getAllBookmarks returns them", async () => {
   await resetBookmarksDb()
@@ -111,4 +118,82 @@ test("database migration removes the legacy knowledge-cards store", async () => 
   assert.equal(db.objectStoreNames.contains("tags"), true)
   assert.equal(db.objectStoreNames.contains("bookmark-tags"), true)
   assert.equal(db.objectStoreNames.contains("sync-runs"), true)
+})
+
+test("upsertBookmarkSnapshot creates a minimal bookmark without overwriting richer fields", async () => {
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-123",
+      tweetUrl: "https://x.com/alice/status/123",
+      authorName: "Alice Johnson",
+      authorHandle: "alice",
+      text: "Full synced text with richer details",
+      createdAtOnX: "2026-04-01T00:00:00.000Z",
+      savedAt: "2026-04-01T00:10:00.000Z",
+      media: [{ type: "photo", url: "https://example.com/media.jpg", altText: "cover" }],
+      metrics: { likes: 8, retweets: 2, replies: 1 },
+      rawPayload: { source: "sync" }
+    }
+  ])
+
+  const snapshot = await upsertBookmarkSnapshot({
+    tweetId: "tweet-123",
+    tweetUrl: "https://x.com/alice/status/123",
+    authorName: "Alice",
+    authorHandle: "alice",
+    text: "Short DOM text",
+    createdAtOnX: "2026-04-01T00:00:00.000Z"
+  })
+
+  const bookmarks = await getAllBookmarks()
+
+  assert.equal(snapshot.tweetId, "tweet-123")
+  assert.equal(bookmarks.length, 1)
+  assert.equal(bookmarks[0].text, "Full synced text with richer details")
+  assert.deepEqual(bookmarks[0].metrics, { likes: 8, retweets: 2, replies: 1 })
+  assert.deepEqual(bookmarks[0].rawPayload, { source: "sync" })
+})
+
+test("upsertBookmarkSnapshot can be assigned into inbox for site bookmark sync", async () => {
+  await resetBookmarksDb()
+
+  await upsertBookmarkSnapshot({
+    tweetId: "tweet-123",
+    tweetUrl: "https://x.com/alice/status/123",
+    authorName: "Alice",
+    authorHandle: "alice",
+    text: "Short DOM text",
+    createdAtOnX: "2026-04-01T00:00:00.000Z"
+  })
+  await assignBookmarksToInboxIfMissing(["tweet-123"])
+
+  const bookmarkLists = await getAllBookmarkLists()
+
+  assert.deepEqual(bookmarkLists.map((entry) => ({ bookmarkId: entry.bookmarkId, listId: entry.listId })), [
+    { bookmarkId: "tweet-123", listId: "list-inbox" }
+  ])
+})
+
+test("removeBookmarkSnapshot removes the bookmark and all related list and tag mappings", async () => {
+  await resetBookmarksDb()
+
+  await upsertBookmarkSnapshot({
+    tweetId: "tweet-123",
+    tweetUrl: "https://x.com/alice/status/123",
+    authorName: "Alice",
+    authorHandle: "alice",
+    text: "Short DOM text",
+    createdAtOnX: "2026-04-01T00:00:00.000Z"
+  })
+  await assignBookmarksToInboxIfMissing(["tweet-123"])
+  const tag = await createTag({ name: "AI" })
+  await attachTagToBookmark({ bookmarkId: "tweet-123", tagId: tag.id })
+
+  await removeBookmarkSnapshot("tweet-123")
+
+  assert.equal((await getAllBookmarks()).length, 0)
+  assert.equal((await getAllBookmarkLists()).length, 0)
+  assert.equal((await getAllBookmarkTags()).length, 0)
 })
