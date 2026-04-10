@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
 import { build, context } from "esbuild"
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -8,6 +8,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const appDir = path.resolve(__dirname, "..")
 const outDir = path.join(appDir, "build", "chrome-mv3")
+const assetsDir = path.join(appDir, "assets")
 const watchMode = process.argv.includes("--watch")
 
 async function readPackageMetadata() {
@@ -22,6 +23,8 @@ async function readPackageMetadata() {
 async function writeStaticFiles() {
   const { name, version } = await readPackageMetadata()
 
+  await cp(assetsDir, path.join(outDir, "assets"), { recursive: true })
+
   await writeFile(
     path.join(outDir, "manifest.json"),
     JSON.stringify(
@@ -31,8 +34,19 @@ async function writeStaticFiles() {
         version,
         permissions: ["cookies", "storage"],
         host_permissions: ["https://x.com/*"],
+        icons: {
+          16: "assets/icons/icon-16.png",
+          32: "assets/icons/icon-32.png",
+          48: "assets/icons/icon-48.png",
+          128: "assets/icons/icon-128.png"
+        },
         action: {
-          default_title: name
+          default_title: name,
+          default_icon: {
+            16: "assets/icons/icon-16.png",
+            32: "assets/icons/icon-32.png",
+            48: "assets/icons/icon-48.png"
+          }
         },
         options_ui: {
           page: "options.html",

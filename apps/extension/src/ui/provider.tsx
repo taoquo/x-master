@@ -45,12 +45,51 @@ export function useExtensionUi() {
 export function ExtensionUiProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = React.useState(defaultSettings)
   const [systemTheme, setSystemTheme] = React.useState<ResolvedTheme>(getSystemTheme)
+  const settingsRef = React.useRef(settings)
+  const clearThemeSwitchFrameRef = React.useRef<number | null>(null)
+
+  const clearThemeSwitchingState = React.useCallback(() => {
+    if (typeof document !== "undefined") {
+      delete document.documentElement.dataset.themeSwitching
+    }
+
+    if (typeof window !== "undefined" && clearThemeSwitchFrameRef.current !== null) {
+      window.cancelAnimationFrame(clearThemeSwitchFrameRef.current)
+      clearThemeSwitchFrameRef.current = null
+    }
+  }, [])
+
+  const startThemeSwitchingState = React.useCallback(() => {
+    if (typeof document === "undefined") {
+      return
+    }
+
+    clearThemeSwitchingState()
+    document.documentElement.dataset.themeSwitching = "true"
+
+    if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+      delete document.documentElement.dataset.themeSwitching
+      return
+    }
+
+    clearThemeSwitchFrameRef.current = window.requestAnimationFrame(() => {
+      clearThemeSwitchFrameRef.current = window.requestAnimationFrame(() => {
+        delete document.documentElement.dataset.themeSwitching
+        clearThemeSwitchFrameRef.current = null
+      })
+    })
+  }, [clearThemeSwitchingState])
 
   React.useEffect(() => {
     void getSettings().then((nextSettings) => {
+      settingsRef.current = nextSettings
       setSettings(nextSettings)
     })
   }, [])
+
+  React.useEffect(() => {
+    settingsRef.current = settings
+  }, [settings])
 
   React.useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -81,13 +120,23 @@ export function ExtensionUiProvider({ children }: { children: React.ReactNode })
     }
 
     document.documentElement.dataset.theme = resolvedTheme
-    document.documentElement.lang = settings.locale
-  }, [resolvedTheme, settings.locale])
+  }, [resolvedTheme])
 
-  async function persistSettings(nextSettings: typeof settings) {
+  React.useEffect(() => {
+    if (typeof document === "undefined") {
+      return
+    }
+
+    document.documentElement.lang = settings.locale
+  }, [settings.locale])
+
+  React.useEffect(() => () => clearThemeSwitchingState(), [clearThemeSwitchingState])
+
+  const persistSettings = React.useCallback(async (nextSettings: typeof settings) => {
+    settingsRef.current = nextSettings
     setSettings(nextSettings)
     await saveSettings(nextSettings)
-  }
+  }, [])
 
   const value = React.useMemo<ExtensionUiValue>(
     () => ({
@@ -97,18 +146,20 @@ export function ExtensionUiProvider({ children }: { children: React.ReactNode })
       t: (key) => translate(settings.locale, key),
       setLocale: async (locale) => {
         await persistSettings({
-          ...settings,
+          ...settingsRef.current,
           locale
         })
       },
       setThemePreference: async (themePreference) => {
+        startThemeSwitchingState()
+
         await persistSettings({
-          ...settings,
+          ...settingsRef.current,
           themePreference
         })
       }
     }),
-    [resolvedTheme, settings]
+    [persistSettings, resolvedTheme, settings.locale, settings.themePreference, startThemeSwitchingState]
   )
 
   return <ExtensionUiContext.Provider value={value}>{children}</ExtensionUiContext.Provider>

@@ -98,6 +98,26 @@ export function EmptyState({ title, description }: { title: string; description?
   )
 }
 
+function formatStatusLabel(status?: string) {
+  if (!status) {
+    return "IDLE"
+  }
+
+  switch (status) {
+    case "running":
+      return "SYNCING"
+    case "partial":
+      return "PARTIAL"
+    case "error":
+      return "ERROR"
+    case "success":
+      return "SUCCESS"
+    case "idle":
+    default:
+      return status.toUpperCase()
+  }
+}
+
 export function StatusBadge({ status, label }: { status?: string; label?: string }) {
-  return <span className={cn("workspace-badge", getStatusClasses(status))}>{label ?? status ?? "idle"}</span>
+  return <span className={cn("workspace-badge", getStatusClasses(status))}>{label ?? formatStatusLabel(status)}</span>
 }

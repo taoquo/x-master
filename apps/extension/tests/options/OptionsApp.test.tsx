@@ -44,6 +44,20 @@ function setSelectValue(
   element.dispatchEvent(new dom.Event("change", { bubbles: true }))
 }
 
+function setInputValue(
+  element: HTMLInputElement,
+  value: string,
+  dom: {
+    HTMLInputElement: typeof HTMLInputElement
+    Event: typeof Event
+  }
+) {
+  const descriptor = Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, "value")
+  descriptor?.set?.call(element, value)
+  element.dispatchEvent(new dom.Event("input", { bubbles: true }))
+  element.dispatchEvent(new dom.Event("change", { bubbles: true }))
+}
+
 test("OptionsApp renders the Chinese locale shell and keeps demo shell active", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
@@ -76,7 +90,7 @@ test("OptionsApp renders the Chinese locale shell and keeps demo shell active", 
   await saveSettings({
     schemaVersion: 3,
     locale: "zh-CN",
-    themePreference: "system",
+    themePreference: "light",
     lastSyncSummary: {
       status: "success",
       fetchedCount: 2,
@@ -90,11 +104,13 @@ test("OptionsApp renders the Chinese locale shell and keeps demo shell active", 
 
   const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
+  await settle()
 
   assert.match(container.textContent ?? "", /书签/)
   assert.match(container.textContent ?? "", /标签/)
   assert.match(container.textContent ?? "", /详情/)
   assert.match(container.textContent ?? "", /偏好设置/)
+  assert.ok(findByTestId(container, "options-brand-logo"))
 
   assert.equal(findByTestId(container, "toggle-preferences-panel"), null)
   assert.equal(findByTestId(container, "workspace-preferences-inline"), null)
@@ -113,6 +129,7 @@ test("OptionsApp renders the Chinese locale shell and keeps demo shell active", 
   assert.equal(cards.length, 1)
   assert.match(cards[0].textContent ?? "", /Prompt engineering notes/)
   assert.match(cards[0].textContent ?? "", /AI/)
+  assert.doesNotMatch(container.textContent ?? "", /WORKSPACE|Archive|METADATA|SUMMARY|MEDIA|TAGS/)
 })
 
 test("OptionsApp uses the shared badge and status surface language", async () => {
@@ -134,6 +151,7 @@ test("OptionsApp uses the shared badge and status surface language", async () =>
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
   await settle()
 
   const statusBadge = container.querySelector('[data-testid="lists-sidebar"] .status-success') as HTMLElement | null
@@ -166,7 +184,7 @@ test("OptionsApp renders the Figma shell with editorial rails", async () => {
   await saveSettings({
     schemaVersion: 3,
     locale: "zh-CN",
-    themePreference: "light",
+    themePreference: "system",
     lastSyncSummary: {
       status: "success",
       fetchedCount: 2,
@@ -190,7 +208,7 @@ test("OptionsApp renders the Figma shell with editorial rails", async () => {
   assert.ok(sidebar)
   assert.ok(library)
   assert.ok(inspector)
-  assert.match(overview?.className ?? "", /xl:grid-cols-\[320px_minmax\(0,1fr\)_340px\]/)
+  assert.match(overview?.className ?? "", /xl:grid-cols-\[256px_minmax\(0,1fr\)_288px\]/)
   assert.match(sidebar?.textContent ?? "", /工作区/)
   assert.match(sidebar?.textContent ?? "", /偏好设置/)
   assert.match(library?.textContent ?? "", /资料库/)
@@ -496,7 +514,11 @@ test("OptionsApp theme toggle keeps system preference reachable", async () => {
   const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
-  const themeToggle = findByTestId(container, "footer-theme-toggle") as HTMLButtonElement | null
+  let themeToggle = findByTestId(container, "footer-theme-toggle") as HTMLButtonElement | null
+  if (!themeToggle) {
+    await settle()
+    themeToggle = findByTestId(container, "footer-theme-toggle") as HTMLButtonElement | null
+  }
   assert.ok(themeToggle)
 
   await act(async () => {
@@ -516,6 +538,76 @@ test("OptionsApp theme toggle keeps system preference reachable", async () => {
   })
   await settle()
   assert.equal((await getSettings()).themePreference, "system")
+})
+
+test("OptionsApp theme toggle flips immediately against resolved dark system theme", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: {
+      status: "idle",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 0
+    },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp), { prefersDark: true })
+  await settle()
+
+  const themeToggle = findByTestId(container, "footer-theme-toggle") as HTMLButtonElement | null
+  assert.ok(themeToggle)
+  assert.equal(dom.window.document.documentElement.dataset.theme, "dark")
+
+  await act(async () => {
+    themeToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+
+  assert.equal(dom.window.document.documentElement.dataset.theme, "light")
+  assert.equal((await getSettings()).themePreference, "light")
+})
+
+test("OptionsApp disables transitions briefly during theme swaps", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "system",
+    lastSyncSummary: {
+      status: "idle",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 0
+    },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+  await settle()
+
+  const themeToggle = findByTestId(container, "footer-theme-toggle") as HTMLButtonElement | null
+  assert.ok(themeToggle)
+  assert.equal(dom.window.document.documentElement.dataset.theme, "light")
+  assert.equal(dom.window.document.documentElement.dataset.themeSwitching, undefined)
+
+  await act(async () => {
+    themeToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+
+  assert.equal(dom.window.document.documentElement.dataset.themeSwitching, "true")
+
+  await settle()
+
+  assert.equal(dom.window.document.documentElement.dataset.theme, "dark")
+  assert.equal(dom.window.document.documentElement.dataset.themeSwitching, undefined)
 })
 
 test("OptionsApp applies demo multi-tag AND filtering and falls back to all", async () => {
@@ -792,7 +884,7 @@ test("OptionsApp uses rail layout and shared field/button primitives", async () 
   assert.ok(library)
   assert.ok(syncButton)
   assert.ok(searchInput)
-  assert.match(overview?.className ?? "", /xl:grid-cols-\[320px_minmax\(0,1fr\)_340px\]/)
+  assert.match(overview?.className ?? "", /xl:grid-cols-\[256px_minmax\(0,1fr\)_288px\]/)
   assert.match(sidebar?.className ?? "", /options-sidebar-shell/)
   assert.match(library?.className ?? "", /options-main-shell/)
   assert.match(syncButton?.className ?? "", /workspace-sync-primary/)
@@ -843,6 +935,120 @@ test("OptionsApp renders the detail inspector with metadata, summary, and tag ac
   assert.match(container.textContent ?? "", /Metadata/)
   assert.match(container.textContent ?? "", /Summary/)
   assert.match(container.textContent ?? "", /Add tag/)
+})
+
+test("OptionsApp renders a dedicated media section in the inspector when a bookmark has media", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-media-inspector",
+      tweetUrl: "https://x.com/alice/status/tweet-media-inspector",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Media bookmark",
+      media: [{ type: "photo", url: "https://example.com/media.jpg" }],
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const firstCard = getBookmarkCards(container)[0]
+  await act(async () => {
+    firstCard.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.ok(findByTestId(container, "inspector-media-section"))
+  assert.match(container.textContent ?? "", /Media/)
+
+  const mediaButton = findByTestId(container, "inspector-media-trigger") as HTMLButtonElement | null
+  assert.ok(mediaButton)
+
+  await act(async () => {
+    mediaButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const mediaLightbox = findByTestId(container, "media-lightbox")
+  const mediaBackdrop = findByTestId(container, "media-lightbox-backdrop")
+  const mediaClose = findByTestId(container, "media-lightbox-close")
+
+  assert.ok(mediaLightbox)
+  assert.ok(mediaBackdrop)
+  assert.ok(mediaClose)
+
+  await act(async () => {
+    ;(mediaClose as HTMLButtonElement).dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.equal(findByTestId(container, "media-lightbox"), null)
+})
+
+test("OptionsApp media preview supports multiple assets with previous and next controls", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-media-multi",
+      tweetUrl: "https://x.com/alice/status/tweet-media-multi",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Multi media bookmark",
+      media: [
+        { type: "photo", url: "https://example.com/media-1.jpg" },
+        { type: "photo", url: "https://example.com/media-2.jpg" }
+      ],
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const firstCard = getBookmarkCards(container)[0]
+  await act(async () => {
+    firstCard.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const mediaButton = findByTestId(container, "inspector-media-trigger") as HTMLButtonElement | null
+  assert.ok(mediaButton)
+
+  await act(async () => {
+    mediaButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const lightboxImage = findByTestId(container, "media-lightbox-image") as HTMLImageElement | null
+  const nextButton = findByTestId(container, "media-lightbox-next") as HTMLButtonElement | null
+  const prevButton = findByTestId(container, "media-lightbox-prev") as HTMLButtonElement | null
+
+  assert.ok(lightboxImage)
+  assert.ok(nextButton)
+  assert.ok(prevButton)
+  assert.match(lightboxImage?.getAttribute("src") ?? "", /media-1\.jpg/)
+
+  await act(async () => {
+    nextButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.match((findByTestId(container, "media-lightbox-image") as HTMLImageElement | null)?.getAttribute("src") ?? "", /media-2\.jpg/)
+
+  await act(async () => {
+    prevButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.match((findByTestId(container, "media-lightbox-image") as HTMLImageElement | null)?.getAttribute("src") ?? "", /media-1\.jpg/)
 })
 
 test("OptionsApp renders flat navigation rows and restrained result cards", async () => {
@@ -903,12 +1109,14 @@ test("OptionsApp renders flat navigation rows and restrained result cards", asyn
   await settle()
 
   cards = getBookmarkCards(container)
-  const listBadge = cards[0].querySelector(".workspace-badge-plain")
+  const cardTag = cards[0].querySelector(".options-card-tag")
 
   assert.equal(cards.length, 1)
   assert.match(aiTagButton?.className ?? "", /options-nav-row-active/)
-  assert.ok(listBadge)
-  assert.equal(listBadge?.textContent, "No list")
+  assert.equal(cards[0].querySelector(".workspace-badge-plain"), null)
+  assert.ok(cardTag)
+  assert.equal(cardTag?.textContent, "AI")
+  assert.equal(cards[0].querySelector(".workspace-media-frame"), null)
 })
 
 test("OptionsApp exposes sidebar tag create and delete actions like the demo", async () => {
@@ -925,10 +1133,11 @@ test("OptionsApp exposes sidebar tag create and delete actions like the demo", a
   const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
-  const originalPrompt = dom.window.prompt
-  dom.window.prompt = () => "灵感"
-
-  const createTagButton = findByTestId(container, "sidebar-create-tag") as HTMLButtonElement | null
+  let createTagButton = findByTestId(container, "sidebar-create-tag") as HTMLButtonElement | null
+  if (!createTagButton) {
+    await settle()
+    createTagButton = findByTestId(container, "sidebar-create-tag") as HTMLButtonElement | null
+  }
   assert.ok(createTagButton)
 
   await act(async () => {
@@ -936,7 +1145,22 @@ test("OptionsApp exposes sidebar tag create and delete actions like the demo", a
   })
   await settle()
 
+  const draftInput = findByTestId(container, "sidebar-create-tag-input") as HTMLInputElement | null
+  assert.ok(draftInput)
+  assert.equal(dom.window.document.activeElement, draftInput)
+
+  await act(async () => {
+    setInputValue(draftInput, "灵感", dom.window)
+  })
+  await settle()
+
+  await act(async () => {
+    draftInput.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+  })
+  await settle()
+
   assert.match(findByTestId(container, "lists-sidebar")?.textContent ?? "", /灵感/)
+  assert.equal(findByTestId(container, "sidebar-create-tag-input"), null)
 
   const deleteTagButton = findByTestId(container, "sidebar-delete-tag") as HTMLButtonElement | null
   assert.ok(deleteTagButton)
@@ -949,10 +1173,70 @@ test("OptionsApp exposes sidebar tag create and delete actions like the demo", a
   })
   await settle()
 
-  dom.window.prompt = originalPrompt
   dom.window.confirm = originalConfirm
 
   assert.doesNotMatch(findByTestId(container, "lists-sidebar")?.textContent ?? "", /灵感/)
+})
+
+test("OptionsApp saves inline tag drafts on blur and cancels them on escape", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "light",
+    lastSyncSummary: { status: "idle", fetchedCount: 0, insertedCount: 0, updatedCount: 0, failedCount: 0 },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const createTagButton = findByTestId(container, "sidebar-create-tag") as HTMLButtonElement | null
+  assert.ok(createTagButton)
+
+  await act(async () => {
+    createTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const blurInput = findByTestId(container, "sidebar-create-tag-input") as HTMLInputElement | null
+  assert.ok(blurInput)
+
+  await act(async () => {
+    setInputValue(blurInput, "研究", dom.window)
+  })
+  await settle()
+
+  await act(async () => {
+    blurInput.focus()
+    blurInput.blur()
+  })
+  await settle()
+
+  assert.match(findByTestId(container, "lists-sidebar")?.textContent ?? "", /研究/)
+  assert.equal(findByTestId(container, "sidebar-create-tag-input"), null)
+
+  await act(async () => {
+    createTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const escapeInput = findByTestId(container, "sidebar-create-tag-input") as HTMLInputElement | null
+  assert.ok(escapeInput)
+
+  await act(async () => {
+    setInputValue(escapeInput, "取消项", dom.window)
+  })
+  await settle()
+
+  await act(async () => {
+    escapeInput.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+  })
+  await settle()
+
+  assert.doesNotMatch(findByTestId(container, "lists-sidebar")?.textContent ?? "", /取消项/)
+  assert.equal(findByTestId(container, "sidebar-create-tag-input"), null)
 })
 
 test("OptionsApp does not expose list rename controls in tag navigation", async () => {
@@ -1184,10 +1468,10 @@ test("OptionsApp renders a single tags summary and preferences inside the left s
   assert.ok(sidebar)
   assert.equal(findByTestId(container, "workspace-summary-strip"), null)
   assert.match(sidebar.textContent ?? "", /偏好设置/)
-  assert.ok(findByTestId(container, "footer-settings-button"))
   assert.ok(findByTestId(container, "footer-locale-toggle"))
   assert.ok(findByTestId(container, "footer-theme-toggle"))
-  assert.ok(findByTestId(container, "footer-info-button"))
+  assert.equal(findByTestId(container, "footer-settings-button"), null)
+  assert.equal(findByTestId(container, "footer-info-button"), null)
   assert.equal(findByTestId(container, "toggle-preferences-panel"), null)
   assert.equal(findByTestId(container, "workspace-preferences-inline"), null)
 })
@@ -1262,7 +1546,11 @@ test("OptionsApp shows command errors near the sync controls", async () => {
   const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
-  const syncButton = findButton(container, "Sync now")
+  let syncButton = findButton(container, "Sync now")
+  if (!syncButton) {
+    await settle()
+    syncButton = findButton(container, "Sync now")
+  }
   assert.ok(syncButton)
 
   await act(async () => {

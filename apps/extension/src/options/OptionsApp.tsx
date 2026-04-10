@@ -11,9 +11,9 @@ import {
   sortBookmarks,
   type BookmarkSortOrder,
 } from "../lib/search/searchBookmarks.ts"
-import { INBOX_LIST_ID } from "../lib/storage/listsStore.ts"
 import { useWorkspaceData } from "./hooks/useWorkspaceData.ts"
 import { EmptyState, StatusBadge, SurfaceCard } from "../ui/components.tsx"
+import { BrandLogo } from "../ui/branding.tsx"
 import { ExtensionUiProvider, useExtensionUi } from "../ui/provider.tsx"
 import { AppIcon } from "../ui/icons.tsx"
 
@@ -44,7 +44,7 @@ function formatTimestamp(value: string | undefined, locale: Locale) {
 }
 
 function getSectionOverline(locale: Locale, zhLabel: string, enLabel: string) {
-  return locale === "zh-CN" ? `${zhLabel} ${enLabel}` : enLabel
+  return locale === "zh-CN" ? zhLabel : enLabel
 }
 
 function getOptionsCopy(locale: Locale) {
@@ -73,6 +73,8 @@ function getOptionsCopy(locale: Locale) {
       search: "搜索",
       searchPlaceholder: "搜索书签、作者和备注...",
       filters: "筛选",
+      filterConditions: "筛选条件",
+      filterDescription: "选择要应用的过滤条件。",
       latestSaved: "最近保存",
       activeFilters: "活跃筛选:",
       sortBy: "排序方式",
@@ -112,8 +114,12 @@ function getOptionsCopy(locale: Locale) {
       detailLabel: "详情",
       timeLabel: "时间",
       summaryTitle: "内容摘要",
+      mediaTitle: "媒体资源",
       openOnX: "在 X 中打开",
       tagsTitle: "标签",
+      closePreview: "关闭预览",
+      previousMedia: "上一张",
+      nextMedia: "下一张",
       noTagsYet: "还没有标签。",
       attachExistingTag: "附加已有标签",
       selectTag: "选择标签",
@@ -169,9 +175,11 @@ function getOptionsCopy(locale: Locale) {
     createList: "Create list",
     libraryTitle: "Library",
     libraryDescription: "",
-      search: "Search",
+    search: "Search",
     searchPlaceholder: "Search bookmarks, authors and notes...",
     filters: "Filters",
+    filterConditions: "Filter conditions",
+    filterDescription: "Choose the filters to apply.",
     latestSaved: "Recently saved",
     activeFilters: "Active filters:",
     sortBy: "Sort by",
@@ -211,8 +219,12 @@ function getOptionsCopy(locale: Locale) {
     detailLabel: "Details",
     timeLabel: "Time",
     summaryTitle: "Summary",
+    mediaTitle: "Media",
     openOnX: "Open on X",
     tagsTitle: "Tags",
+    closePreview: "Close preview",
+    previousMedia: "Previous media",
+    nextMedia: "Next media",
     noTagsYet: "No tags yet.",
     attachExistingTag: "Attach existing tag",
     selectTag: "Select a tag",
@@ -264,21 +276,12 @@ function getTagNamesForBookmark(bookmarkId: string, bookmarkTags: BookmarkTagRec
     .filter(Boolean) as TagRecord[]
 }
 
-function getListIdByBookmarkId(bookmarkId: string, bookmarkListByBookmarkId: Map<string, string>) {
-  return bookmarkListByBookmarkId.get(bookmarkId) ?? INBOX_LIST_ID
-}
-
-function getDisplayListName(listId: string, listNamesById: Map<string, string>, copy: OptionsCopy) {
-  if (listId === INBOX_LIST_ID) {
-    return copy.noList
-  }
-
-  return listNamesById.get(listId) ?? copy.noList
-}
-
-function getNextThemePreference(themePreference: "system" | "light" | "dark"): "system" | "light" | "dark" {
+function getNextThemePreference(
+  themePreference: "system" | "light" | "dark",
+  resolvedTheme: "light" | "dark"
+): "system" | "light" | "dark" {
   if (themePreference === "system") {
-    return "dark"
+    return resolvedTheme === "dark" ? "light" : "dark"
   }
 
   if (themePreference === "dark") {
@@ -450,43 +453,20 @@ function TextInputField({
 }
 
 function PreviewMedia({ bookmark, index }: { bookmark: BookmarkRecord; index: number }) {
-  const palettes = [
-    "from-[#f0efeb] via-[#ecebe7] to-[#e6e4de]",
-    "from-[#efede7] via-[#ebe8e2] to-[#e4e1da]",
-    "from-[#f2f0ea] via-[#ece9e2] to-[#e8e4dc]",
-    "from-[#efece5] via-[#e8e4dd] to-[#dfdbd3]",
-    "from-[#f5f3ee] via-[#ece8e0] to-[#e2ddd5]"
-  ]
-  const palette = palettes[index % palettes.length]
   const mediaUrl = bookmark.media?.[0]?.url
 
+  if (!mediaUrl) {
+    return null
+  }
+
   return (
-    <div
-      className={cn(
-        "workspace-media-frame relative h-44 bg-gradient-to-br sm:h-40 lg:h-44 2xl:h-48",
-        palette
-      )}>
-      {mediaUrl ? (
-        <img
-          src={mediaUrl}
-          alt=""
-          className="h-full w-full object-cover"
-        />
-      ) : null}
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(26,26,26,0.06))]" />
-      {mediaUrl ? (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-[8px] border border-black/10 bg-white/75 text-[var(--text-tertiary)]">
-            <AppIcon name="image" size={20} />
-          </div>
-        </div>
-      ) : (
-        <div className="absolute inset-x-4 bottom-4">
-          <div className="max-w-[18ch] text-[0.88rem] leading-6 tracking-[-0.01em] text-[var(--text-secondary)]">
-            {truncateText(bookmark.text, 42)}
-          </div>
-        </div>
-      )}
+    <div className="workspace-media-frame options-card-media relative aspect-video overflow-hidden bg-[var(--tag-bg)]" data-card-media-index={index}>
+      <img
+        src={mediaUrl}
+        alt=""
+        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+      />
+      <div className="absolute inset-0 bg-black/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
     </div>
   )
 }
@@ -494,59 +474,132 @@ function PreviewMedia({ bookmark, index }: { bookmark: BookmarkRecord; index: nu
 function BookmarkCard({
   bookmark,
   index,
-  currentListName,
   currentTagNames,
   selected,
   locale,
-  copy,
   onSelect
 }: {
   bookmark: BookmarkRecord
   index: number
-  currentListName: string
   currentTagNames: string[]
   selected: boolean
   locale: Locale
-  copy: OptionsCopy
   onSelect: () => void
 }) {
+  const authorInitials = bookmark.authorName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || bookmark.authorHandle.slice(0, 2).toUpperCase()
+
   return (
     <article
       data-bookmark-card={bookmark.tweetId}
       onClick={onSelect}
       className={cn(
-        "options-result-card group relative flex min-h-[220px] flex-col overflow-hidden p-4",
+        "options-result-card group relative flex min-h-[220px] flex-col overflow-hidden",
         selected && "options-result-card-selected"
       )}>
       <PreviewMedia bookmark={bookmark} index={index} />
 
-      <div className="mt-3 flex items-start gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--tag-bg)] text-sm font-medium text-[var(--text-primary)]">
-          {bookmark.authorName.slice(0, 2).toUpperCase()}
+      <div className="options-card-body flex flex-1 flex-col">
+        <div className="flex items-start gap-3">
+          <div className="options-card-avatar">{authorInitials}</div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-[0.95rem] font-semibold text-[var(--text-primary)]">{bookmark.authorName}</div>
+                <div className="options-meta-copy truncate">@{bookmark.authorHandle}</div>
+              </div>
+              <div className="options-card-timestamp shrink-0">
+                {formatTimestamp(bookmark.savedAt, locale)}
+              </div>
+            </div>
+
+            <div className="options-card-copy-wrap">
+              <p className={cn("options-card-copy", !!bookmark.media?.length && "is-media")}>
+                {truncateText(bookmark.text, bookmark.media?.length ? 180 : 260)}
+              </p>
+            </div>
+
+            {currentTagNames.length ? (
+              <div className="options-card-tags">
+                {currentTagNames.map((tagName) => (
+                  <span key={tagName} className="options-card-tag">
+                    {tagName}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="truncate text-[0.95rem] font-medium text-[var(--text-primary)]">{bookmark.authorName}</div>
-              <div className="options-meta-copy truncate">@{bookmark.authorHandle}</div>
-            </div>
-            <div className="shrink-0 text-[11px] tracking-[0.02em] text-[var(--text-tertiary)]">
-              {formatTimestamp(bookmark.savedAt, locale)}
-            </div>
+
+        <div className="options-card-actions">
+          <div className="options-card-actions-start">
+            <button type="button" className="options-card-action" tabIndex={-1} aria-hidden="true">
+              <AppIcon name="comment" size={16} />
+            </button>
+            <button type="button" className="options-card-action" tabIndex={-1} aria-hidden="true">
+              <AppIcon name="heart" size={16} />
+            </button>
+            <button type="button" className="options-card-action" tabIndex={-1} aria-hidden="true">
+              <AppIcon name="share" size={16} />
+            </button>
           </div>
-          <p className="mt-3 text-[0.83rem] leading-[1.7] text-[var(--text-secondary)]">{truncateText(bookmark.text, 62)}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <span className="workspace-badge workspace-badge-plain">{currentListName}</span>
-            {bookmark.media?.length ? <span className="chip-button options-chip !cursor-default !px-3 !py-1.5">{copy.hasMedia}</span> : null}
-            {currentTagNames.slice(0, 2).map((tagName) => (
-              <span key={tagName} className="chip-button options-chip !cursor-default !px-3 !py-1.5">
-                {tagName}
-              </span>
-            ))}
-          </div>
+          <button
+            type="button"
+            className="options-card-action"
+            onClick={(event) => {
+              event.stopPropagation()
+              window.open(bookmark.tweetUrl, "_blank", "noopener,noreferrer")
+            }}>
+            <AppIcon name="external" size={16} />
+          </button>
         </div>
       </div>
     </article>
+  )
+}
+
+function BookmarkMediaSection({
+  bookmark,
+  locale,
+  copy,
+  onPreview
+}: {
+  bookmark: BookmarkRecord
+  locale: Locale
+  copy: OptionsCopy
+  onPreview: (mediaUrl: string) => void
+}) {
+  const mediaUrl = bookmark.media?.[0]?.url
+
+  if (!mediaUrl) {
+    return null
+  }
+
+  return (
+    <section data-testid="inspector-media-section" className="options-inspector-section options-inspector-divider">
+      <div className="options-overline">{getSectionOverline(locale, copy.mediaTitle, "Media")}</div>
+      <button
+        type="button"
+        data-testid="inspector-media-trigger"
+        className="options-inspector-media-trigger mt-3"
+        onClick={() => onPreview(mediaUrl)}>
+        <div className="options-inspector-media-shell">
+          <img src={mediaUrl} alt="" className="h-28 w-full object-cover" />
+          <div className="options-inspector-media-badge">
+            <AppIcon name="image" size={14} />
+          </div>
+          {bookmark.media && bookmark.media.length > 1 ? (
+            <div className="options-inspector-media-count">
+              {bookmark.media.length}
+            </div>
+          ) : null}
+        </div>
+      </button>
+    </section>
   )
 }
 
@@ -570,10 +623,14 @@ function BookmarkInspector({
   onDetachTag: (tagId: string) => Promise<void>
 }) {
   const [selectedTagId, setSelectedTagId] = useState("")
+  const [previewMediaIndex, setPreviewMediaIndex] = useState<number | null>(null)
   const inspectorScrollRef = useRef<HTMLDivElement | null>(null)
+  const mediaItems = bookmark?.media ?? []
+  const hasMultipleMedia = mediaItems.length > 1
 
   useEffect(() => {
     setSelectedTagId("")
+    setPreviewMediaIndex(null)
     if (inspectorScrollRef.current) {
       if (typeof inspectorScrollRef.current.scrollTo === "function") {
         inspectorScrollRef.current.scrollTo({ top: 0, behavior: "auto" })
@@ -583,14 +640,82 @@ function BookmarkInspector({
     }
   }, [bookmark?.tweetId])
 
+  useEffect(() => {
+    if (previewMediaIndex === null || typeof window === "undefined") {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPreviewMediaIndex(null)
+        return
+      }
+
+      if (event.key === "ArrowRight" && mediaItems.length > 1) {
+        setPreviewMediaIndex((current) => {
+          if (current === null) {
+            return 0
+          }
+
+          return (current + 1) % mediaItems.length
+        })
+        return
+      }
+
+      if (event.key === "ArrowLeft" && mediaItems.length > 1) {
+        setPreviewMediaIndex((current) => {
+          if (current === null) {
+            return 0
+          }
+
+          return (current - 1 + mediaItems.length) % mediaItems.length
+        })
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [mediaItems, previewMediaIndex])
+
+  const previewMediaUrl = previewMediaIndex === null ? null : mediaItems[previewMediaIndex]?.url ?? null
+
+  function handleOpenPreview(mediaUrl: string) {
+    const nextIndex = mediaItems.findIndex((item) => item.url === mediaUrl)
+    setPreviewMediaIndex(nextIndex >= 0 ? nextIndex : 0)
+  }
+
+  function handleNextPreview() {
+    if (!mediaItems.length) {
+      return
+    }
+
+    setPreviewMediaIndex((current) => {
+      const safeIndex = current ?? 0
+      return (safeIndex + 1) % mediaItems.length
+    })
+  }
+
+  function handlePrevPreview() {
+    if (!mediaItems.length) {
+      return
+    }
+
+    setPreviewMediaIndex((current) => {
+      const safeIndex = current ?? 0
+      return (safeIndex - 1 + mediaItems.length) % mediaItems.length
+    })
+  }
+
   if (!bookmark) {
     return (
       <SurfaceCard chrome="bare" className="options-inspector-shell xl:h-[100dvh]">
-        <div data-testid="inspector-section-stack" className="scroll-shell flex min-h-0 flex-1 flex-col overflow-y-auto">
-          <EmptyState
-            title={copy.detailsTitle}
-            description={copy.noBookmarkSelectedDescription}
-          />
+        <div
+          data-testid="inspector-section-stack"
+          className="scroll-shell workspace-empty-state flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto border-0 bg-transparent px-6 text-center shadow-none">
+          <div className="options-inspector-empty-icon">
+            <AppIcon name="bookmark" size={28} />
+          </div>
+          <p className="mt-4 text-sm text-[var(--text-secondary)]">{copy.noBookmarkSelectedDescription}</p>
         </div>
       </SurfaceCard>
     )
@@ -615,7 +740,7 @@ function BookmarkInspector({
       <div
         ref={inspectorScrollRef}
         data-testid="inspector-section-stack"
-        className="scroll-shell flex min-h-0 flex-1 flex-col gap-10 overflow-y-auto">
+        className="scroll-shell flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-5">
         <section data-testid="inspector-metadata-section" className="options-inspector-section">
           <div className="options-overline">{getSectionOverline(locale, copy.metadataTitle, "Metadata")}</div>
           <h2 className="options-display-title-xs mt-3">{copy.detailsTitle}</h2>
@@ -631,19 +756,29 @@ function BookmarkInspector({
           <p className="options-meta-copy mt-4">{detailTimestamp}</p>
         </section>
 
-        <section data-testid="inspector-summary-section" className="options-inspector-section">
+        <section data-testid="inspector-summary-section" className="options-inspector-section options-inspector-divider">
           <div className="options-overline">{getSectionOverline(locale, copy.summaryTitle, "Summary")}</div>
-          <p className="options-body-copy mt-3">{bookmark.text}</p>
+          <p className="options-body-copy options-inspector-summary mt-3">{bookmark.text}</p>
+        </section>
+
+        <BookmarkMediaSection
+          bookmark={bookmark}
+          locale={locale}
+          copy={copy}
+          onPreview={handleOpenPreview}
+        />
+
+        <section className="options-inspector-section options-inspector-divider">
           <button
             type="button"
-            className="options-secondary-button mt-4 w-full justify-center"
+            className="options-secondary-button options-open-x-button w-full justify-center"
             onClick={() => window.open(bookmark.tweetUrl, "_blank", "noopener,noreferrer")}>
             <AppIcon name="external" size={14} />
             <span>{copy.openOnX}</span>
           </button>
         </section>
 
-        <section data-testid="inspector-tags-section" className="options-inspector-section">
+        <section data-testid="inspector-tags-section" className="options-inspector-section options-inspector-divider">
           <div className="options-overline">{getSectionOverline(locale, copy.tagsTitle, "Tags")}</div>
           <div data-testid="current-tags" className="mt-4 flex flex-wrap gap-2">
             {!currentTags.length ? <span className="options-meta-copy">{copy.noTagsYet}</span> : null}
@@ -660,7 +795,10 @@ function BookmarkInspector({
           </div>
 
           <div className="mt-6 grid gap-4">
-            <FieldBlock label={copy.attachExistingTag} htmlFor={attachSelectId}>
+            <FieldBlock
+              label={copy.attachExistingTag}
+              htmlFor={attachSelectId}
+              labelClassName="options-overline !font-medium !tracking-[0.12em] !text-[var(--text-quaternary)]">
               <SelectField
                 id={attachSelectId}
                 dataTestId="attach-tag-select"
@@ -677,13 +815,78 @@ function BookmarkInspector({
               type="button"
               onClick={() => void onAttachTag(selectedTagId)}
               disabled={isSavingTags || !selectedTagId}
-              className="options-secondary-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
+              className="options-secondary-button options-dashed-action w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
               <AppIcon name="tag" size={14} />
               <span>{copy.addTag}</span>
             </button>
           </div>
         </section>
       </div>
+      {previewMediaUrl ? (
+        <div data-testid="media-lightbox" className="options-media-lightbox">
+          <button
+            type="button"
+            data-testid="media-lightbox-backdrop"
+            aria-label={copy.mediaTitle}
+            className="options-media-lightbox-backdrop"
+            onClick={() => setPreviewMediaIndex(null)}
+          />
+          <div className="options-media-lightbox-shell">
+            <div className="options-media-lightbox-toolbar">
+              <button
+                type="button"
+                data-testid="media-lightbox-close"
+                aria-label={copy.closePreview}
+                className="options-media-lightbox-close"
+                onClick={() => setPreviewMediaIndex(null)}>
+                <AppIcon name="close" size={18} />
+              </button>
+            </div>
+            <div className="options-media-lightbox-stage">
+              {hasMultipleMedia ? (
+                <button
+                  type="button"
+                  data-testid="media-lightbox-prev"
+                  aria-label={copy.previousMedia}
+                  className="options-media-lightbox-nav is-prev"
+                  onClick={handlePrevPreview}>
+                  <span aria-hidden="true">‹</span>
+                </button>
+              ) : (
+                <div className="options-media-lightbox-nav-spacer" aria-hidden="true" />
+              )}
+              <div className="options-media-lightbox-content">
+                <img
+                  key={previewMediaUrl}
+                  data-testid="media-lightbox-image"
+                  src={previewMediaUrl}
+                  alt=""
+                  className="options-media-lightbox-image"
+                />
+              </div>
+              {hasMultipleMedia ? (
+                <button
+                  type="button"
+                  data-testid="media-lightbox-next"
+                  aria-label={copy.nextMedia}
+                  className="options-media-lightbox-nav is-next"
+                  onClick={handleNextPreview}>
+                  <span aria-hidden="true">›</span>
+                </button>
+              ) : (
+                <div className="options-media-lightbox-nav-spacer" aria-hidden="true" />
+              )}
+            </div>
+            {hasMultipleMedia ? (
+              <div className="options-media-lightbox-footer">
+                <div className="options-media-lightbox-counter">
+                  {previewMediaIndex! + 1} / {mediaItems.length}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </SurfaceCard>
   )
 }
@@ -692,6 +895,7 @@ function WorkspaceSidebar({
   workspace,
   locale,
   themePreference,
+  resolvedTheme,
   copy,
   lastSyncLabel,
   activeTagIds,
@@ -704,6 +908,7 @@ function WorkspaceSidebar({
   workspace: ReturnType<typeof useWorkspaceData>
   locale: Locale
   themePreference: "system" | "light" | "dark"
+  resolvedTheme: "light" | "dark"
   copy: OptionsCopy
   lastSyncLabel: string
   activeTagIds: string[]
@@ -717,14 +922,57 @@ function WorkspaceSidebar({
     map.set(bookmarkTag.tagId, (map.get(bookmarkTag.tagId) ?? 0) + 1)
     return map
   }, new Map<string, number>())
+  const [isCreatingTagInline, setIsCreatingTagInline] = useState(false)
+  const [draftTagName, setDraftTagName] = useState("")
+  const [isSubmittingDraftTag, setIsSubmittingDraftTag] = useState(false)
+  const draftTagInputRef = useRef<HTMLInputElement | null>(null)
+  const draftTagBlurIntentRef = useRef<"idle" | "submit" | "cancel">("idle")
 
-  function handleCreateTagClick() {
-    const name = window.prompt(copy.createTagPrompt, "")
-    if (!name?.trim()) {
+  useEffect(() => {
+    if (!isCreatingTagInline || !draftTagInputRef.current) {
       return
     }
 
-    void onCreateTag(name)
+    draftTagInputRef.current.focus()
+    draftTagInputRef.current.select()
+  }, [isCreatingTagInline])
+
+  function resetInlineTagDraft() {
+    draftTagBlurIntentRef.current = "idle"
+    setDraftTagName("")
+    setIsSubmittingDraftTag(false)
+    setIsCreatingTagInline(false)
+  }
+
+  async function submitInlineTagDraft(nextName?: string) {
+    if (isSubmittingDraftTag) {
+      return
+    }
+
+    const trimmedName = (nextName ?? draftTagInputRef.current?.value ?? draftTagName).trim()
+    if (!trimmedName) {
+      resetInlineTagDraft()
+      return
+    }
+
+    setIsSubmittingDraftTag(true)
+
+    try {
+      await onCreateTag(trimmedName)
+      resetInlineTagDraft()
+    } catch {
+      setIsSubmittingDraftTag(false)
+    }
+  }
+
+  function handleCreateTagClick() {
+    if (isCreatingTagInline) {
+      draftTagInputRef.current?.focus()
+      return
+    }
+
+    setDraftTagName("")
+    setIsCreatingTagInline(true)
   }
 
   function handleDeleteTagClick(tagId: string, tagName: string) {
@@ -744,23 +992,26 @@ function WorkspaceSidebar({
       data-testid="lists-sidebar"
       className="options-demo-sidebar options-sidebar-shell flex min-h-[420px] min-w-0 flex-col overflow-hidden">
       <section data-testid="sidebar-status-section" className="options-sidebar-hero">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="options-overline">{getSectionOverline(locale, "工作区", "Workspace")}</div>
-          <StatusBadge status={workspace.summary.status} />
+        <div className="options-sidebar-hero-head">
+          <div className="options-sidebar-hero-meta">
+            <div className="options-overline">{getSectionOverline(locale, "工作区", "Workspace")}</div>
+            <StatusBadge status={workspace.summary.status} />
+          </div>
         </div>
 
-        <h1 className="options-display-title mt-4">
-          {copy.pageTitle}
-        </h1>
+        <div className="options-sidebar-brand-row">
+          <BrandLogo
+            size={38}
+            testId="options-brand-logo"
+            className="rounded-[12px] shadow-[0_14px_28px_-22px_rgba(15,23,42,0.42)]"
+          />
+          <h1 className="options-display-title options-sidebar-title">
+            {copy.pageTitle}
+          </h1>
+        </div>
 
-        <p className="options-body-copy mt-3 max-w-[24ch]">
-          {locale === "zh-CN"
-            ? "在列表、标签和最近同步之间搜索、排序并整理已保存内容。"
-            : "Search, sort, and organize saved items across lists, tags, and recent syncs."}
-        </p>
-
-        <div data-testid="workspace-sidebar-sync" className="mt-5 grid gap-3">
-          <div className="options-meta-copy">
+        <div data-testid="workspace-sidebar-sync" className="options-sidebar-sync">
+          <div className="options-sidebar-sync-label">
             {copy.lastSync} {lastSyncLabel}
           </div>
 
@@ -778,7 +1029,7 @@ function WorkspaceSidebar({
       </section>
 
       <section data-testid="sidebar-lists-section" className="options-sidebar-lists">
-        <div className="px-6 pb-4 pt-6">
+        <div className="options-sidebar-lists-head">
           <div className="options-sidebar-section-head">
             <div className="options-overline">{getSectionOverline(locale, "标签", "Tags")}</div>
             <button
@@ -792,7 +1043,7 @@ function WorkspaceSidebar({
           </div>
         </div>
 
-        <div data-testid="sidebar-lists-scroll" className="scroll-shell min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+        <div data-testid="sidebar-lists-scroll" className="options-sidebar-lists-scroll scroll-shell min-h-0 flex-1 overflow-y-auto">
           <div data-testid="sidebar-list-tree" className="space-y-1">
             <div
               role="button"
@@ -806,15 +1057,56 @@ function WorkspaceSidebar({
                 }
               }}
               className={cn(
-                "options-nav-row w-full text-left",
+                "options-nav-row options-nav-row-all w-full text-left",
                 activeTagIds.includes("all") && "options-nav-row-active"
               )}>
               <span className="options-nav-row-main">
-                <AppIcon name="bookmark" size={14} className="options-nav-row-icon" />
+                <AppIcon name="globe" size={14} className="options-nav-row-icon" />
                 <span>{copy.allBookmarks}</span>
               </span>
               <span className="options-nav-count">{workspace.stats.totalBookmarks}</span>
             </div>
+
+            {isCreatingTagInline ? (
+              <div data-testid="sidebar-create-tag-row" className="options-nav-row options-nav-row-draft">
+                <span className="options-nav-row-main">
+                  <AppIcon name="hash" size={14} className="options-nav-row-icon" />
+                  <input
+                    ref={draftTagInputRef}
+                    type="text"
+                    value={draftTagName}
+                    data-testid="sidebar-create-tag-input"
+                    aria-label={copy.createTagLabel}
+                    placeholder={copy.createTagPrompt}
+                    disabled={isSubmittingDraftTag}
+                    className="options-nav-row-input"
+                    onChange={(event) => setDraftTagName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault()
+                        draftTagBlurIntentRef.current = "submit"
+                        void submitInlineTagDraft(event.currentTarget.value)
+                        return
+                      }
+
+                      if (event.key === "Escape") {
+                        event.preventDefault()
+                        draftTagBlurIntentRef.current = "cancel"
+                        resetInlineTagDraft()
+                      }
+                    }}
+                    onBlur={(event) => {
+                      if (draftTagBlurIntentRef.current === "submit" || draftTagBlurIntentRef.current === "cancel") {
+                        draftTagBlurIntentRef.current = "idle"
+                        return
+                      }
+
+                      void submitInlineTagDraft(event.currentTarget.value)
+                    }}
+                  />
+                </span>
+              </div>
+            ) : null}
 
             {workspace.tags.map((tag) => {
               const isSelected = activeTagIds.includes(tag.id)
@@ -832,27 +1124,33 @@ function WorkspaceSidebar({
                     }
                   }}
                   className={cn(
-                    "options-nav-row w-full text-left",
+                    "options-nav-row options-nav-row-tag w-full text-left",
                     isSelected && "options-nav-row-active"
                   )}>
                   <span className="options-nav-row-main">
-                    <AppIcon name="tag" size={14} className="options-nav-row-icon" />
+                    <AppIcon name="hash" size={14} className="options-nav-row-icon" />
                     <span className="truncate">{tag.name}</span>
                   </span>
                   <span className="options-nav-row-trailing">
                     <span className="options-nav-count">{tagCountById.get(tag.id) ?? 0}</span>
-                    <button
-                      type="button"
-                      data-testid={isSelected ? undefined : "sidebar-delete-tag"}
-                      className="options-nav-row-delete"
-                      aria-label={`${copy.deleteLabel} ${tag.name}`}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        handleDeleteTagClick(tag.id, tag.name)
-                      }}
-                    >
-                      <AppIcon name="trash" size={12} />
-                    </button>
+                    {isSelected ? (
+                      <span className="options-nav-row-check" aria-hidden="true">
+                        <AppIcon name="check" size={12} />
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        data-testid="sidebar-delete-tag"
+                        className="options-nav-row-delete"
+                        aria-label={`${copy.deleteLabel} ${tag.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          handleDeleteTagClick(tag.id, tag.name)
+                        }}
+                      >
+                        <AppIcon name="trash" size={12} />
+                      </button>
+                    )}
                   </span>
                 </div>
               )
@@ -862,38 +1160,27 @@ function WorkspaceSidebar({
       </section>
 
       <section data-testid="sidebar-footer-section" className="options-sidebar-config">
-        <div className="px-6 py-6">
-          <div className="options-overline">{copy.preferencesLabel}</div>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
-            <button
-              type="button"
-              data-testid="footer-settings-button"
-              aria-label={copy.preferencesLabel}
-              className="options-footer-icon-button">
-              <AppIcon name="bookmark" size={14} />
-            </button>
-            <button
-              type="button"
-              data-testid="footer-locale-toggle"
-              onClick={() => void setLocale(locale === "zh-CN" ? "en" : "zh-CN")}
-              className="options-footer-chip">
-              {locale === "zh-CN" ? "中" : "EN"}
-            </button>
-            <button
-              type="button"
-              data-testid="footer-theme-toggle"
-              onClick={() => void setThemePreference(getNextThemePreference(themePreference))}
-              className="options-footer-icon-button"
-              aria-label={copy.themeLabel}>
-              {themePreference === "dark" ? "L" : "D"}
-            </button>
-            <button
-              type="button"
-              data-testid="footer-info-button"
-              aria-label={copy.infoLabel}
-              className="options-footer-icon-button">
-              <AppIcon name="info" size={14} />
-            </button>
+        <div className="py-4">
+          <span className="sr-only">{copy.preferencesLabel}</span>
+          <div className="options-sidebar-footer-row">
+            <div className="options-sidebar-footer-controls">
+              <button
+                type="button"
+                data-testid="footer-locale-toggle"
+                aria-label={copy.languageLabel}
+                onClick={() => void setLocale(locale === "zh-CN" ? "en" : "zh-CN")}
+                className="options-footer-chip">
+                {locale === "zh-CN" ? "中" : "EN"}
+              </button>
+              <button
+                type="button"
+                data-testid="footer-theme-toggle"
+                onClick={() => void setThemePreference(getNextThemePreference(themePreference, resolvedTheme))}
+                className="options-footer-icon-button"
+                aria-label={copy.themeLabel}>
+                <AppIcon name={resolvedTheme === "dark" ? "moon" : "sun"} size={14} />
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -902,6 +1189,7 @@ function WorkspaceSidebar({
 }
 
 function WorkspaceToolbar({
+  locale,
   copy,
   loadError,
   currentScopeLabel,
@@ -920,9 +1208,9 @@ function WorkspaceToolbar({
   onlyLongform,
   setOnlyLongform,
   activeRefinementChips,
-  clearRefinement,
-  clearAllRefinements
+  clearRefinement
 }: {
+  locale: Locale
   copy: OptionsCopy
   loadError: string | null
   currentScopeLabel: string
@@ -942,27 +1230,30 @@ function WorkspaceToolbar({
   setOnlyLongform: React.Dispatch<React.SetStateAction<boolean>>
   activeRefinementChips: Array<{ key: string; label: string }>
   clearRefinement: (key: string) => void
-  clearAllRefinements: () => void
 }) {
+  const activeFilterCount = Number(onlyWithMedia) + Number(onlyLongform)
+
   return (
-    <div data-testid="library-header-section" className="options-main-header">
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div data-testid="library-header-section" className="options-main-header space-y-4">
+      <div className="space-y-2">
+        <div className="flex items-end justify-between gap-4">
           <div className="min-w-0">
-            <div className="options-overline">{copy.libraryTitle} Archive</div>
-            <h2 className="options-display-title-sm mt-3 truncate">{currentScopeLabel}</h2>
+            <div className="options-overline">{getSectionOverline(locale, copy.libraryTitle, "Archive")}</div>
+            <h2 className="options-display-title-sm mt-3 truncate font-bold">{currentScopeLabel}</h2>
           </div>
           <div className="text-right">
-            <div className="options-results-value">{visibleBookmarksCount}</div>
+            <div className="options-results-value font-bold">{visibleBookmarksCount}</div>
             <div className="options-overline mt-1">{copy.results}</div>
           </div>
         </div>
+      </div>
 
-        <InlineMessage message={loadError} className="!rounded-[6px] !border-[var(--border-subtle)] !bg-[var(--tag-bg)] !px-3 !py-2 !text-[12px]" />
+      <InlineMessage message={loadError} className="!rounded-[6px] !border-[var(--border-subtle)] !bg-[var(--tag-bg)] !px-3 !py-2 !text-[12px]" />
 
-        <div data-testid="workspace-toolbar" className="options-toolbar-grid">
-          <div className="relative min-w-0">
-            <AppIcon name="search" size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
+      <div data-testid="workspace-toolbar" className="flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <div className="relative min-w-0 flex-1">
+            <AppIcon name="search" size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
             <TextInputField
               id={searchId}
               ariaLabel={copy.search}
@@ -970,7 +1261,7 @@ function WorkspaceToolbar({
               value={query}
               placeholder={copy.searchPlaceholder}
               onChange={setQuery}
-              className="workspace-input options-toolbar-field pl-11 pr-4"
+              className="workspace-input options-toolbar-field pl-10 pr-4"
             />
           </div>
 
@@ -984,10 +1275,15 @@ function WorkspaceToolbar({
                 onClick={() => setFilterPopoverOpen((current) => !current)}>
                 <AppIcon name="filter" size={14} />
                 <span>{copy.filters}</span>
+                {activeFilterCount ? <span className="options-toolbar-badge">{activeFilterCount}</span> : null}
               </button>
 
               {filterPopoverOpen ? (
                 <div data-testid="filter-popover" className="options-filter-popover">
+                  <div className="space-y-1.5 pb-3">
+                    <h4 className="text-sm font-medium leading-none text-[var(--text-primary)]">{copy.filterConditions}</h4>
+                    <p className="text-xs text-[var(--text-secondary)]">{copy.filterDescription}</p>
+                  </div>
                   <label data-testid="filter-option-media" className="options-filter-row">
                     <input
                       type="checkbox"
@@ -1021,8 +1317,11 @@ function WorkspaceToolbar({
               data-testid="sort-trigger"
               className="options-toolbar-action"
               onClick={() => setSortOrder((current) => getNextSortOrder(current))}>
+              <AppIcon name="sort" size={14} />
               <span>{getSortLabel(copy, sortOrder)}</span>
             </button>
+
+            <span className="options-toolbar-divider" aria-hidden="true" />
 
             <div className="options-view-toggle-group">
               <button
@@ -1031,7 +1330,7 @@ function WorkspaceToolbar({
                 className={cn("options-view-toggle", viewMode === "grid" && "is-active")}
                 aria-pressed={viewMode === "grid"}
                 onClick={() => setViewMode("grid")}>
-                Grid
+                <AppIcon name="grid" size={16} />
               </button>
               <button
                 type="button"
@@ -1039,36 +1338,35 @@ function WorkspaceToolbar({
                 className={cn("options-view-toggle", viewMode === "list" && "is-active")}
                 aria-pressed={viewMode === "list"}
                 onClick={() => setViewMode("list")}>
-                List
+                <AppIcon name="list" size={16} />
               </button>
             </div>
           </div>
         </div>
 
-        <div data-testid="active-filters-row" className="options-active-filters">
-          <span className="options-meta-copy">{copy.activeFilters}</span>
-          {activeRefinementChips.length ? (
-            <>
-              {activeRefinementChips.map((chip) => (
-                <button
-                  key={chip.key}
-                  type="button"
-                  onClick={() => clearRefinement(chip.key)}
-                  className="chip-button options-chip !px-3 !py-1.5 !text-xs">
-                  <span>{chip.label}</span>
-                  <AppIcon name="close" size={12} />
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={clearAllRefinements}
-                className="options-clear-button">
-                <span>{copy.clearAll}</span>
-              </button>
-            </>
-          ) : (
-            <span className="options-meta-copy">-</span>
-          )}
+        <div className="options-toolbar-context-row flex items-center justify-between gap-4 text-sm">
+          <div data-testid="active-filters-row" className="options-active-filters">
+            <span className="options-active-filters-label">{copy.activeFilters}</span>
+            {activeRefinementChips.length ? (
+              <>
+                {activeRefinementChips.map((chip) => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() => clearRefinement(chip.key)}
+                    className="chip-button options-chip !px-3 !py-1.5 !text-xs">
+                    <span>{chip.label}</span>
+                    <AppIcon name="close" size={12} />
+                  </button>
+                ))}
+              </>
+            ) : (
+              <span className="options-active-filters-empty" aria-hidden="true" />
+            )}
+          </div>
+          <span data-testid="library-results-summary" className="options-toolbar-results-meta">
+            {visibleBookmarksCount} {copy.results}
+          </span>
         </div>
       </div>
     </div>
@@ -1079,7 +1377,6 @@ function BookmarkResultsPane({
   workspace,
   locale,
   copy,
-  selectedListId,
   currentScopeLabel,
   searchId,
   query,
@@ -1098,16 +1395,12 @@ function BookmarkResultsPane({
   setSelectedBookmarkId,
   visibleBookmarks,
   activeRefinementChips,
-  bookmarkListByBookmarkId,
   tagNamesByBookmarkId,
-  listNamesById,
-  clearRefinement,
-  clearAllRefinements
+  clearRefinement
 }: {
   workspace: ReturnType<typeof useWorkspaceData>
   locale: Locale
   copy: OptionsCopy
-  selectedListId: string
   currentScopeLabel: string
   searchId: string
   query: string
@@ -1126,16 +1419,14 @@ function BookmarkResultsPane({
   setSelectedBookmarkId: React.Dispatch<React.SetStateAction<string | undefined>>
   visibleBookmarks: BookmarkRecord[]
   activeRefinementChips: Array<{ key: string; label: string }>
-  bookmarkListByBookmarkId: Map<string, string>
   tagNamesByBookmarkId: Map<string, string[]>
-  listNamesById: Map<string, string>
   clearRefinement: (key: string) => void
-  clearAllRefinements: () => void
 }) {
   return (
     <section data-testid="library-workspace" className="options-main-shell min-h-[420px] min-w-0 overflow-hidden p-0 xl:h-[100dvh]">
       <div className="flex h-full min-h-0 flex-col">
         <WorkspaceToolbar
+          locale={locale}
           copy={copy}
           loadError={workspace.loadError}
           currentScopeLabel={currentScopeLabel}
@@ -1155,29 +1446,19 @@ function BookmarkResultsPane({
           setOnlyLongform={setOnlyLongform}
           activeRefinementChips={activeRefinementChips}
           clearRefinement={clearRefinement}
-          clearAllRefinements={clearAllRefinements}
         />
 
-        <div data-testid="library-results-summary" className="options-results-summary flex items-center justify-between gap-3 px-12 py-5">
-          <span className="options-meta-copy">{visibleBookmarks.length} {copy.results}</span>
-          {selectedListId ? <span className="options-meta-copy">{copy.scopedTo} {currentScopeLabel}</span> : null}
-        </div>
-
-        <div data-testid="library-results-scroll" className="scroll-shell min-h-0 flex-1 overflow-y-auto px-12 pb-12 pt-8">
+        <div data-testid="library-results-scroll" className="scroll-shell min-h-0 flex-1 overflow-y-auto">
           {visibleBookmarks.length ? (
-            <div
-              data-testid="results-stack"
-              className={cn(
-                "content-start gap-8",
-                viewMode === "grid" ? "options-results-grid grid sm:grid-cols-2 2xl:grid-cols-2" : "options-results-list flex flex-col"
-              )}>
+            <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-6 lg:px-8">
+              <div
+                data-testid="results-stack"
+                className={cn(
+                  "content-start gap-4",
+                  viewMode === "grid" ? "options-results-grid grid grid-cols-1 lg:grid-cols-2" : "options-results-list flex flex-col"
+                )}>
               {visibleBookmarks.map((bookmark, index) => {
                 const currentTagNames = tagNamesByBookmarkId.get(bookmark.tweetId) ?? []
-                const currentListName = getDisplayListName(
-                  getListIdByBookmarkId(bookmark.tweetId, bookmarkListByBookmarkId),
-                  listNamesById,
-                  copy
-                )
                 const isSelected = selectedBookmarkId === bookmark.tweetId
 
                 return (
@@ -1185,21 +1466,22 @@ function BookmarkResultsPane({
                     key={bookmark.tweetId}
                     bookmark={bookmark}
                     index={index}
-                    currentListName={currentListName}
                     currentTagNames={currentTagNames}
                     selected={isSelected}
                     locale={locale}
-                    copy={copy}
                     onSelect={() => setSelectedBookmarkId(bookmark.tweetId)}
                   />
                 )
               })}
             </div>
+            </div>
           ) : (
-            <EmptyState
-              title={copy.noBookmarksTitle}
-              description={copy.noBookmarksDescription}
-            />
+            <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-6 lg:px-8">
+              <EmptyState
+                title={copy.noBookmarksTitle}
+                description={copy.noBookmarksDescription}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -1231,9 +1513,8 @@ function SidebarLoading({ copy: _copy }: { copy: OptionsCopy }) {
 
 function OptionsScreen() {
   const workspace = useWorkspaceData()
-  const { locale, themePreference, setLocale, setThemePreference } = useExtensionUi()
+  const { locale, themePreference, resolvedTheme, setLocale, setThemePreference } = useExtensionUi()
   const copy = getOptionsCopy(locale)
-  const [selectedListId, setSelectedListId] = useState("")
   const [activeTagIds, setActiveTagIds] = useState<string[]>(["all"])
   const [query, setQuery] = useState("")
   const [sortOrder, setSortOrder] = useState<BookmarkSortOrder>("saved-desc")
@@ -1243,12 +1524,7 @@ function OptionsScreen() {
   const [onlyLongform, setOnlyLongform] = useState(false)
   const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | undefined>(undefined)
 
-  const bookmarkListByBookmarkId = useMemo(
-    () => new Map(workspace.bookmarkLists.map((bookmarkList) => [bookmarkList.bookmarkId, bookmarkList.listId])),
-    [workspace.bookmarkLists]
-  )
   const tagsById = useMemo(() => new Map(workspace.tags.map((tag) => [tag.id, tag])), [workspace.tags])
-  const listNamesById = useMemo(() => new Map(workspace.lists.map((list) => [list.id, list.name])), [workspace.lists])
   const bookmarkTagIdsByBookmarkId = useMemo(() => {
     const map = new Map<string, Set<string>>()
 
@@ -1304,12 +1580,6 @@ function OptionsScreen() {
   }, [selectedBookmarkId, visibleBookmarks])
 
   useEffect(() => {
-    if (selectedListId && !workspace.lists.some((list) => list.id === selectedListId)) {
-      setSelectedListId("")
-    }
-  }, [selectedListId, workspace.lists])
-
-  useEffect(() => {
     setActiveTagIds((current) => {
       if (current.includes("all")) {
         return current.length === 1 ? current : ["all"]
@@ -1340,15 +1610,12 @@ function OptionsScreen() {
 
   const searchId = createFieldId("filters", "search")
   const lastSyncLabel = formatTimestamp(workspace.summary.lastSyncedAt, locale)
-  const currentScopeLabel = selectedListId
-    ? getDisplayListName(selectedListId, listNamesById, copy)
-    : activeTagIds.includes("all")
-      ? copy.allBookmarks
-      : activeTagIds
-          .map((tagId) => workspace.tags.find((tag) => tag.id === tagId)?.name ?? tagId)
-          .join(" + ")
+  const currentScopeLabel = activeTagIds.includes("all")
+    ? copy.allBookmarks
+    : activeTagIds
+        .map((tagId) => workspace.tags.find((tag) => tag.id === tagId)?.name ?? tagId)
+        .join(" + ")
   const activeRefinementChips = [
-    query.trim() ? { key: "query", label: `${copy.searchPrefix}: ${truncateText(query.trim(), 24)}` } : null,
     onlyWithMedia ? { key: "media", label: copy.hasMedia } : null,
     onlyLongform ? { key: "longform", label: copy.longform } : null
   ].filter(Boolean) as Array<{ key: string; label: string }>
@@ -1367,12 +1634,6 @@ function OptionsScreen() {
     if (key === "longform") {
       setOnlyLongform(false)
     }
-  }
-
-  function clearAllRefinements() {
-    setQuery("")
-    setOnlyWithMedia(false)
-    setOnlyLongform(false)
   }
 
   function handleTagToggle(tagId: string) {
@@ -1401,7 +1662,7 @@ function OptionsScreen() {
         <div data-testid="workspace-shell" className="w-full">
           <div
             data-testid="workspace-overview"
-            className="grid gap-0 xl:min-h-0 xl:h-[100dvh] xl:grid-cols-[320px_minmax(0,1fr)_340px] xl:items-stretch">
+            className="grid gap-0 xl:min-h-0 xl:h-[100dvh] xl:grid-cols-[256px_minmax(0,1fr)_288px] xl:items-stretch">
           {workspace.isLoading && !workspace.bookmarks.length ? (
             <>
               <SidebarLoading copy={copy} />
@@ -1414,6 +1675,7 @@ function OptionsScreen() {
                 workspace={workspace}
                 locale={locale}
                 themePreference={themePreference}
+                resolvedTheme={resolvedTheme}
                 copy={copy}
                 lastSyncLabel={lastSyncLabel}
                 activeTagIds={activeTagIds}
@@ -1428,7 +1690,6 @@ function OptionsScreen() {
                 workspace={workspace}
                 locale={locale}
                 copy={copy}
-                selectedListId={selectedListId}
                 currentScopeLabel={currentScopeLabel}
                 searchId={searchId}
                 query={query}
@@ -1447,11 +1708,8 @@ function OptionsScreen() {
                 setSelectedBookmarkId={setSelectedBookmarkId}
                 visibleBookmarks={visibleBookmarks}
                 activeRefinementChips={activeRefinementChips}
-                bookmarkListByBookmarkId={bookmarkListByBookmarkId}
                 tagNamesByBookmarkId={tagNamesByBookmarkId}
-                listNamesById={listNamesById}
                 clearRefinement={clearRefinement}
-                clearAllRefinements={clearAllRefinements}
               />
 
               <section data-testid="workspace-inspector">

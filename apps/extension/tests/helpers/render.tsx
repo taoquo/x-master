@@ -3,8 +3,9 @@ import { JSDOM } from "jsdom"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 
-export function render(ui: React.ReactElement) {
+export function render(ui: React.ReactElement, options?: { prefersDark?: boolean }) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>")
+  const prefersDark = options?.prefersDark ?? false
   ;(globalThis as typeof globalThis & { window: Window & typeof globalThis; document: Document }).window =
     dom.window as unknown as Window & typeof globalThis
   ;(globalThis as typeof globalThis & { window: Window & typeof globalThis; document: Document }).document =
@@ -41,6 +42,21 @@ export function render(ui: React.ReactElement) {
     unobserve() {}
     disconnect() {}
   }
+  const matchMedia = (query: string) => ({
+    matches: query === "(prefers-color-scheme: dark)" ? prefersDark : false,
+    media: query,
+    onchange: null,
+    addEventListener() {},
+    removeEventListener() {},
+    addListener() {},
+    removeListener() {},
+    dispatchEvent() {
+      return false
+    }
+  })
+  ;(globalThis as typeof globalThis & { matchMedia?: typeof dom.window.matchMedia }).matchMedia =
+    matchMedia as typeof dom.window.matchMedia
+  dom.window.matchMedia = matchMedia as typeof dom.window.matchMedia
 
   const rootElement = dom.window.document.getElementById("root") as HTMLDivElement
   const root = createRoot(rootElement)

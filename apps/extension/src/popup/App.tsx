@@ -4,6 +4,7 @@ import type { Locale, WorkspaceData } from "../lib/types.ts"
 import { createEmptySyncSummary } from "../lib/types.ts"
 import { createEmptyWorkspaceStats } from "../lib/workspace/stats.ts"
 import { ExtensionUiProvider, useExtensionUi } from "../ui/provider.tsx"
+import { BrandLogo } from "../ui/branding.tsx"
 import { AppIcon } from "../ui/icons.tsx"
 import { StatusBadge, SurfaceCard } from "../ui/components.tsx"
 import { SyncPanel } from "./components/SyncPanel.tsx"
@@ -102,14 +103,21 @@ function PopupScreen() {
       >
           <div data-testid="popup-overview-panel" className="space-y-5">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="workspace-overline">{copy.inventory}</div>
-                <h1 className="mt-2 font-sans text-[2.35rem] leading-[0.92] tracking-[-0.06em] text-ink">
-                  X Bookmark Manager
-                </h1>
-                <p className="mt-3 max-w-[24ch] text-sm leading-6 text-slate-600">
-                  {copy.appDescription}
-                </p>
+              <div className="flex min-w-0 items-start gap-3">
+                <BrandLogo
+                  size={72}
+                  testId="popup-brand-logo"
+                  className="rounded-[20px] shadow-[0_16px_34px_-20px_rgba(15,23,42,0.42)]"
+                />
+                <div className="min-w-0">
+                  <div className="workspace-overline">{copy.inventory}</div>
+                  <h1 className="mt-2 font-sans text-[2.08rem] leading-[0.92] tracking-[-0.06em] text-ink">
+                    X Bookmark Manager
+                  </h1>
+                  <p className="mt-2.5 max-w-[22ch] text-sm leading-6 text-slate-600">
+                    {copy.appDescription}
+                  </p>
+                </div>
               </div>
               <StatusBadge status={data.summary.status} label={copy.status[data.summary.status]} />
             </div>

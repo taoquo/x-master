@@ -42,6 +42,7 @@ test("mountPopup renders Chinese popup copy and the default light theme", async 
   assert.match(dom.window.document.body.textContent ?? "", /工作区入口/)
   assert.match(dom.window.document.body.textContent ?? "", /本地库存/)
   assert.ok(dom.window.document.body.querySelector('[data-testid="popup-overview-panel"]'))
+  assert.ok(dom.window.document.body.querySelector('[data-testid="popup-brand-logo"]'))
   assert.ok(dom.window.document.body.querySelector('[data-testid="popup-actions-panel"]'))
   assert.match(dom.window.document.body.textContent ?? "", /立即同步/)
   assert.equal(dom.window.document.documentElement.dataset.theme, "light")
