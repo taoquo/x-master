@@ -609,6 +609,62 @@ test("home controller removes the local bookmark when native state switches back
   controller.destroy()
 })
 
+test("bookmarks controller opens the tag popover after native re-bookmark succeeds", async () => {
+  const dom = createBookmarksDom("/i/bookmarks", "bookmark")
+  const calls: string[] = []
+  const client = {
+    syncSiteTweetBookmark: async ({ enabled }: { tweet: unknown; enabled: boolean }) => {
+      calls.push(`sync:${enabled ? "add" : "remove"}`)
+      return { bookmarkId: "1234567890", enabled }
+    },
+    prepareSiteTweetTagging: async () => {
+      calls.push("prepare")
+      return {
+        bookmarkId: "1234567890",
+        locale: "en",
+        tags: [createTag("tag-1", "AI")],
+        selectedTagIds: []
+      } satisfies SiteTweetTagState
+    },
+    setSiteTweetTag: async () => ({
+      bookmarkId: "1234567890",
+      tags: [],
+      selectedTagIds: []
+    }),
+    createSiteTweetTag: async () => ({
+      bookmarkId: "1234567890",
+      createdTag: createTag("tag-2", "Research"),
+      tags: [createTag("tag-2", "Research")],
+      selectedTagIds: ["tag-2"]
+    })
+  }
+
+  const controller = createSiteTaggingController({
+    window: dom.window as unknown as Window,
+    document: dom.window.document,
+    pathname: dom.window.location.pathname,
+    client,
+    bookmarkConfirmation: {
+      attempts: 4,
+      delayMs: 10
+    }
+  })
+  controller.start()
+
+  const nativeBookmarkButton = dom.window.document.querySelector('button[data-testid="bookmark"]') as HTMLButtonElement | null
+  assert.ok(nativeBookmarkButton)
+  nativeBookmarkButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 15))
+  nativeBookmarkButton.setAttribute("data-testid", "removeBookmark")
+
+  await new Promise((resolve) => setTimeout(resolve, 60))
+
+  assert.deepEqual(calls, ["sync:add", "prepare"])
+  assert.ok(dom.window.document.querySelector('[data-site-tag-popover-host="true"]'))
+
+  controller.destroy()
+})
+
 test("bookmarks controller removes the local bookmark when native remove bookmark is clicked", async () => {
   const dom = createBookmarksDom("/i/bookmarks", "removeBookmark")
   const calls: string[] = []
@@ -656,6 +712,62 @@ test("bookmarks controller removes the local bookmark when native remove bookmar
   await new Promise((resolve) => setTimeout(resolve, 40))
 
   assert.deepEqual(calls, ["sync:remove"])
+
+  controller.destroy()
+})
+
+test("standard tweet pages outside home also open the tag popover after native bookmark succeeds", async () => {
+  const dom = createBookmarksDom("/alice", "bookmark")
+  const calls: string[] = []
+  const client = {
+    syncSiteTweetBookmark: async ({ enabled }: { tweet: unknown; enabled: boolean }) => {
+      calls.push(`sync:${enabled ? "add" : "remove"}`)
+      return { bookmarkId: "1234567890", enabled }
+    },
+    prepareSiteTweetTagging: async () => {
+      calls.push("prepare")
+      return {
+        bookmarkId: "1234567890",
+        locale: "en",
+        tags: [createTag("tag-1", "AI")],
+        selectedTagIds: []
+      } satisfies SiteTweetTagState
+    },
+    setSiteTweetTag: async () => ({
+      bookmarkId: "1234567890",
+      tags: [],
+      selectedTagIds: []
+    }),
+    createSiteTweetTag: async () => ({
+      bookmarkId: "1234567890",
+      createdTag: createTag("tag-2", "Research"),
+      tags: [createTag("tag-2", "Research")],
+      selectedTagIds: ["tag-2"]
+    })
+  }
+
+  const controller = createSiteTaggingController({
+    window: dom.window as unknown as Window,
+    document: dom.window.document,
+    pathname: dom.window.location.pathname,
+    client,
+    bookmarkConfirmation: {
+      attempts: 4,
+      delayMs: 10
+    }
+  })
+  controller.start()
+
+  const nativeBookmarkButton = dom.window.document.querySelector('button[data-testid="bookmark"]') as HTMLButtonElement | null
+  assert.ok(nativeBookmarkButton)
+  nativeBookmarkButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 15))
+  nativeBookmarkButton.setAttribute("data-testid", "removeBookmark")
+
+  await new Promise((resolve) => setTimeout(resolve, 60))
+
+  assert.deepEqual(calls, ["sync:add", "prepare"])
+  assert.ok(dom.window.document.querySelector('[data-site-tag-popover-host="true"]'))
 
   controller.destroy()
 })

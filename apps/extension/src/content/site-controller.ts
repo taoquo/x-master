@@ -83,6 +83,11 @@ export function createSiteTaggingController({
     document,
     client,
     onOpenStateChange(triggerHost, isOpen) {
+      popoverIsOpen = isOpen
+      if (!isOpen) {
+        activePopoverTweetId = null
+      }
+
       if (!triggerHost) {
         return
       }
@@ -97,9 +102,10 @@ export function createSiteTaggingController({
   let bookmarkOverlayHost: HTMLElement | null = null
   let bookmarkOverlayShadowRoot: ShadowRoot | null = null
   let activeBookmarkArticle: HTMLElement | null = null
+  let activePopoverTweetId: string | null = null
+  let popoverIsOpen = false
   let bookmarkOverlayHovered = false
-  const homePendingArticles = new WeakSet<Element>()
-  const bookmarkPendingArticles = new WeakSet<Element>()
+  const pendingBookmarkArticles = new WeakSet<Element>()
   let observer: MutationObserver | null = null
   const originalPushState = window.history.pushState.bind(window.history)
   const originalReplaceState = window.history.replaceState.bind(window.history)
@@ -129,6 +135,8 @@ export function createSiteTaggingController({
       originalReplaceState(...args)
       handleRouteChange()
     }) as History["replaceState"]
+    document.removeEventListener("click", handleNativeBookmarkClick, true)
+    document.addEventListener("click", handleNativeBookmarkClick, true)
     ensureRouteObserver()
     applyRouteMode()
   }
@@ -137,6 +145,7 @@ export function createSiteTaggingController({
     window.removeEventListener("popstate", handleRouteChange)
     window.history.pushState = originalPushState
     window.history.replaceState = originalReplaceState
+    document.removeEventListener("click", handleNativeBookmarkClick, true)
     observer?.disconnect()
     observer = null
     teardownBookmarkMode()
@@ -166,14 +175,11 @@ export function createSiteTaggingController({
     scanBookmarkArticles()
     window.addEventListener("scroll", handleBookmarkViewportChange, true)
     window.addEventListener("resize", handleBookmarkViewportChange)
-    document.removeEventListener("click", handleBookmarkPageBookmarkClick, true)
-    document.addEventListener("click", handleBookmarkPageBookmarkClick, true)
   }
 
   function teardownBookmarkMode() {
     window.removeEventListener("scroll", handleBookmarkViewportChange, true)
     window.removeEventListener("resize", handleBookmarkViewportChange)
-    document.removeEventListener("click", handleBookmarkPageBookmarkClick, true)
     removeBookmarkTriggerArtifacts()
     mountedArticles = new WeakSet<Element>()
     popover.close()
@@ -181,12 +187,10 @@ export function createSiteTaggingController({
 
   function setupHomeMode() {
     removeBookmarkTriggerArtifacts()
-    document.removeEventListener("click", handleHomeBookmarkClick, true)
-    document.addEventListener("click", handleHomeBookmarkClick, true)
   }
 
   function teardownHomeMode() {
-    document.removeEventListener("click", handleHomeBookmarkClick, true)
+    removeBookmarkTriggerArtifacts()
   }
 
   function ensureRouteObserver() {
@@ -328,6 +332,7 @@ export function createSiteTaggingController({
         return
       }
 
+      activePopoverTweetId = draft.tweetId
       void popover.open({
         anchor: trigger,
         triggerHost: host,
@@ -374,18 +379,8 @@ export function createSiteTaggingController({
     bookmarkOverlayHost.style.top = `${Math.round(top)}px`
   }
 
-  function handleHomeBookmarkClick(event: Event) {
-    if (syncRouteMode()) {
-      if (isBookmarksPath(currentPathname)) {
-        handleBookmarkPageBookmarkClick(event)
-      }
-      return
-    }
-
-    if (!isHomePath(currentPathname)) {
-      return
-    }
-
+  function handleNativeBookmarkClick(event: Event) {
+    syncRouteMode()
     const target = event.target as (Element & { closest?: typeof Element.prototype.closest }) | null
     if (!target?.closest) {
       return
@@ -397,15 +392,15 @@ export function createSiteTaggingController({
     }
 
     const article = button.closest("article")
-    if (!article || homePendingArticles.has(article)) {
+    if (!article || pendingBookmarkArticles.has(article)) {
       return
     }
 
-    homePendingArticles.add(article)
+    pendingBookmarkArticles.add(article)
     const shouldEnable = button.dataset.testid === "bookmark"
 
     void waitForBookmarkConfirmation(article, bookmarkConfirmation, shouldEnable).then(async (confirmed) => {
-      homePendingArticles.delete(article)
+      pendingBookmarkArticles.delete(article)
       if (!confirmed) {
         return
       }
@@ -421,62 +416,22 @@ export function createSiteTaggingController({
       })
 
       if (!shouldEnable) {
+        if (activePopoverTweetId === draft.tweetId) {
+          popover.close()
+        }
+        return
+      }
+
+      if (popoverIsOpen) {
         return
       }
 
       const activeBookmarkButton = resolveHomeBookmarkButton(article) ?? button
+      activePopoverTweetId = draft.tweetId
       void popover.open({
         anchor: activeBookmarkButton,
         triggerHost: null,
         tweet: draft
-      })
-    })
-  }
-
-  function handleBookmarkPageBookmarkClick(event: Event) {
-    if (syncRouteMode()) {
-      if (isHomePath(currentPathname)) {
-        handleHomeBookmarkClick(event)
-      }
-      return
-    }
-
-    if (!isBookmarksPath(currentPathname)) {
-      return
-    }
-
-    const target = event.target as (Element & { closest?: typeof Element.prototype.closest }) | null
-    if (!target?.closest) {
-      return
-    }
-
-    const button = target.closest('button[data-testid="bookmark"], button[data-testid="removeBookmark"]') as HTMLButtonElement | null
-    if (!button) {
-      return
-    }
-
-    const article = button.closest("article")
-    if (!article || bookmarkPendingArticles.has(article)) {
-      return
-    }
-
-    bookmarkPendingArticles.add(article)
-    const shouldEnable = button.dataset.testid === "bookmark"
-
-    void waitForBookmarkConfirmation(article, bookmarkConfirmation, shouldEnable).then(async (confirmed) => {
-      bookmarkPendingArticles.delete(article)
-      if (!confirmed) {
-        return
-      }
-
-      const draft = extractDraft(article)
-      if (!draft) {
-        return
-      }
-
-      await client.syncSiteTweetBookmark({
-        tweet: draft,
-        enabled: shouldEnable
       })
     })
   }
