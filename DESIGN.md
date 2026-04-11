@@ -1,6 +1,6 @@
 # x-master Extension UI / 设计说明
 
-本文档描述的是当前 `apps/extension` 已实现界面的真实设计语言，不是外部参考稿，也不是未来愿景稿。目标是让后续改动基于现状演进，避免继续把视觉判断建立在不相关的 inspiration 上。
+本文档描述的是当前扩展已实现界面的真实设计语言，不是外部参考稿，也不是未来愿景稿。目标是让后续改动基于现状演进，避免继续把视觉判断建立在不相关的 inspiration 上。
 
 ## 1. 范围与事实来源
 
@@ -12,13 +12,13 @@
 
 当前设计事实主要来自这些文件：
 
-- `apps/extension/src/styles/extension.css`
-- `apps/extension/src/ui/components.tsx`
-- `apps/extension/src/popup/App.tsx`
-- `apps/extension/src/popup/components/SyncPanel.tsx`
-- `apps/extension/src/options/OptionsApp.tsx`
-- `apps/extension/src/content/site-controller.ts`
-- `apps/extension/src/content/tag-popover.ts`
+- `src/styles/extension.css`
+- `src/ui/components.tsx`
+- `src/popup/App.tsx`
+- `src/popup/components/SyncPanel.tsx`
+- `src/options/OptionsApp.tsx`
+- `src/content/site-controller.ts`
+- `src/content/tag-popover.ts`
 
 ## 2. 总体风格判断
 
@@ -392,6 +392,6 @@ Tailwind 里定义了：
 
 ## 12. 一句话结论
 
-`apps/extension` 当前最准确的设计定义不是“某个品牌官网风格”，而是：
+当前扩展最准确的设计定义不是“某个品牌官网风格”，而是：
 
 > 一套以浅色本地工作台为主、以蓝色状态和工具性布局为核心，同时夹带一套独立站内玻璃弹层风格的浏览器扩展 UI。

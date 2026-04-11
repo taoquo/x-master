@@ -40,7 +40,7 @@ npm run build
 1. 打开 `chrome://extensions`。
 2. 开启开发者模式。
 3. 点击 `Load unpacked`。
-4. 选择 `apps/extension/build/chrome-mv3`。
+4. 选择 `build/chrome-mv3`。
 
 ## 如何使用
 
@@ -71,8 +71,10 @@ npm run build
 ## 仓库结构
 
 ```text
-apps/
-  extension/   Chrome 扩展源码、测试与构建脚本
+assets/   扩展静态资源
+scripts/  构建脚本
+src/      扩展源码
+tests/    自动化测试
 ```
 
 ## 开发命令
@@ -92,5 +94,5 @@ npm run lint
 
 ## 构建产物
 
-- 解包目录：`apps/extension/build/chrome-mv3`
-- 压缩包：`apps/extension/build/chrome-mv3.zip`
+- 解包目录：`build/chrome-mv3`
+- 压缩包：`build/chrome-mv3.zip`

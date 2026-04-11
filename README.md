@@ -40,7 +40,7 @@ Load it into Chrome:
 1. Open `chrome://extensions`.
 2. Enable Developer mode.
 3. Click `Load unpacked`.
-4. Select `apps/extension/build/chrome-mv3`.
+4. Select `build/chrome-mv3`.
 
 ## How to Use It
 
@@ -71,8 +71,10 @@ Load it into Chrome:
 ## Repository Structure
 
 ```text
-apps/
-  extension/   Chrome extension source, tests, and build scripts
+assets/   Static extension assets
+scripts/  Build scripts
+src/      Extension source code
+tests/    Automated tests
 ```
 
 ## Development
@@ -92,5 +94,5 @@ npm run lint
 
 ## Build Output
 
-- Unpacked build: `apps/extension/build/chrome-mv3`
-- Zip artifact: `apps/extension/build/chrome-mv3.zip`
+- Unpacked build: `build/chrome-mv3`
+- Zip artifact: `build/chrome-mv3.zip`
