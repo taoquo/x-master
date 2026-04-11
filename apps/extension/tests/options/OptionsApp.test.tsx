@@ -224,7 +224,7 @@ test("OptionsApp renders the Figma shell with editorial rails", async () => {
   assert.match(container.textContent ?? "", /内容摘要/)
 })
 
-test("OptionsApp renders the demo shell and hides legacy options panels", async () => {
+test("OptionsApp renders the english demo shell by default and hides legacy options panels", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await upsertBookmarks([
@@ -246,10 +246,10 @@ test("OptionsApp renders the demo shell and hides legacy options panels", async 
   assert.ok(findByTestId(container, "lists-sidebar"))
   assert.ok(findByTestId(container, "library-workspace"))
   assert.ok(findByTestId(container, "workspace-inspector"))
-  assert.match(container.textContent ?? "", /工作区/)
-  assert.match(container.textContent ?? "", /资料库/)
-  assert.match(container.textContent ?? "", /全部书签/)
-  assert.match(container.textContent ?? "", /筛选/)
+  assert.match(container.textContent ?? "", /Workspace/)
+  assert.match(container.textContent ?? "", /Archive/)
+  assert.match(container.textContent ?? "", /All bookmarks/)
+  assert.match(container.textContent ?? "", /Filters/)
 
   assert.equal(findByTestId(container, "toggle-preferences-panel"), null)
   assert.equal(findButton(container, "高级筛选") ?? findButton(container, "Advanced filters"), undefined)
@@ -323,7 +323,7 @@ test("OptionsApp uses demo tag navigation and footer preference toggles", async 
   assert.equal(themeSettings.themePreference, "system")
 })
 
-test("OptionsApp switches between grid and list views and shows demo filter popover", async () => {
+test("OptionsApp switches between grid and list views and shows english demo filter popover by default", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await upsertBookmarks([
@@ -378,28 +378,28 @@ test("OptionsApp switches between grid and list views and shows demo filter popo
   assert.ok(filterTrigger)
   assert.ok(sortTrigger)
   assert.match(resultsStack?.className ?? "", /options-results-grid/)
-  assert.match(sortTrigger?.textContent ?? "", /最近保存/)
+  assert.match(sortTrigger?.textContent ?? "", /Recently saved/)
   assert.match(getBookmarkCards(container)[0]?.textContent ?? "", /Bob/)
 
   await act(async () => {
     ;(sortTrigger as HTMLButtonElement).dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
-  assert.match(sortTrigger?.textContent ?? "", /最早保存/)
+  assert.match(sortTrigger?.textContent ?? "", /Oldest saved/)
   assert.match(getBookmarkCards(container)[0]?.textContent ?? "", /Alice/)
 
   await act(async () => {
     ;(sortTrigger as HTMLButtonElement).dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
-  assert.match(sortTrigger?.textContent ?? "", /最近发布/)
+  assert.match(sortTrigger?.textContent ?? "", /Newest published/)
   assert.match(getBookmarkCards(container)[0]?.textContent ?? "", /Carol/)
 
   await act(async () => {
     ;(sortTrigger as HTMLButtonElement).dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
-  assert.match(sortTrigger?.textContent ?? "", /最多喜欢/)
+  assert.match(sortTrigger?.textContent ?? "", /Most liked/)
   assert.match(getBookmarkCards(container)[0]?.textContent ?? "", /Bob/)
 
   await act(async () => {
@@ -418,19 +418,19 @@ test("OptionsApp switches between grid and list views and shows demo filter popo
   assert.ok(hasMediaToggle)
   assert.equal(unreadToggle.disabled, true)
   assert.equal(archivedToggle.disabled, true)
-  assert.match(popover?.textContent ?? "", /包含媒体/)
-  assert.match(popover?.textContent ?? "", /长文/)
-  assert.match(popover?.textContent ?? "", /未读/)
-  assert.match(popover?.textContent ?? "", /已归档/)
+  assert.match(popover?.textContent ?? "", /Has media/)
+  assert.match(popover?.textContent ?? "", /Longform/)
+  assert.match(popover?.textContent ?? "", /Unread/)
+  assert.match(popover?.textContent ?? "", /Archived/)
 
   await act(async () => {
     hasMediaToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
 
-  assert.match(findByTestId(container, "active-filters-row")?.textContent ?? "", /活跃筛选/)
-  assert.match(findByTestId(container, "active-filters-row")?.textContent ?? "", /包含媒体/)
-  assert.match(findByTestId(container, "library-results-summary")?.textContent ?? "", /结果/)
+  assert.match(findByTestId(container, "active-filters-row")?.textContent ?? "", /Active filters/)
+  assert.match(findByTestId(container, "active-filters-row")?.textContent ?? "", /Has media/)
+  assert.match(findByTestId(container, "library-results-summary")?.textContent ?? "", /results/)
 
   await act(async () => {
     listToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))

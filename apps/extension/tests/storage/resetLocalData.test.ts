@@ -88,7 +88,7 @@ test("resetLocalData clears IndexedDB stores and resets reduced extension settin
 
   const settings = await getSettings()
   assert.equal(settings.schemaVersion, 3)
-  assert.equal(settings.locale, "zh-CN")
+  assert.equal(settings.locale, "en")
   assert.equal(settings.themePreference, "system")
   assert.equal(settings.lastSyncSummary.status, "idle")
   assert.equal(settings.lastSyncSummary.errorSummary, undefined)

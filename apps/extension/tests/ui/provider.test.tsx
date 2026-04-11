@@ -39,7 +39,7 @@ test("ExtensionUiProvider exposes default locale, theme preference, and translat
   const probe = container.querySelector('[data-testid="probe"]')
   assert.ok(probe)
   assert.equal(probe.getAttribute("data-theme"), "light")
-  assert.match(probe.textContent ?? "", /zh-CN\|system\|立即同步/)
+  assert.match(probe.textContent ?? "", /en\|system\|Sync now/)
 })
 
 test("ExtensionUiProvider resolves stored english locale and dark theme", async () => {

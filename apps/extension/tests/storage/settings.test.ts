@@ -36,7 +36,7 @@ test("getSettings returns bookmark-manager defaults", async () => {
   const settings = await getSettings()
 
   assert.equal(settings.schemaVersion, 3)
-  assert.equal(settings.locale, "zh-CN")
+  assert.equal(settings.locale, "en")
   assert.equal(settings.themePreference, "system")
   assert.equal(settings.lastSyncSummary.status, "idle")
   assert.deepEqual(settings.classificationRules, [])
@@ -90,7 +90,7 @@ test("getSettings migrates legacy stored fields into the reduced settings shape"
   const settings = await getSettings()
 
   assert.equal(settings.schemaVersion, 3)
-  assert.equal(settings.locale, "zh-CN")
+  assert.equal(settings.locale, "en")
   assert.equal(settings.themePreference, "system")
   assert.equal(settings.lastSyncSummary.status, "success")
   assert.equal(settings.lastSyncSummary.lastSyncedAt, "2026-03-16T00:00:00.000Z")

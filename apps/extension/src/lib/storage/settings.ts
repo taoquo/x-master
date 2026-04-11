@@ -9,7 +9,7 @@ import {
 
 const SETTINGS_STORAGE_KEY = "settings"
 const SETTINGS_SCHEMA_VERSION = 3
-const DEFAULT_LOCALE: Locale = "zh-CN"
+const DEFAULT_LOCALE: Locale = "en"
 const DEFAULT_THEME_PREFERENCE: ThemePreference = "system"
 
 function normalizeLocale(locale: unknown): Locale {
