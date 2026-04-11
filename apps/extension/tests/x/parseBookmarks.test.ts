@@ -102,3 +102,74 @@ test("parseBookmarkEntries extracts normalized bookmark records", () => {
   assert.equal(result.bookmarks[1].sourceKind, "x-note-tweet")
   assert.equal(result.nextCursor, "next-cursor")
 })
+
+test("parseBookmarkEntries skips tweet entries without a rest_id", () => {
+  const result = parseBookmarkEntries({
+    data: {
+      bookmark_timeline_v2: {
+        timeline: {
+          instructions: [
+            {
+              type: "TimelineAddEntries",
+              entries: [
+                {
+                  entryId: "tweet-missing-id",
+                  content: {
+                    itemContent: {
+                      tweet_results: {
+                        result: {
+                          legacy: {
+                            full_text: "missing id should be ignored"
+                          },
+                          core: {
+                            user_results: {
+                              result: {
+                                legacy: {
+                                  name: "Ghost",
+                                  screen_name: "ghost"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  entryId: "tweet-789",
+                  content: {
+                    itemContent: {
+                      tweet_results: {
+                        result: {
+                          rest_id: "789",
+                          legacy: {
+                            full_text: "valid bookmark",
+                            created_at: "Wed Mar 17 00:00:00 +0000 2026"
+                          },
+                          core: {
+                            user_results: {
+                              result: {
+                                legacy: {
+                                  name: "Carol",
+                                  screen_name: "carol"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  })
+
+  assert.equal(result.bookmarks.length, 1)
+  assert.equal(result.bookmarks[0].tweetId, "789")
+})

@@ -20,7 +20,7 @@ export function parseBookmarkEntries(response: any) {
 
   const bookmarks = entries
     .filter((entry: any) => String(entry?.entryId ?? "").startsWith("tweet-"))
-    .map((entry: any) => {
+    .flatMap((entry: any) => {
       const rawResult = entry?.content?.itemContent?.tweet_results?.result
       const result = unwrapTweetResult(rawResult)
       const legacy = result?.legacy ?? {}
@@ -29,29 +29,35 @@ export function parseBookmarkEntries(response: any) {
       const screenName = userLegacy?.screen_name
       const restId = result?.rest_id
 
-      return {
-        tweetId: restId,
-        tweetUrl: screenName
-          ? `https://x.com/${screenName}/status/${restId}`
-          : `https://x.com/i/status/${restId}`,
-        authorName: userLegacy?.name ?? "",
-        authorHandle: screenName ?? "",
-        text: noteTweetText ?? legacy?.full_text ?? "",
-        createdAtOnX: legacy?.created_at ?? "",
-        savedAt: new Date().toISOString(),
-        media: (legacy?.extended_entities?.media ?? []).map((item: any) => ({
-          type: item?.type,
-          url: item?.media_url_https ?? item?.media_url ?? "",
-          altText: item?.ext_alt_text
-        })),
-        metrics: {
-          likes: legacy?.favorite_count ?? 0,
-          retweets: legacy?.retweet_count ?? 0,
-          replies: legacy?.reply_count ?? 0
-        },
-        rawPayload: result,
-        sourceKind: noteTweetText ? "x-note-tweet" : "x-bookmark"
+      if (!restId) {
+        return []
       }
+
+      return [
+        {
+          tweetId: restId,
+          tweetUrl: screenName
+            ? `https://x.com/${screenName}/status/${restId}`
+            : `https://x.com/i/status/${restId}`,
+          authorName: userLegacy?.name ?? "",
+          authorHandle: screenName ?? "",
+          text: noteTweetText ?? legacy?.full_text ?? "",
+          createdAtOnX: legacy?.created_at ?? "",
+          savedAt: new Date().toISOString(),
+          media: (legacy?.extended_entities?.media ?? []).map((item: any) => ({
+            type: item?.type,
+            url: item?.media_url_https ?? item?.media_url ?? "",
+            altText: item?.ext_alt_text
+          })),
+          metrics: {
+            likes: legacy?.favorite_count ?? 0,
+            retweets: legacy?.retweet_count ?? 0,
+            replies: legacy?.reply_count ?? 0
+          },
+          rawPayload: result,
+          sourceKind: noteTweetText ? "x-note-tweet" : "x-bookmark"
+        }
+      ]
     })
 
   const nextCursorEntry = entries.find((entry: any) => String(entry?.entryId ?? "").startsWith("cursor-bottom-"))
