@@ -17,6 +17,7 @@ export function parseBookmarkEntries(response: any) {
   const instructions = getTimelineInstructions(response)
   const addEntries = instructions.find((instruction: any) => instruction?.type === "TimelineAddEntries")
   const entries = addEntries?.entries ?? []
+  const seenAt = new Date().toISOString()
 
   const bookmarks = entries
     .filter((entry: any) => String(entry?.entryId ?? "").startsWith("tweet-"))
@@ -43,7 +44,8 @@ export function parseBookmarkEntries(response: any) {
           authorHandle: screenName ?? "",
           text: noteTweetText ?? legacy?.full_text ?? "",
           createdAtOnX: legacy?.created_at ?? "",
-          savedAt: new Date().toISOString(),
+          savedAt: seenAt,
+          lastSeenAt: seenAt,
           media: (legacy?.extended_entities?.media ?? []).map((item: any) => ({
             type: item?.type,
             url: item?.media_url_https ?? item?.media_url ?? "",

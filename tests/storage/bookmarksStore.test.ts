@@ -71,6 +71,45 @@ test("upsertBookmarks updates an existing bookmark with the same tweetId", async
   assert.equal(bookmarks[0].text, "updated text")
 })
 
+test("upsertBookmarks preserves the original savedAt for existing bookmarks", async () => {
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "123",
+      tweetUrl: "https://x.com/alice/status/123",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "hello",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T01:00:00.000Z",
+      lastSeenAt: "2026-03-15T01:00:00.000Z",
+      rawPayload: { id: "123" }
+    }
+  ])
+
+  await upsertBookmarks([
+    {
+      tweetId: "123",
+      tweetUrl: "https://x.com/alice/status/123",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "updated text",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T02:00:00.000Z",
+      lastSeenAt: "2026-03-15T02:00:00.000Z",
+      rawPayload: { id: "123", version: 2 }
+    }
+  ])
+
+  const bookmarks = await getAllBookmarks()
+
+  assert.equal(bookmarks.length, 1)
+  assert.equal(bookmarks[0].savedAt, "2026-03-15T01:00:00.000Z")
+  assert.equal(bookmarks[0].lastSeenAt, "2026-03-15T02:00:00.000Z")
+  assert.equal(bookmarks[0].text, "updated text")
+})
+
 test("database migration removes the legacy knowledge-cards store", async () => {
   await resetBookmarksDb()
 
@@ -132,6 +171,7 @@ test("upsertBookmarkSnapshot creates a minimal bookmark without overwriting rich
       text: "Full synced text with richer details",
       createdAtOnX: "2026-04-01T00:00:00.000Z",
       savedAt: "2026-04-01T00:10:00.000Z",
+      lastSeenAt: "2026-04-01T00:10:00.000Z",
       media: [{ type: "photo", url: "https://example.com/media.jpg", altText: "cover" }],
       metrics: { likes: 8, retweets: 2, replies: 1 },
       rawPayload: { source: "sync" }
@@ -152,8 +192,10 @@ test("upsertBookmarkSnapshot creates a minimal bookmark without overwriting rich
   assert.equal(snapshot.tweetId, "tweet-123")
   assert.equal(bookmarks.length, 1)
   assert.equal(bookmarks[0].text, "Full synced text with richer details")
+  assert.equal(bookmarks[0].savedAt, "2026-04-01T00:10:00.000Z")
   assert.deepEqual(bookmarks[0].metrics, { likes: 8, retweets: 2, replies: 1 })
   assert.deepEqual(bookmarks[0].rawPayload, { source: "sync" })
+  assert.match(String(bookmarks[0].lastSeenAt), /^\d{4}-\d{2}-\d{2}T/)
 })
 
 test("upsertBookmarkSnapshot can be assigned into inbox for site bookmark sync", async () => {

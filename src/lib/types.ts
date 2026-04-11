@@ -7,6 +7,7 @@ export interface BookmarkRecord {
   text: string
   createdAtOnX: string
   savedAt: string
+  lastSeenAt?: string
   media?: Array<{ type: string; url: string; altText?: string }>
   metrics?: { likes: number; retweets: number; replies: number }
   rawPayload: unknown

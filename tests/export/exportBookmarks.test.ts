@@ -46,6 +46,7 @@ test("createWorkspaceExportPayload includes workspace data and strips rawPayload
         text: "Agents for export",
         createdAtOnX: "2026-04-11T08:00:00.000Z",
         savedAt: "2026-04-11T08:05:00.000Z",
+        lastSeenAt: "2026-04-11T08:08:00.000Z",
         rawPayload: { hidden: true },
         updatedAt: "2026-04-11T08:06:00.000Z"
       }
@@ -103,6 +104,7 @@ test("createWorkspaceExportPayload includes workspace data and strips rawPayload
   assert.equal(payload.exportedAt, "2026-04-11T09:00:00.000Z")
   assert.equal(payload.bookmarks.length, 1)
   assert.equal("rawPayload" in payload.bookmarks[0], false)
+  assert.equal(payload.bookmarks[0].lastSeenAt, "2026-04-11T08:08:00.000Z")
   assert.equal(payload.settings.locale, "zh-CN")
   assert.equal(payload.settings.themePreference, "dark")
   assert.deepEqual(payload.summary, workspace.summary)
