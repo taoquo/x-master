@@ -8,9 +8,11 @@ import {
 } from "../types.ts"
 
 const SETTINGS_STORAGE_KEY = "settings"
-const SETTINGS_SCHEMA_VERSION = 3
+const SETTINGS_SCHEMA_VERSION = 4
+const SYNC_STRATEGY_VERSION = 1
 const DEFAULT_LOCALE: Locale = "en"
 const DEFAULT_THEME_PREFERENCE: ThemePreference = "system"
+const DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES = 3
 
 function normalizeLocale(locale: unknown): Locale {
   return locale === "en" || locale === "zh-CN" ? locale : DEFAULT_LOCALE
@@ -35,6 +37,15 @@ function normalizeRule(rule: Partial<ClassificationRule> | undefined, index: num
   }
 }
 
+function normalizePositiveInteger(value: unknown, fallback: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback
+  }
+
+  const normalized = Math.trunc(value)
+  return normalized > 0 ? normalized : fallback
+}
+
 function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): ExtensionSettings {
   const defaults = createDefaultSettings()
 
@@ -46,6 +57,12 @@ function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): Ex
       ...defaults.lastSyncSummary,
       ...settings?.lastSyncSummary
     },
+    syncStrategyVersion: normalizePositiveInteger(settings?.syncStrategyVersion, SYNC_STRATEGY_VERSION),
+    hasCompletedInitialFullSync: Boolean(settings?.hasCompletedInitialFullSync),
+    incrementalStopBufferPages: normalizePositiveInteger(
+      settings?.incrementalStopBufferPages,
+      DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES
+    ),
     classificationRules: Array.isArray(settings?.classificationRules)
       ? settings.classificationRules.map((rule, index) => normalizeRule(rule, index))
       : defaults.classificationRules
@@ -58,7 +75,10 @@ export function createDefaultSettings(): ExtensionSettings {
     locale: DEFAULT_LOCALE,
     themePreference: DEFAULT_THEME_PREFERENCE,
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
+    classificationRules: [],
+    syncStrategyVersion: SYNC_STRATEGY_VERSION,
+    hasCompletedInitialFullSync: false,
+    incrementalStopBufferPages: DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES
   }
 }
 

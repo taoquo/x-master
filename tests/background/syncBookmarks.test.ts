@@ -14,8 +14,9 @@ test("runBookmarkSync stores fetched bookmarks, assigns inbox, and applies match
 
   const result = await runBookmarkSync({
     getXCookieHeader: async () => "auth_token=abc; ct0=token123",
-    fetchAllBookmarks: async ({ fetchPage, limit }) => {
-      assert.equal(limit, 1000)
+    fetchAllBookmarks: async ({ fetchPage, limit, stopAfterConsecutiveKnownPages }) => {
+      assert.equal(limit, 10000)
+      assert.equal(stopAfterConsecutiveKnownPages, undefined)
       const page = await fetchPage({ cursor: undefined })
       return { bookmarks: page.bookmarks, failedCount: page.failedCount ?? 0 }
     },
@@ -114,11 +115,14 @@ test("runBookmarkSync stores fetched bookmarks, assigns inbox, and applies match
 
 test("runBookmarkSync default summary persistence updates saved settings", async () => {
   let savedSettings: ExtensionSettings = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     locale: "zh-CN",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
+    classificationRules: [],
+    syncStrategyVersion: 1,
+    hasCompletedInitialFullSync: false,
+    incrementalStopBufferPages: 3
   }
 
   await runBookmarkSync({
@@ -133,6 +137,7 @@ test("runBookmarkSync default summary persistence updates saved settings", async
 
   assert.equal(savedSettings.lastSyncSummary.status, "success")
   assert.equal(savedSettings.lastSyncSummary.fetchedCount, 0)
+  assert.equal(savedSettings.hasCompletedInitialFullSync, true)
 })
 
 test("runBookmarkSync does not delete bookmarks that are already stored locally", async () => {
@@ -156,11 +161,14 @@ test("runBookmarkSync does not delete bookmarks that are already stored locally"
     fetchAllBookmarks: async () => ({ bookmarks: [], failedCount: 0 }),
     createSyncRun: async () => {},
     getSettings: async () => ({
-      schemaVersion: 3,
+      schemaVersion: 4,
       locale: "zh-CN",
       themePreference: "system",
       lastSyncSummary: createEmptySyncSummary(),
-      classificationRules: []
+      classificationRules: [],
+      syncStrategyVersion: 1,
+      hasCompletedInitialFullSync: true,
+      incrementalStopBufferPages: 3
     }),
     saveSettings: async () => {}
   })
@@ -168,6 +176,60 @@ test("runBookmarkSync does not delete bookmarks that are already stored locally"
   const bookmarks = await getAllBookmarks()
   assert.equal(bookmarks.length, 1)
   assert.equal(bookmarks[0].tweetId, "existing-1")
+})
+
+test("runBookmarkSync uses buffered incremental mode after initial sync completes", async () => {
+  await runBookmarkSync({
+    getXCookieHeader: async () => "auth_token=abc; ct0=token123",
+    fetchAllBookmarks: async ({ limit, stopAfterConsecutiveKnownPages }) => {
+      assert.equal(limit, 10000)
+      assert.equal(stopAfterConsecutiveKnownPages, 3)
+      return { bookmarks: [], failedCount: 0 }
+    },
+    createSyncRun: async () => {},
+    getSettings: async () => ({
+      schemaVersion: 4,
+      locale: "zh-CN",
+      themePreference: "system",
+      lastSyncSummary: createEmptySyncSummary(),
+      classificationRules: [],
+      syncStrategyVersion: 1,
+      hasCompletedInitialFullSync: true,
+      incrementalStopBufferPages: 3
+    }),
+    saveSettings: async () => {}
+  })
+})
+
+test("runBookmarkSync does not mark initial full sync complete when the first sync fails", async () => {
+  let savedSettings: ExtensionSettings = {
+    schemaVersion: 4,
+    locale: "zh-CN",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: [],
+    syncStrategyVersion: 1,
+    hasCompletedInitialFullSync: false,
+    incrementalStopBufferPages: 3
+  }
+
+  await assert.rejects(
+    () =>
+      runBookmarkSync({
+        getXCookieHeader: async () => "auth_token=abc; ct0=token123",
+        fetchAllBookmarks: async () => {
+          throw new Error("boom")
+        },
+        createSyncRun: async () => {},
+        getSettings: async () => savedSettings,
+        saveSettings: async (nextSettings) => {
+          savedSettings = nextSettings
+        }
+      }),
+    /boom/
+  )
+
+  assert.equal(savedSettings.hasCompletedInitialFullSync, false)
 })
 
 test("runBookmarkSync persists an error summary and rethrows when sync fails", async () => {

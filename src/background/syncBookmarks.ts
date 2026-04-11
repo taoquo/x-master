@@ -1,6 +1,6 @@
 import { collectRuleTagAssignments } from "../lib/classification/rules.ts"
 import { assignBookmarksToInboxIfMissing } from "../lib/storage/listsStore.ts"
-import { upsertBookmarks } from "../lib/storage/bookmarksStore.ts"
+import { getAllBookmarks, upsertBookmarks } from "../lib/storage/bookmarksStore.ts"
 import { getSettings, saveSettings } from "../lib/storage/settings.ts"
 import { createSyncRun } from "../lib/storage/syncRunsStore.ts"
 import { attachBookmarkTags, getAllBookmarkTags, getAllTags } from "../lib/storage/tagsStore.ts"
@@ -9,7 +9,9 @@ import { extractCsrfToken, getXCookieHeader } from "../lib/x/auth.ts"
 import { fetchBookmarksPage } from "../lib/x/client.ts"
 import { fetchAllBookmarks } from "../lib/x/paginateBookmarks.ts"
 
-const DEFAULT_SYNC_LIMIT = 1000
+const DEFAULT_SYNC_LIMIT = 10000
+const DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES = 3
+const SYNC_STRATEGY_VERSION = 1
 
 interface SyncResult {
   fetchedCount: number
@@ -116,8 +118,32 @@ export async function runBookmarkSync({
     const settings = await readSettings()
     const cookieHeader = await getCookieHeader()
     const csrfToken = extractCsrfToken(cookieHeader)
+    const hasCompletedInitialFullSync = Boolean(settings.hasCompletedInitialFullSync)
+    const incrementalStopBufferPages =
+      settings.incrementalStopBufferPages && settings.incrementalStopBufferPages > 0
+        ? settings.incrementalStopBufferPages
+        : DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES
+    const knownBookmarkIds = hasCompletedInitialFullSync
+      ? new Set((await getAllBookmarks()).map((bookmark) => bookmark.tweetId))
+      : null
     const { bookmarks, failedCount } = await paginateBookmarks({
       limit: syncLimit,
+      stopAfterConsecutiveKnownPages: hasCompletedInitialFullSync ? incrementalStopBufferPages : undefined,
+      isExistingBookmark: knownBookmarkIds
+        ? (bookmark) => {
+            const tweetId = bookmark.tweetId
+            if (!tweetId) {
+              return false
+            }
+
+            const isKnown = knownBookmarkIds.has(tweetId)
+            if (!isKnown) {
+              knownBookmarkIds.add(tweetId)
+            }
+
+            return isKnown
+          }
+        : undefined,
       fetchPage: ({ cursor }) =>
         loadBookmarksPage({
           cursor,
@@ -142,6 +168,15 @@ export async function runBookmarkSync({
 
     if (ruleAssignments.length > 0) {
       await saveBookmarkTags(ruleAssignments)
+    }
+
+    if (!hasCompletedInitialFullSync) {
+      await writeSettings({
+        ...settings,
+        syncStrategyVersion: SYNC_STRATEGY_VERSION,
+        hasCompletedInitialFullSync: true,
+        incrementalStopBufferPages
+      })
     }
 
     const finishedAt = new Date().toISOString()

@@ -118,6 +118,9 @@ export interface ExtensionSettings {
   themePreference: ThemePreference
   lastSyncSummary: SyncSummary
   classificationRules: ClassificationRule[]
+  syncStrategyVersion?: number
+  hasCompletedInitialFullSync?: boolean
+  incrementalStopBufferPages?: number
 }
 
 export interface WorkspaceData {

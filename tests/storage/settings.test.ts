@@ -35,11 +35,14 @@ test("getSettings returns bookmark-manager defaults", async () => {
 
   const settings = await getSettings()
 
-  assert.equal(settings.schemaVersion, 3)
+  assert.equal(settings.schemaVersion, 4)
   assert.equal(settings.locale, "en")
   assert.equal(settings.themePreference, "system")
   assert.equal(settings.lastSyncSummary.status, "idle")
   assert.deepEqual(settings.classificationRules, [])
+  assert.equal(settings.syncStrategyVersion, 1)
+  assert.equal(settings.hasCompletedInitialFullSync, false)
+  assert.equal(settings.incrementalStopBufferPages, 3)
 })
 
 test("saveClassificationRules persists deterministic rule settings", async () => {
@@ -89,12 +92,15 @@ test("getSettings migrates legacy stored fields into the reduced settings shape"
 
   const settings = await getSettings()
 
-  assert.equal(settings.schemaVersion, 3)
+  assert.equal(settings.schemaVersion, 4)
   assert.equal(settings.locale, "en")
   assert.equal(settings.themePreference, "system")
   assert.equal(settings.lastSyncSummary.status, "success")
   assert.equal(settings.lastSyncSummary.lastSyncedAt, "2026-03-16T00:00:00.000Z")
   assert.deepEqual(settings.classificationRules, [])
+  assert.equal(settings.syncStrategyVersion, 1)
+  assert.equal(settings.hasCompletedInitialFullSync, false)
+  assert.equal(settings.incrementalStopBufferPages, 3)
 })
 
 test("saveSettings persists locale and theme preferences", async () => {
