@@ -6,8 +6,12 @@
   ],
   "scripts": {
     "build": "npm --workspace @xbm/extension run build",
+    "build:site": "npm --workspace @xbm/site run build",
     "test": "npm --workspace @xbm/extension test",
+    "test:site": "npm --workspace @xbm/site test",
     "lint": "npm --workspace @xbm/extension run lint",
-    "typecheck": "npm --workspace @xbm/extension run typecheck"
+    "lint:site": "npm --workspace @xbm/site run lint",
+    "typecheck": "npm --workspace @xbm/extension run typecheck",
+    "typecheck:site": "npm --workspace @xbm/site run typecheck"
   }
 }
