@@ -7,6 +7,7 @@ import { OptionsApp } from "../../src/options/OptionsApp.tsx"
 import { upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
 import { createList } from "../../src/lib/storage/listsStore.ts"
+import { createEmptySyncSummary } from "../../src/lib/types.ts"
 import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
 import { attachTagToBookmark, createTag } from "../../src/lib/storage/tagsStore.ts"
 import { render, settle } from "../helpers/render.tsx"
@@ -164,6 +165,116 @@ test("OptionsApp uses the shared badge and status surface language", async () =>
   assert.doesNotMatch(inspectorEmptyState.className, /panel-elevated/)
   assert.doesNotMatch(inspectorEmptyState.className, /panel-surface/)
   assert.match(findByTestId(container, "lists-sidebar")?.textContent ?? "", /偏好设置/)
+})
+
+test("OptionsApp renders an export action and downloads a workspace backup", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-export-1",
+      tweetUrl: "https://x.com/alice/status/tweet-export-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Export this bookmark",
+      createdAtOnX: "2026-04-11T08:00:00.000Z",
+      savedAt: "2026-04-11T08:05:00.000Z",
+      rawPayload: { source: "x" }
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: {
+      status: "success",
+      fetchedCount: 1,
+      insertedCount: 1,
+      updatedCount: 0,
+      failedCount: 0,
+      lastSyncedAt: "2026-04-11T08:05:00.000Z"
+    },
+    classificationRules: []
+  })
+
+  let capturedJson = ""
+  let capturedDownload = ""
+  let revokedUrl = ""
+  const { container, dom } = render(React.createElement(OptionsApp))
+  const originalCreateObjectUrl = globalThis.URL.createObjectURL
+  const originalRevokeObjectUrl = globalThis.URL.revokeObjectURL
+  const originalClick = (dom.window.HTMLAnchorElement.prototype as HTMLAnchorElement & { click: () => void }).click
+
+  globalThis.URL.createObjectURL = (blob: Blob | MediaSource) => {
+    void (blob as Blob).text().then((value) => {
+      capturedJson = value
+    })
+    return "blob:export"
+  }
+  globalThis.URL.revokeObjectURL = (url: string) => {
+    revokedUrl = url
+  }
+  ;(dom.window.HTMLAnchorElement.prototype as HTMLAnchorElement & { click: () => void }).click = function click() {
+    capturedDownload = this.download
+  }
+
+  try {
+    await settle()
+
+    const exportButton = findByTestId(container, "footer-export-toggle") as HTMLButtonElement | null
+    assert.ok(exportButton)
+    assert.equal(exportButton.textContent?.trim() ?? "", "")
+    assert.equal(exportButton.getAttribute("aria-label"), "Export data")
+    assert.equal(findByTestId(container, "sidebar-export-workspace"), null)
+
+    await act(async () => {
+      exportButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    })
+    await settle()
+
+    assert.equal(capturedDownload, "xbm-workspace-2026-04-11.json")
+    assert.equal(revokedUrl, "blob:export")
+    assert.match(capturedJson, /"bookmarks": \[/)
+    assert.doesNotMatch(capturedJson, /"rawPayload"/)
+  } finally {
+    globalThis.URL.createObjectURL = originalCreateObjectUrl
+    globalThis.URL.revokeObjectURL = originalRevokeObjectUrl
+    ;(dom.window.HTMLAnchorElement.prototype as HTMLAnchorElement & { click: () => void }).click = originalClick
+  }
+})
+
+test("OptionsApp surfaces export failures in the shared command error area", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  const originalCreateObjectUrl = globalThis.URL.createObjectURL
+  globalThis.URL.createObjectURL = () => {
+    throw new Error("download blocked")
+  }
+
+  try {
+    await settle()
+
+    const exportButton = findByTestId(container, "footer-export-toggle") as HTMLButtonElement | null
+    assert.ok(exportButton)
+
+    await act(async () => {
+      exportButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    })
+    await settle()
+
+    assert.match(findByTestId(container, "sidebar-status-section")?.textContent ?? "", /download blocked/)
+  } finally {
+    globalThis.URL.createObjectURL = originalCreateObjectUrl
+  }
 })
 
 test("OptionsApp renders the Figma shell with editorial rails", async () => {

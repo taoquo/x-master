@@ -11,6 +11,7 @@ import {
   Gear,
   GlobeSimple,
   Hash,
+  Export,
   ImageSquare,
   Info,
   List,
@@ -57,6 +58,7 @@ type AppIconName =
   | "comment"
   | "heart"
   | "share"
+  | "export"
 
 interface AppIconProps {
   name: AppIconName
@@ -127,6 +129,8 @@ export function AppIcon({ name, size = 18, className }: AppIconProps) {
       return <Heart {...commonProps} />
     case "share":
       return <ShareNetwork {...commonProps} />
+    case "export":
+      return <Export {...commonProps} />
     default:
       return null
   }

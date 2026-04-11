@@ -1,16 +1,24 @@
 import { useState } from "react"
+import { createWorkspaceExportFilename, exportBookmarks } from "../../lib/export/exportBookmarks.ts"
 import { runSync } from "../../lib/runtime/popupClient.ts"
 import { createList, deleteList, moveBookmarkToList, moveBookmarksToList, renameList } from "../../lib/storage/listsStore.ts"
-import { removeTagFromClassificationRules, saveClassificationRules } from "../../lib/storage/settings.ts"
+import { getSettings, removeTagFromClassificationRules, saveClassificationRules } from "../../lib/storage/settings.ts"
 import { attachTagToBookmark, attachTagToBookmarks, createTag, deleteTag, detachTagFromBookmark } from "../../lib/storage/tagsStore.ts"
-import type { ClassificationRule } from "../../lib/types.ts"
+import type { ClassificationRule, WorkspaceData } from "../../lib/types.ts"
 
 function toErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 
-export function useWorkspaceCommands({ refreshData }: { refreshData: () => Promise<void> }) {
+export function useWorkspaceCommands({
+  refreshData,
+  getWorkspaceData
+}: {
+  refreshData: () => Promise<void>
+  getWorkspaceData: () => WorkspaceData
+}) {
   const [isSyncing, setIsSyncing] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const [isSavingLists, setIsSavingLists] = useState(false)
   const [isSavingTags, setIsSavingTags] = useState(false)
   const [isSavingRules, setIsSavingRules] = useState(false)
@@ -27,6 +35,40 @@ export function useWorkspaceCommands({ refreshData }: { refreshData: () => Promi
     } finally {
       await refreshData()
       setIsSyncing(false)
+    }
+  }
+
+  async function handleExportWorkspace() {
+    setCommandError(null)
+    setIsExporting(true)
+
+    try {
+      if (typeof document === "undefined" || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
+        throw new Error("Download APIs unavailable")
+      }
+
+      const exportedAt = new Date().toISOString()
+      const settings = await getSettings()
+      const json = exportBookmarks({
+        workspace: getWorkspaceData(),
+        settings,
+        exportedAt
+      })
+      const blob = new Blob([json], { type: "application/json;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+
+      link.href = url
+      link.download = createWorkspaceExportFilename(exportedAt)
+      link.rel = "noopener"
+      document.body.append(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      setCommandError(toErrorMessage(error, "Failed to export data"))
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -228,11 +270,13 @@ export function useWorkspaceCommands({ refreshData }: { refreshData: () => Promi
 
   return {
     isSyncing,
+    isExporting,
     isSavingLists,
     isSavingTags,
     isSavingRules,
     commandError,
     handleSync,
+    handleExportWorkspace,
     handleCreateList,
     handleRenameList,
     handleDeleteList,

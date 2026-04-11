@@ -56,6 +56,8 @@ function getOptionsCopy(locale: Locale) {
       lastSync: "上次同步",
       syncNow: "立即同步",
       syncing: "同步中...",
+      exportData: "导出数据",
+      exporting: "导出中...",
       totalTags: "总标签数",
       unclassified: "未分类",
       unclassifiedHint: "仍在等待标签覆盖。",
@@ -161,6 +163,8 @@ function getOptionsCopy(locale: Locale) {
     lastSync: "Last sync",
     syncNow: "Sync now",
     syncing: "Syncing...",
+    exportData: "Export data",
+    exporting: "Exporting...",
     totalTags: "Total tags",
     unclassified: "Unclassified",
     unclassifiedHint: "Still waiting for tag coverage.",
@@ -1179,6 +1183,15 @@ function WorkspaceSidebar({
                 className="options-footer-icon-button"
                 aria-label={copy.themeLabel}>
                 <AppIcon name={resolvedTheme === "dark" ? "moon" : "sun"} size={14} />
+              </button>
+              <button
+                type="button"
+                data-testid="footer-export-toggle"
+                onClick={() => void workspace.handleExportWorkspace()}
+                disabled={workspace.isExporting}
+                className="options-footer-icon-button"
+                aria-label={copy.exportData}>
+                <AppIcon name="export" size={14} />
               </button>
             </div>
           </div>
