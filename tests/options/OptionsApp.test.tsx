@@ -232,7 +232,7 @@ test("OptionsApp renders an export action and downloads a workspace backup", asy
     })
     await settle()
 
-    assert.equal(capturedDownload, "xbm-workspace-2026-04-11.json")
+    assert.match(String(capturedDownload), /^xbm-workspace-\d{4}-\d{2}-\d{2}\.json$/)
     assert.equal(revokedUrl, "blob:export")
     assert.match(capturedJson, /"bookmarks": \[/)
     assert.doesNotMatch(capturedJson, /"rawPayload"/)

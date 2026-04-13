@@ -121,7 +121,7 @@ export function SyncPanel({
           onClick={() => void onSync()}
           disabled={isSyncing}
           className="primary-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
-          <AppIcon name="sync" size={16} />
+          <AppIcon name="sync" size={16} className={isSyncing ? "animate-spin" : undefined} />
           <span>{isSyncing ? copy.syncing : copy.syncNow}</span>
         </button>
       </div>

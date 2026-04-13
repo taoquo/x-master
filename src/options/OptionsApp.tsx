@@ -1024,7 +1024,7 @@ function WorkspaceSidebar({
             onClick={() => void workspace.handleSync()}
             disabled={workspace.isSyncing}
             className="workspace-sync-primary">
-            <AppIcon name="sync" size={16} />
+            <AppIcon name="sync" size={16} className={workspace.isSyncing ? "animate-spin" : undefined} />
             <span>{workspace.isSyncing ? copy.syncing : copy.syncNow}</span>
           </button>
 
