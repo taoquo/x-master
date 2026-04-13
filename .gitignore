@@ -25,3 +25,5 @@ yarn-error.log*
 .claude/
 .gstack/
 .worktrees/
+
+docs/
