@@ -43,6 +43,8 @@ test("getSettings returns bookmark-manager defaults", async () => {
   assert.equal(settings.syncStrategyVersion, 1)
   assert.equal(settings.hasCompletedInitialFullSync, false)
   assert.equal(settings.incrementalStopBufferPages, 3)
+  assert.equal(settings.leftSidebarWidth, 280)
+  assert.equal(settings.rightSidebarWidth, 360)
 })
 
 test("saveClassificationRules persists deterministic rule settings", async () => {
@@ -111,13 +113,17 @@ test("saveSettings persists locale and theme preferences", async () => {
     locale: "en",
     themePreference: "dark",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
+    classificationRules: [],
+    leftSidebarWidth: 320,
+    rightSidebarWidth: 420
   })
 
   const settings = await getSettings()
 
   assert.equal(settings.locale, "en")
   assert.equal(settings.themePreference, "dark")
+  assert.equal(settings.leftSidebarWidth, 320)
+  assert.equal(settings.rightSidebarWidth, 420)
 })
 
 test("removeTagFromClassificationRules strips deleted tag ids from every rule", async () => {

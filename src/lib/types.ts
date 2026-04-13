@@ -121,6 +121,8 @@ export interface ExtensionSettings {
   syncStrategyVersion?: number
   hasCompletedInitialFullSync?: boolean
   incrementalStopBufferPages?: number
+  leftSidebarWidth?: number
+  rightSidebarWidth?: number
 }
 
 export interface WorkspaceData {

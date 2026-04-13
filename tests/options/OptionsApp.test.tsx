@@ -1597,6 +1597,82 @@ test("OptionsApp renders a single tags summary and preferences inside the left s
   assert.equal(findByTestId(container, "workspace-preferences-inline"), null)
 })
 
+test("OptionsApp truncates the sidebar title instead of overflowing", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 4,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: [],
+    syncStrategyVersion: 1,
+    hasCompletedInitialFullSync: false,
+    incrementalStopBufferPages: 3
+  })
+
+  const { container } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const title = container.querySelector(".options-sidebar-title") as HTMLElement | null
+  assert.ok(title)
+  assert.match(title.className, /truncate/)
+})
+
+test("OptionsApp renders left and right split handles in three-pane mode", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 4,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: [],
+    syncStrategyVersion: 1,
+    hasCompletedInitialFullSync: false,
+    incrementalStopBufferPages: 3
+  })
+
+  const { container } = render(React.createElement(OptionsApp))
+  await settle()
+
+  assert.ok(findByTestId(container, "split-handle-left"))
+  assert.ok(findByTestId(container, "split-handle-right"))
+})
+
+test("OptionsApp persists updated pane widths after dragging a split handle", async () => {
+  const runtime = installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 4,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: [],
+    syncStrategyVersion: 1,
+    hasCompletedInitialFullSync: false,
+    incrementalStopBufferPages: 3,
+    leftSidebarWidth: 280,
+    rightSidebarWidth: 360
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const leftHandle = findByTestId(container, "split-handle-left") as HTMLDivElement | null
+  assert.ok(leftHandle)
+
+  await act(async () => {
+    leftHandle.dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, clientX: 280 }))
+    dom.window.dispatchEvent(new dom.window.MouseEvent("mousemove", { bubbles: true, clientX: 320 }))
+    dom.window.dispatchEvent(new dom.window.MouseEvent("mouseup", { bubbles: true, clientX: 320 }))
+  })
+  await settle()
+
+  const storedSettings = runtime.getStoredSettings() as { leftSidebarWidth?: number } | undefined
+  assert.equal(storedSettings?.leftSidebarWidth, 320)
+})
+
 test("OptionsApp does not expose expandable inline preferences in demo shell", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()

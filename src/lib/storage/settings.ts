@@ -13,6 +13,8 @@ const SYNC_STRATEGY_VERSION = 1
 const DEFAULT_LOCALE: Locale = "en"
 const DEFAULT_THEME_PREFERENCE: ThemePreference = "system"
 const DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES = 3
+const DEFAULT_LEFT_SIDEBAR_WIDTH = 280
+const DEFAULT_RIGHT_SIDEBAR_WIDTH = 360
 
 function normalizeLocale(locale: unknown): Locale {
   return locale === "en" || locale === "zh-CN" ? locale : DEFAULT_LOCALE
@@ -46,6 +48,11 @@ function normalizePositiveInteger(value: unknown, fallback: number) {
   return normalized > 0 ? normalized : fallback
 }
 
+function normalizeRange(value: unknown, fallback: number, min: number, max: number) {
+  const normalized = normalizePositiveInteger(value, fallback)
+  return Math.min(max, Math.max(min, normalized))
+}
+
 function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): ExtensionSettings {
   const defaults = createDefaultSettings()
 
@@ -63,6 +70,8 @@ function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): Ex
       settings?.incrementalStopBufferPages,
       DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES
     ),
+    leftSidebarWidth: normalizeRange(settings?.leftSidebarWidth, DEFAULT_LEFT_SIDEBAR_WIDTH, 260, 420),
+    rightSidebarWidth: normalizeRange(settings?.rightSidebarWidth, DEFAULT_RIGHT_SIDEBAR_WIDTH, 320, 520),
     classificationRules: Array.isArray(settings?.classificationRules)
       ? settings.classificationRules.map((rule, index) => normalizeRule(rule, index))
       : defaults.classificationRules
@@ -78,7 +87,9 @@ export function createDefaultSettings(): ExtensionSettings {
     classificationRules: [],
     syncStrategyVersion: SYNC_STRATEGY_VERSION,
     hasCompletedInitialFullSync: false,
-    incrementalStopBufferPages: DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES
+    incrementalStopBufferPages: DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES,
+    leftSidebarWidth: DEFAULT_LEFT_SIDEBAR_WIDTH,
+    rightSidebarWidth: DEFAULT_RIGHT_SIDEBAR_WIDTH
   }
 }
 

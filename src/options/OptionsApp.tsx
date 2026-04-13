@@ -12,6 +12,7 @@ import {
   type BookmarkSortOrder,
 } from "../lib/search/searchBookmarks.ts"
 import { useWorkspaceData } from "./hooks/useWorkspaceData.ts"
+import { getSettings, saveSettings } from "../lib/storage/settings.ts"
 import { EmptyState, StatusBadge, SurfaceCard } from "../ui/components.tsx"
 import { BrandLogo } from "../ui/branding.tsx"
 import { ExtensionUiProvider, useExtensionUi } from "../ui/provider.tsx"
@@ -1009,9 +1010,11 @@ function WorkspaceSidebar({
             testId="options-brand-logo"
             className="rounded-[12px] shadow-[0_14px_28px_-22px_rgba(15,23,42,0.42)]"
           />
-          <h1 className="options-display-title options-sidebar-title">
-            {copy.pageTitle}
-          </h1>
+          <div className="min-w-0 flex-1">
+            <h1 className="options-display-title options-sidebar-title truncate">
+              {copy.pageTitle}
+            </h1>
+          </div>
         </div>
 
         <div data-testid="workspace-sidebar-sync" className="options-sidebar-sync">
@@ -1528,6 +1531,8 @@ function OptionsScreen() {
   const workspace = useWorkspaceData()
   const { locale, themePreference, resolvedTheme, setLocale, setThemePreference } = useExtensionUi()
   const copy = getOptionsCopy(locale)
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(280)
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(360)
   const [activeTagIds, setActiveTagIds] = useState<string[]>(["all"])
   const [query, setQuery] = useState("")
   const [sortOrder, setSortOrder] = useState<BookmarkSortOrder>("saved-desc")
@@ -1536,6 +1541,75 @@ function OptionsScreen() {
   const [onlyWithMedia, setOnlyWithMedia] = useState(false)
   const [onlyLongform, setOnlyLongform] = useState(false)
   const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | undefined>(undefined)
+  const resizeStateRef = useRef<null | { side: "left" | "right"; startX: number; startWidth: number }>(null)
+  const paneWidthsRef = useRef({ left: 280, right: 360 })
+
+  useEffect(() => {
+    void getSettings().then((settings) => {
+      const nextLeft = settings.leftSidebarWidth ?? 280
+      const nextRight = settings.rightSidebarWidth ?? 360
+      paneWidthsRef.current = { left: nextLeft, right: nextRight }
+      setLeftSidebarWidth(nextLeft)
+      setRightSidebarWidth(nextRight)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    const stopResizeMode = () => {
+      document.documentElement.classList.remove("is-pane-resizing")
+    }
+
+    const handlePointerMove = (event: PointerEvent | MouseEvent) => {
+      const state = resizeStateRef.current
+      if (!state) {
+        return
+      }
+      event.preventDefault()
+
+      if (state.side === "left") {
+        const nextWidth = Math.min(420, Math.max(260, state.startWidth + (event.clientX - state.startX)))
+        paneWidthsRef.current.left = nextWidth
+        setLeftSidebarWidth(nextWidth)
+        return
+      }
+
+      const nextWidth = Math.min(520, Math.max(320, state.startWidth - (event.clientX - state.startX)))
+      paneWidthsRef.current.right = nextWidth
+      setRightSidebarWidth(nextWidth)
+    }
+
+    const handlePointerUp = () => {
+      if (!resizeStateRef.current) {
+        return
+      }
+
+      resizeStateRef.current = null
+      stopResizeMode()
+      void getSettings().then((settings) =>
+        saveSettings({
+          ...settings,
+          leftSidebarWidth: paneWidthsRef.current.left,
+          rightSidebarWidth: paneWidthsRef.current.right
+        })
+      )
+    }
+
+    window.addEventListener("pointermove", handlePointerMove)
+    window.addEventListener("pointerup", handlePointerUp)
+    window.addEventListener("mousemove", handlePointerMove)
+    window.addEventListener("mouseup", handlePointerUp)
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+      window.removeEventListener("mousemove", handlePointerMove)
+      window.removeEventListener("mouseup", handlePointerUp)
+      stopResizeMode()
+    }
+  }, [leftSidebarWidth, rightSidebarWidth])
 
   const tagsById = useMemo(() => new Map(workspace.tags.map((tag) => [tag.id, tag])), [workspace.tags])
   const bookmarkTagIdsByBookmarkId = useMemo(() => {
@@ -1675,6 +1749,13 @@ function OptionsScreen() {
         <div data-testid="workspace-shell" className="w-full">
           <div
             data-testid="workspace-overview"
+            style={
+              typeof window !== "undefined" && window.innerWidth >= 768
+                ? {
+                    gridTemplateColumns: `${leftSidebarWidth}px 12px minmax(0, 1fr) 12px ${rightSidebarWidth}px`
+                  }
+                : undefined
+            }
             className="grid gap-0 xl:min-h-0 xl:h-[100dvh] xl:grid-cols-[256px_minmax(0,1fr)_288px] xl:items-stretch">
           {workspace.isLoading && !workspace.bookmarks.length ? (
             <>
@@ -1697,6 +1778,31 @@ function OptionsScreen() {
                 onDeleteTag={workspace.handleDeleteTag}
                 setLocale={setLocale}
                 setThemePreference={setThemePreference}
+              />
+
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                data-testid="split-handle-left"
+                className="workspace-split-handle hidden md:block"
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                  resizeStateRef.current = {
+                    side: "left",
+                    startX: event.clientX,
+                    startWidth: leftSidebarWidth
+                  }
+                  document.documentElement.classList.add("is-pane-resizing")
+                }}
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                  resizeStateRef.current = {
+                    side: "left",
+                    startX: event.clientX,
+                    startWidth: leftSidebarWidth
+                  }
+                  document.documentElement.classList.add("is-pane-resizing")
+                }}
               />
 
               <BookmarkResultsPane
@@ -1723,6 +1829,31 @@ function OptionsScreen() {
                 activeRefinementChips={activeRefinementChips}
                 tagNamesByBookmarkId={tagNamesByBookmarkId}
                 clearRefinement={clearRefinement}
+              />
+
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                data-testid="split-handle-right"
+                className="workspace-split-handle hidden md:block"
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                  resizeStateRef.current = {
+                    side: "right",
+                    startX: event.clientX,
+                    startWidth: rightSidebarWidth
+                  }
+                  document.documentElement.classList.add("is-pane-resizing")
+                }}
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                  resizeStateRef.current = {
+                    side: "right",
+                    startX: event.clientX,
+                    startWidth: rightSidebarWidth
+                  }
+                  document.documentElement.classList.add("is-pane-resizing")
+                }}
               />
 
               <section data-testid="workspace-inspector">

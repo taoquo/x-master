@@ -605,10 +605,38 @@
     display: flex;
     align-items: center;
     gap: 12px;
+    min-width: 0;
   }
 
   .options-sidebar-title {
     margin-top: 0;
+  }
+
+  .workspace-split-handle {
+    width: 12px;
+    cursor: col-resize;
+    position: relative;
+  }
+
+  .workspace-split-handle::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    left: 50%;
+    width: 1px;
+    transform: translateX(-50%);
+    background: var(--border-subtle);
+  }
+
+  .workspace-split-handle:hover::before {
+    width: 2px;
+    background: var(--text-tertiary);
+  }
+
+  .is-pane-resizing,
+  .is-pane-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
   }
 
   .options-sidebar-sync {
