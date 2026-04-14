@@ -1,9 +1,8 @@
 import { runBookmarkSync } from "./syncBookmarks.ts"
-import { getAllBookmarks, removeBookmarkSnapshot, upsertBookmarkSnapshot } from "../lib/storage/bookmarksStore.ts"
-import { assignBookmarksToInboxIfMissing, getAllBookmarkLists, getAllLists } from "../lib/storage/listsStore.ts"
+import { removeBookmarkSnapshot, upsertBookmarkSnapshot } from "../lib/storage/bookmarksStore.ts"
+import { assignBookmarksToInboxIfMissing } from "../lib/storage/listsStore.ts"
 import { resetLocalData } from "../lib/storage/resetLocalData.ts"
 import { getSettings } from "../lib/storage/settings.ts"
-import { getLatestSyncRun } from "../lib/storage/syncRunsStore.ts"
 import {
   attachTagToBookmark,
   createTag,
@@ -28,7 +27,7 @@ import type {
   SiteTweetTagState,
   WorkspaceData
 } from "../lib/types.ts"
-import { buildWorkspaceStats } from "../lib/workspace/stats.ts"
+import { loadWorkspaceDataFromLocal } from "../lib/workspace/loadWorkspaceData.ts"
 
 const OPTIONS_PAGE_PATH = "options.html"
 
@@ -183,33 +182,7 @@ async function createSiteTweetTagDefault({
 }
 
 async function loadWorkspaceData(): Promise<WorkspaceData> {
-  const [bookmarks, lists, bookmarkLists, tags, bookmarkTags, settings, latestSyncRun] = await Promise.all([
-    getAllBookmarks(),
-    getAllLists(),
-    getAllBookmarkLists(),
-    getAllTags(),
-    getAllBookmarkTags(),
-    getSettings(),
-    getLatestSyncRun()
-  ])
-
-  return {
-    bookmarks,
-    lists,
-    bookmarkLists,
-    tags,
-    bookmarkTags,
-    classificationRules: settings.classificationRules,
-    summary: settings.lastSyncSummary,
-    latestSyncRun,
-    stats: buildWorkspaceStats({
-      bookmarks,
-      lists,
-      bookmarkLists,
-      tags,
-      bookmarkTags
-    })
-  }
+  return loadWorkspaceDataFromLocal()
 }
 
 export async function openOrFocusOptionsPage() {

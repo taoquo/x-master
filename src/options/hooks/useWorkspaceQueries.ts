@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react"
 import type { WorkspaceData } from "../../lib/types.ts"
-import { loadWorkspaceData } from "../../lib/runtime/popupClient.ts"
 import { createEmptySyncSummary } from "../../lib/types.ts"
 import { createEmptyWorkspaceStats } from "../../lib/workspace/stats.ts"
+import { loadWorkspaceDataFromLocal } from "../../lib/workspace/loadWorkspaceData.ts"
 
 function createEmptyWorkspaceData(): WorkspaceData {
   return {
@@ -33,7 +33,7 @@ export function useWorkspaceQueries() {
     }
 
     try {
-      const nextData = await loadWorkspaceData()
+      const nextData = await loadWorkspaceDataFromLocal()
       setData(nextData)
       setLoadError(null)
     } catch (error) {

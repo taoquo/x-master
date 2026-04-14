@@ -1,11 +1,6 @@
 import { createBackgroundMessageHandler } from "../../src/background/index.ts"
-import { getAllBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
-import { getAllBookmarkLists, getAllLists } from "../../src/lib/storage/listsStore.ts"
 import { resetLocalData } from "../../src/lib/storage/resetLocalData.ts"
-import { getSettings } from "../../src/lib/storage/settings.ts"
-import { getLatestSyncRun } from "../../src/lib/storage/syncRunsStore.ts"
-import { getAllBookmarkTags, getAllTags } from "../../src/lib/storage/tagsStore.ts"
-import { buildWorkspaceStats } from "../../src/lib/workspace/stats.ts"
+import { loadWorkspaceDataFromLocal } from "../../src/lib/workspace/loadWorkspaceData.ts"
 
 export function installChromeRuntimeHarness({
   runSync
@@ -16,35 +11,7 @@ export function installChromeRuntimeHarness({
   let openOptionsPageCallCount = 0
 
   const handler = createBackgroundMessageHandler({
-    loadWorkspaceData: async () => {
-      const [bookmarks, lists, bookmarkLists, tags, bookmarkTags, settings, latestSyncRun] = await Promise.all([
-        getAllBookmarks(),
-        getAllLists(),
-        getAllBookmarkLists(),
-        getAllTags(),
-        getAllBookmarkTags(),
-        getSettings(),
-        getLatestSyncRun()
-      ])
-
-      return {
-        bookmarks,
-        lists,
-        bookmarkLists,
-        tags,
-        bookmarkTags,
-        classificationRules: settings.classificationRules,
-        summary: settings.lastSyncSummary,
-        latestSyncRun,
-        stats: buildWorkspaceStats({
-          bookmarks,
-          lists,
-          bookmarkLists,
-          tags,
-          bookmarkTags
-        })
-      }
-    },
+    loadWorkspaceData: async () => loadWorkspaceDataFromLocal(),
     resetData: async () => {
       await resetLocalData()
       return { success: true }

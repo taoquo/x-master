@@ -1393,6 +1393,7 @@ function WorkspaceToolbar({
 
 function BookmarkResultsPane({
   workspace,
+  isLoading,
   locale,
   copy,
   currentScopeLabel,
@@ -1417,6 +1418,7 @@ function BookmarkResultsPane({
   clearRefinement
 }: {
   workspace: ReturnType<typeof useWorkspaceData>
+  isLoading: boolean
   locale: Locale
   copy: OptionsCopy
   currentScopeLabel: string
@@ -1467,7 +1469,15 @@ function BookmarkResultsPane({
         />
 
         <div data-testid="library-results-scroll" className="scroll-shell min-h-0 flex-1 overflow-y-auto">
-          {visibleBookmarks.length ? (
+          {isLoading ? (
+            <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-6 lg:px-8">
+              <div className="space-y-4">
+                <div className="h-32 animate-pulse rounded-[16px] bg-[var(--surface-muted)]" />
+                <div className="h-32 animate-pulse rounded-[16px] bg-[var(--surface-muted)]" />
+                <div className="h-32 animate-pulse rounded-[16px] bg-[var(--surface-muted)]" />
+              </div>
+            </div>
+          ) : visibleBookmarks.length ? (
             <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-6 lg:px-8">
               <div
                 data-testid="results-stack"
@@ -1507,28 +1517,6 @@ function BookmarkResultsPane({
   )
 }
 
-function SidebarLoading({ copy: _copy }: { copy: OptionsCopy }) {
-  return (
-    <SurfaceCard chrome="bare" className="options-sidebar-shell min-h-[420px] xl:h-[100dvh]">
-      <div className="space-y-4 px-8 py-10">
-        <div className="h-4 animate-pulse rounded-[4px] bg-[var(--tag-bg)]" />
-        <div className="h-12 animate-pulse rounded-[4px] bg-[var(--tag-bg)]" />
-        <div className="h-10 animate-pulse rounded-[6px] bg-[var(--tag-bg)]" />
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-          <div className="h-24 animate-pulse rounded-[6px] bg-[var(--tag-bg)]" />
-          <div className="h-24 animate-pulse rounded-[6px] bg-[var(--tag-bg)]" />
-        </div>
-        <div className="space-y-2">
-          <div className="h-10 animate-pulse rounded-[4px] bg-[var(--tag-bg)]" />
-          <div className="h-10 animate-pulse rounded-[4px] bg-[var(--tag-bg)]" />
-          <div className="h-10 animate-pulse rounded-[4px] bg-[var(--tag-bg)]" />
-        </div>
-        <div className="h-20 animate-pulse rounded-[4px] bg-[var(--tag-bg)]" />
-      </div>
-    </SurfaceCard>
-  )
-}
-
 function OptionsScreen() {
   const workspace = useWorkspaceData()
   const { locale, themePreference, resolvedTheme, setLocale, setThemePreference } = useExtensionUi()
@@ -1547,13 +1535,15 @@ function OptionsScreen() {
   const paneWidthsRef = useRef({ left: 280, right: 360 })
 
   useEffect(() => {
-    void getSettings().then((settings) => {
-      const nextLeft = settings.leftSidebarWidth ?? 280
-      const nextRight = settings.rightSidebarWidth ?? 360
-      paneWidthsRef.current = { left: nextLeft, right: nextRight }
-      setLeftSidebarWidth(nextLeft)
-      setRightSidebarWidth(nextRight)
-    })
+    void getSettings()
+      .then((settings) => {
+        const nextLeft = settings.leftSidebarWidth ?? 280
+        const nextRight = settings.rightSidebarWidth ?? 360
+        paneWidthsRef.current = { left: nextLeft, right: nextRight }
+        setLeftSidebarWidth(nextLeft)
+        setRightSidebarWidth(nextRight)
+      })
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -1708,6 +1698,7 @@ function OptionsScreen() {
     onlyWithMedia ? { key: "media", label: copy.hasMedia } : null,
     onlyLongform ? { key: "longform", label: copy.longform } : null
   ].filter(Boolean) as Array<{ key: string; label: string }>
+  const coldStartLoading = workspace.isLoading && !workspace.bookmarks.length
 
   function clearRefinement(key: string) {
     if (key === "query") {
@@ -1759,13 +1750,6 @@ function OptionsScreen() {
                 : undefined
             }
             className="grid gap-0 xl:min-h-0 xl:h-[100dvh] xl:grid-cols-[256px_minmax(0,1fr)_288px] xl:items-stretch">
-          {workspace.isLoading && !workspace.bookmarks.length ? (
-            <>
-              <SidebarLoading copy={copy} />
-              <LoadingPanel title={copy.libraryTitle} />
-              <LoadingPanel title={copy.detailsTitle} />
-            </>
-          ) : (
             <>
               <WorkspaceSidebar
                 workspace={workspace}
@@ -1809,6 +1793,7 @@ function OptionsScreen() {
 
               <BookmarkResultsPane
                 workspace={workspace}
+                isLoading={coldStartLoading}
                 locale={locale}
                 copy={copy}
                 currentScopeLabel={currentScopeLabel}
@@ -1859,31 +1844,34 @@ function OptionsScreen() {
               />
 
               <section data-testid="workspace-inspector">
-                <BookmarkInspector
-                  bookmark={selectedBookmark}
-                  tags={workspace.tags}
-                  bookmarkTags={workspace.bookmarkTags}
-                  isSavingTags={workspace.isSavingTags}
-                  locale={locale}
-                  copy={copy}
-                  onAttachTag={async (tagId) => {
-                    if (!selectedBookmark) {
-                      return
-                    }
+                {coldStartLoading ? (
+                  <LoadingPanel title={copy.detailsTitle} />
+                ) : (
+                  <BookmarkInspector
+                    bookmark={selectedBookmark}
+                    tags={workspace.tags}
+                    bookmarkTags={workspace.bookmarkTags}
+                    isSavingTags={workspace.isSavingTags}
+                    locale={locale}
+                    copy={copy}
+                    onAttachTag={async (tagId) => {
+                      if (!selectedBookmark) {
+                        return
+                      }
 
-                    await workspace.handleAttachTag(selectedBookmark.tweetId, tagId)
-                  }}
-                  onDetachTag={async (tagId) => {
-                    if (!selectedBookmark) {
-                      return
-                    }
+                      await workspace.handleAttachTag(selectedBookmark.tweetId, tagId)
+                    }}
+                    onDetachTag={async (tagId) => {
+                      if (!selectedBookmark) {
+                        return
+                      }
 
-                    await workspace.handleDetachTag(selectedBookmark.tweetId, tagId)
-                  }}
-                />
+                      await workspace.handleDetachTag(selectedBookmark.tweetId, tagId)
+                    }}
+                  />
+                )}
               </section>
             </>
-          )}
           </div>
         </div>
       </main>

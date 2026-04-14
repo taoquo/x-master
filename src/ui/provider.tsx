@@ -81,10 +81,12 @@ export function ExtensionUiProvider({ children }: { children: React.ReactNode })
   }, [clearThemeSwitchingState])
 
   React.useEffect(() => {
-    void getSettings().then((nextSettings) => {
-      settingsRef.current = nextSettings
-      setSettings(nextSettings)
-    })
+    void getSettings()
+      .then((nextSettings) => {
+        settingsRef.current = nextSettings
+        setSettings(nextSettings)
+      })
+      .catch(() => {})
   }, [])
 
   React.useEffect(() => {

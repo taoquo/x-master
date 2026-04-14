@@ -1703,19 +1703,32 @@ test("OptionsApp shows load errors in the workspace area", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
 
-  const originalSendMessage = chrome.runtime.sendMessage as (message: { type: string }) => Promise<unknown>
-  ;(chrome.runtime.sendMessage as unknown as (message: { type: string }) => Promise<unknown>) = async (message) => {
-    if (message.type === LOAD_WORKSPACE_DATA_MESSAGE) {
-      return { error: "Load failed on purpose" }
-    }
-
-    return originalSendMessage(message)
+  const storageLocal = chrome.storage.local as { get: (...args: unknown[]) => Promise<unknown> }
+  const originalGet = storageLocal.get
+  storageLocal.get = async () => {
+    throw new Error("Load failed on purpose")
   }
 
-  const { container } = render(React.createElement(OptionsApp))
-  await settle()
+  try {
+    const { container } = render(React.createElement(OptionsApp))
+    await settle()
 
-  assert.match(container.textContent ?? "", /Load failed on purpose/)
+    assert.match(container.textContent ?? "", /Load failed on purpose/)
+  } finally {
+    storageLocal.get = originalGet
+  }
+})
+
+test("OptionsApp keeps the real three-pane shell visible while the first workspace load is still pending", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  const { container } = render(React.createElement(OptionsApp))
+
+  assert.ok(findByTestId(container, "lists-sidebar"))
+  assert.ok(findByTestId(container, "workspace-sidebar-sync"))
+  assert.ok(findByTestId(container, "workspace-toolbar"))
+  assert.ok(findByTestId(container, "workspace-inspector"))
 })
 
 test("OptionsApp shows command errors near the sync controls", async () => {
@@ -1756,6 +1769,40 @@ test("OptionsApp shows command errors near the sync controls", async () => {
   await settle()
 
   assert.match(container.textContent ?? "", /Sync failed on purpose/)
+})
+
+test("OptionsApp loads workspace data without depending on the runtime workspace message", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-local-load",
+      tweetUrl: "https://x.com/alice/status/tweet-local-load",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Loaded directly from IndexedDB",
+      createdAtOnX: "2026-04-14T08:00:00.000Z",
+      savedAt: "2026-04-14T08:05:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const originalSendMessage = chrome.runtime.sendMessage as (message: { type: string }) => Promise<unknown>
+  ;(chrome.runtime.sendMessage as unknown as (message: { type: string }) => Promise<unknown>) = async (message) => {
+    if (message.type === LOAD_WORKSPACE_DATA_MESSAGE) {
+      return { error: "workspace runtime path should not be used" }
+    }
+
+    return originalSendMessage(message)
+  }
+
+  const { container } = render(React.createElement(OptionsApp))
+  await settle()
+  await settle()
+
+  assert.match(container.textContent ?? "", /Loaded directly from IndexedDB/)
+  assert.doesNotMatch(container.textContent ?? "", /workspace runtime path should not be used/)
 })
 
 test("OptionsApp refreshes workspace data when the window regains focus after site bookmark changes", async () => {
