@@ -1,7 +1,7 @@
 import type { BookmarkListRecord, BookmarkRecord, BookmarkTagRecord } from "../types.ts"
 import { getAllBookmarks } from "../storage/bookmarksStore.ts"
 
-export type BookmarkSortOrder = "saved-desc" | "saved-asc" | "created-desc" | "likes-desc"
+export type BookmarkSortOrder = "timeline" | "saved-desc" | "saved-asc" | "created-desc" | "likes-desc"
 export type MultiValueMatchMode = "any" | "all"
 export type SavedTimeRange = "all" | "7d" | "30d" | "90d"
 
@@ -161,13 +161,30 @@ export function sortBookmarks(bookmarks: BookmarkRecord[], sortOrder: BookmarkSo
 
   sorted.sort((left, right) => {
     switch (sortOrder) {
+      case "timeline": {
+        const leftRank = left.bookmarkTimelineRank
+        const rightRank = right.bookmarkTimelineRank
+
+        if (leftRank !== undefined && rightRank !== undefined) {
+          return leftRank - rightRank
+        }
+
+        if (leftRank !== undefined) {
+          return -1
+        }
+
+        if (rightRank !== undefined) {
+          return 1
+        }
+
+        return toTimestamp(right.savedAt) - toTimestamp(left.savedAt)
+      }
       case "saved-asc":
         return toTimestamp(left.savedAt) - toTimestamp(right.savedAt)
       case "created-desc":
         return toTimestamp(right.createdAtOnX) - toTimestamp(left.createdAtOnX)
       case "likes-desc":
         return (right.metrics?.likes ?? 0) - (left.metrics?.likes ?? 0)
-      case "saved-desc":
       default:
         return toTimestamp(right.savedAt) - toTimestamp(left.savedAt)
     }

@@ -4,7 +4,7 @@ import "fake-indexeddb/auto"
 import React from "react"
 import { act } from "react"
 import { OptionsApp } from "../../src/options/OptionsApp.tsx"
-import { upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
+import { removeBookmarkSnapshot, upsertBookmarkSnapshot, upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
 import { createList } from "../../src/lib/storage/listsStore.ts"
 import { createEmptySyncSummary } from "../../src/lib/types.ts"
@@ -1756,4 +1756,142 @@ test("OptionsApp shows command errors near the sync controls", async () => {
   await settle()
 
   assert.match(container.textContent ?? "", /Sync failed on purpose/)
+})
+
+test("OptionsApp refreshes workspace data when the window regains focus after site bookmark changes", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+  await settle()
+
+  assert.equal(getBookmarkCards(container).length, 0)
+
+  await upsertBookmarkSnapshot({
+    tweetId: "tweet-focus-refresh",
+    tweetUrl: "https://x.com/alice/status/tweet-focus-refresh",
+    authorName: "Alice",
+    authorHandle: "alice",
+    text: "Fresh bookmark from x.com",
+    createdAtOnX: "2026-04-14T08:00:00.000Z"
+  })
+
+  await act(async () => {
+    dom.window.dispatchEvent(new dom.window.FocusEvent("focus"))
+  })
+  await settle()
+  await settle()
+
+  assert.equal(getBookmarkCards(container).length, 1)
+  assert.match(container.textContent ?? "", /Fresh bookmark from x.com/)
+})
+
+test("OptionsApp shows a newly site-bookmarked tweet first under the default recently saved sort", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-ranked-1",
+      tweetUrl: "https://x.com/alice/status/tweet-ranked-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Older synced bookmark",
+      createdAtOnX: "2026-04-10T08:00:00.000Z",
+      savedAt: "2026-04-10T08:05:00.000Z",
+      bookmarkTimelineRank: 0,
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-ranked-2",
+      tweetUrl: "https://x.com/bob/status/tweet-ranked-2",
+      authorName: "Bob",
+      authorHandle: "bob",
+      text: "Another synced bookmark",
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:05:00.000Z",
+      bookmarkTimelineRank: 1,
+      rawPayload: {}
+    }
+  ])
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+  await settle()
+
+  await upsertBookmarkSnapshot({
+    tweetId: "tweet-new-site-bookmark",
+    tweetUrl: "https://x.com/carol/status/tweet-new-site-bookmark",
+    authorName: "Carol",
+    authorHandle: "carol",
+    text: "Newest site bookmark",
+    createdAtOnX: "2026-04-14T08:00:00.000Z"
+  })
+
+  await act(async () => {
+    dom.window.dispatchEvent(new dom.window.FocusEvent("focus"))
+  })
+  await settle()
+  await settle()
+
+  assert.match(getBookmarkCards(container)[0]?.textContent ?? "", /Newest site bookmark/)
+})
+
+test("OptionsApp removes a bookmark from the results after a site-side unbookmark and focus refresh", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-remove-after-focus",
+      tweetUrl: "https://x.com/alice/status/tweet-remove-after-focus",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Will be removed from options",
+      createdAtOnX: "2026-04-10T08:00:00.000Z",
+      savedAt: "2026-04-10T08:05:00.000Z",
+      bookmarkTimelineRank: 0,
+      rawPayload: {}
+    }
+  ])
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+  await settle()
+
+  assert.equal(getBookmarkCards(container).length, 1)
+  assert.match(container.textContent ?? "", /Will be removed from options/)
+
+  await removeBookmarkSnapshot("tweet-remove-after-focus")
+
+  await act(async () => {
+    dom.window.dispatchEvent(new dom.window.FocusEvent("focus"))
+  })
+  await settle()
+  await settle()
+
+  assert.equal(getBookmarkCards(container).length, 0)
+  assert.doesNotMatch(container.textContent ?? "", /Will be removed from options/)
 })

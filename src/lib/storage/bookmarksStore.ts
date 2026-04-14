@@ -29,6 +29,7 @@ export async function upsertBookmarks(bookmarks: BookmarkRecord[]) {
       ...bookmark,
       savedAt,
       lastSeenAt,
+      bookmarkTimelineRank: bookmark.bookmarkTimelineRank ?? existing?.bookmarkTimelineRank,
       id: bookmark.id ?? bookmark.tweetId,
       updatedAt: timestamp
     })
@@ -63,6 +64,7 @@ export async function upsertBookmarkSnapshot(snapshot: SiteTweetDraft): Promise<
   const store = transaction.objectStore(BOOKMARKS_STORE)
   const existing = (await requestToPromise(store.get(snapshot.tweetId))) as StoredBookmark | undefined
   const now = new Date().toISOString()
+  const temporaryTimelineRank = -Date.now()
 
   const nextBookmark: StoredBookmark = {
     id: existing?.id ?? snapshot.tweetId,
@@ -74,6 +76,7 @@ export async function upsertBookmarkSnapshot(snapshot: SiteTweetDraft): Promise<
     createdAtOnX: existing?.createdAtOnX || snapshot.createdAtOnX,
     savedAt: existing?.savedAt || now,
     lastSeenAt: now,
+    bookmarkTimelineRank: existing?.bookmarkTimelineRank ?? temporaryTimelineRank,
     media: existing?.media,
     metrics: existing?.metrics,
     rawPayload: existing?.rawPayload ?? { source: "site-inline-tagging" },

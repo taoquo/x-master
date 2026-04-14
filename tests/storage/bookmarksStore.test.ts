@@ -110,6 +110,27 @@ test("upsertBookmarks preserves the original savedAt for existing bookmarks", as
   assert.equal(bookmarks[0].text, "updated text")
 })
 
+test("upsertBookmarks stores bookmarkTimelineRank from synced bookmarks", async () => {
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "123",
+      tweetUrl: "https://x.com/alice/status/123",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "hello",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T01:00:00.000Z",
+      bookmarkTimelineRank: 7,
+      rawPayload: { id: "123" }
+    }
+  ])
+
+  const bookmarks = await getAllBookmarks()
+  assert.equal(bookmarks[0].bookmarkTimelineRank, 7)
+})
+
 test("database migration removes the legacy knowledge-cards store", async () => {
   await resetBookmarksDb()
 
@@ -216,6 +237,22 @@ test("upsertBookmarkSnapshot can be assigned into inbox for site bookmark sync",
   assert.deepEqual(bookmarkLists.map((entry) => ({ bookmarkId: entry.bookmarkId, listId: entry.listId })), [
     { bookmarkId: "tweet-123", listId: "list-inbox" }
   ])
+})
+
+test("upsertBookmarkSnapshot assigns a temporary timeline rank so new site bookmarks surface first", async () => {
+  await resetBookmarksDb()
+
+  const snapshot = await upsertBookmarkSnapshot({
+    tweetId: "tweet-123",
+    tweetUrl: "https://x.com/alice/status/123",
+    authorName: "Alice",
+    authorHandle: "alice",
+    text: "Short DOM text",
+    createdAtOnX: "2026-04-01T00:00:00.000Z"
+  })
+
+  assert.equal(typeof snapshot.bookmarkTimelineRank, "number")
+  assert.ok((snapshot.bookmarkTimelineRank ?? 1) < 0)
 })
 
 test("removeBookmarkSnapshot removes the bookmark and all related list and tag mappings", async () => {

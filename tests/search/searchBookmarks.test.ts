@@ -84,6 +84,16 @@ test("author, time, flags, and sort helpers stay scoped to bookmark-management b
   assert.deepEqual(sortBookmarks(bookmarks, "likes-desc").map((bookmark) => bookmark.tweetId), ["2", "1", "3"])
 })
 
+test("sortBookmarks uses timeline rank before savedAt fallback", () => {
+  const rankedBookmarks = [
+    { ...bookmarks[0], bookmarkTimelineRank: 2 },
+    { ...bookmarks[1], bookmarkTimelineRank: 0 },
+    { ...bookmarks[2], bookmarkTimelineRank: 1 }
+  ]
+
+  assert.deepEqual(sortBookmarks(rankedBookmarks, "timeline").map((bookmark) => bookmark.tweetId), ["2", "3", "1"])
+})
+
 test("applyBookmarkFilters combines list, author, tag, and flag filters with sorting", () => {
   const filtered = applyBookmarkFilters(bookmarks, {
     query: "",

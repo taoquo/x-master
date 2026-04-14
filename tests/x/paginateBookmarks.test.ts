@@ -70,6 +70,35 @@ test("fetchAllBookmarks returns partial results when a later page fails", async 
   assert.equal(result.failedCount, 1)
 })
 
+test("fetchAllBookmarks assigns sequential bookmarkTimelineRank values across pages", async () => {
+  const fetchPage = async ({ cursor }: { cursor?: string | null }) => {
+    if (!cursor) {
+      return {
+        bookmarks: [{ tweetId: "1" }, { tweetId: "2" }],
+        nextCursor: "cursor-2",
+        failedCount: 0
+      }
+    }
+
+    return {
+      bookmarks: [{ tweetId: "3" }],
+      nextCursor: null,
+      failedCount: 0
+    }
+  }
+
+  const result = await fetchAllBookmarks({ fetchPage, limit: 10 })
+
+  assert.deepEqual(
+    result.bookmarks.map((bookmark) => ({ tweetId: bookmark.tweetId, rank: bookmark.bookmarkTimelineRank })),
+    [
+      { tweetId: "1", rank: 0 },
+      { tweetId: "2", rank: 1 },
+      { tweetId: "3", rank: 2 }
+    ]
+  )
+})
+
 test("fetchAllBookmarks stops after buffered known pages in incremental mode", async () => {
   const calls: Array<string | null | undefined> = []
   const fetchPage = async ({ cursor }: { cursor?: string | null }) => {

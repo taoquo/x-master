@@ -716,6 +716,60 @@ test("bookmarks controller removes the local bookmark when native remove bookmar
   controller.destroy()
 })
 
+test("bookmarks controller still removes the local bookmark when the tweet draft disappears before confirmation resolves", async () => {
+  const dom = createBookmarksDom("/i/bookmarks", "removeBookmark")
+  const calls: string[] = []
+  const client = {
+    syncSiteTweetBookmark: async ({ enabled }: { tweet: unknown; enabled: boolean }) => {
+      calls.push(`sync:${enabled ? "add" : "remove"}`)
+      return { bookmarkId: "1234567890", enabled }
+    },
+    prepareSiteTweetTagging: async () => ({
+      bookmarkId: "1234567890",
+      tags: [createTag("tag-1", "AI")],
+      selectedTagIds: []
+    }) satisfies SiteTweetTagState,
+    setSiteTweetTag: async () => ({
+      bookmarkId: "1234567890",
+      tags: [],
+      selectedTagIds: []
+    }),
+    createSiteTweetTag: async () => ({
+      bookmarkId: "1234567890",
+      createdTag: createTag("tag-2", "Research"),
+      tags: [createTag("tag-2", "Research")],
+      selectedTagIds: ["tag-2"]
+    })
+  }
+
+  const article = dom.window.document.querySelector("article") as HTMLElement | null
+  const controller = createSiteTaggingController({
+    window: dom.window as unknown as Window,
+    document: dom.window.document,
+    pathname: dom.window.location.pathname,
+    client,
+    bookmarkConfirmation: {
+      attempts: 3,
+      delayMs: 10
+    }
+  })
+  controller.start()
+
+  const nativeBookmarkButton = dom.window.document.querySelector('button[data-testid="removeBookmark"]') as HTMLButtonElement | null
+  assert.ok(nativeBookmarkButton)
+  assert.ok(article)
+
+  nativeBookmarkButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 15))
+  article.innerHTML = ""
+
+  await new Promise((resolve) => setTimeout(resolve, 40))
+
+  assert.deepEqual(calls, ["sync:remove"])
+
+  controller.destroy()
+})
+
 test("standard tweet pages outside home also open the tag popover after native bookmark succeeds", async () => {
   const dom = createBookmarksDom("/alice", "bookmark")
   const calls: string[] = []

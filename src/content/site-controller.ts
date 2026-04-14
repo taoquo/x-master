@@ -398,6 +398,7 @@ export function createSiteTaggingController({
 
     pendingBookmarkArticles.add(article)
     const shouldEnable = button.dataset.testid === "bookmark"
+    const initialDraft = extractDraft(article)
 
     void waitForBookmarkConfirmation(article, bookmarkConfirmation, shouldEnable).then(async (confirmed) => {
       pendingBookmarkArticles.delete(article)
@@ -405,7 +406,7 @@ export function createSiteTaggingController({
         return
       }
 
-      const draft = extractDraft(article)
+      const draft = extractDraft(article) ?? initialDraft
       if (!draft) {
         return
       }

@@ -188,7 +188,7 @@ function getOptionsCopy(locale: Locale) {
     latestSaved: "Recently saved",
     activeFilters: "Active filters:",
     sortBy: "Sort by",
-    newestSaved: "Newest saved",
+    newestSaved: "Recently saved",
     oldestSaved: "Oldest saved",
     newestPublished: "Newest published",
     mostLiked: "Most liked",
@@ -300,10 +300,12 @@ function createFieldId(scope: string, name: string) {
   return `${scope}-${name}`
 }
 
-const SORT_ORDER_SEQUENCE: BookmarkSortOrder[] = ["saved-desc", "saved-asc", "created-desc", "likes-desc"]
+const SORT_ORDER_SEQUENCE: BookmarkSortOrder[] = ["timeline", "saved-asc", "created-desc", "likes-desc"]
 
 function getSortLabel(copy: OptionsCopy, sortOrder: BookmarkSortOrder) {
   switch (sortOrder) {
+    case "timeline":
+      return copy.latestSaved
     case "saved-asc":
       return copy.oldestSaved
     case "created-desc":
@@ -1535,7 +1537,7 @@ function OptionsScreen() {
   const [rightSidebarWidth, setRightSidebarWidth] = useState(360)
   const [activeTagIds, setActiveTagIds] = useState<string[]>(["all"])
   const [query, setQuery] = useState("")
-  const [sortOrder, setSortOrder] = useState<BookmarkSortOrder>("saved-desc")
+  const [sortOrder, setSortOrder] = useState<BookmarkSortOrder>("timeline")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false)
   const [onlyWithMedia, setOnlyWithMedia] = useState(false)

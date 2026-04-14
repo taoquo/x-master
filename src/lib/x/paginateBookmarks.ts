@@ -57,8 +57,13 @@ export async function fetchAllBookmarks({
     }
   }
 
+  const rankedBookmarks = bookmarks.map((bookmark, index) => ({
+    ...bookmark,
+    bookmarkTimelineRank: index
+  })) as Array<Partial<BookmarkRecord>>
+
   return {
-    bookmarks,
+    bookmarks: rankedBookmarks,
     failedCount
   }
 }

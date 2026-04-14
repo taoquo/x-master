@@ -27,8 +27,10 @@ export function useWorkspaceQueries() {
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  async function refreshData() {
-    setIsLoading(true)
+  async function refreshData({ background = false }: { background?: boolean } = {}) {
+    if (!background) {
+      setIsLoading(true)
+    }
 
     try {
       const nextData = await loadWorkspaceData()
@@ -37,12 +39,42 @@ export function useWorkspaceQueries() {
     } catch (error) {
       setLoadError(toErrorMessage(error))
     } finally {
-      setIsLoading(false)
+      if (!background) {
+        setIsLoading(false)
+      }
     }
   }
 
   useEffect(() => {
     void refreshData()
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return
+    }
+
+    function refreshFromExternalChange() {
+      if (document.visibilityState === "hidden") {
+        return
+      }
+
+      void refreshData({ background: true })
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void refreshData({ background: true })
+      }
+    }
+
+    window.addEventListener("focus", refreshFromExternalChange)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener("focus", refreshFromExternalChange)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
   }, [])
 
   return {
