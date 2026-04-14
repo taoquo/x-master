@@ -2,6 +2,16 @@
 
 [中文说明](./README.zh-CN.md)
 
+## Preview
+
+Workspace overview
+
+![Workspace overview](./assets/readme/workspace-overview.png)
+
+Inline tag management on X
+
+![Inline tag management on X](./assets/readme/inline-tagging.png)
+
 X Bookmark Manager is a Chrome extension for people who save too much on X and still want to find the right post later. It turns X bookmarks into a local-first workspace you can sync, review, tag, and organize without relying on a hosted backend.
 
 ## Why Use It
