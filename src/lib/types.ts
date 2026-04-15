@@ -9,7 +9,7 @@ export interface BookmarkRecord {
   savedAt: string
   lastSeenAt?: string
   bookmarkTimelineRank?: number
-  media?: Array<{ type: string; url: string; altText?: string }>
+  media?: Array<{ type: string; url: string; posterUrl?: string; altText?: string }>
   metrics?: { likes: number; retweets: number; replies: number }
   rawPayload: unknown
   updatedAt?: string

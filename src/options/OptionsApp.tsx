@@ -480,31 +480,37 @@ function PreviewMedia({ bookmark, index }: { bookmark: BookmarkRecord; index: nu
   const primaryMedia = bookmark.media?.[0]
   const mediaUrl = primaryMedia?.url
   const isVideo = primaryMedia?.type === "video" || primaryMedia?.type === "animated_gif"
+  const previewUrl = isVideo ? getMediaPosterUrl(bookmark, 0) ?? mediaUrl : mediaUrl
 
-  if (!mediaUrl) {
+  if (!previewUrl) {
     return null
   }
 
   return (
     <div className="workspace-media-frame options-card-media relative aspect-video overflow-hidden bg-[var(--tag-bg)]" data-card-media-index={index}>
-      {isVideo ? (
-        <video
-          src={mediaUrl}
-          muted
-          playsInline
-          preload="metadata"
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-        />
-      ) : (
-        <img
-          src={mediaUrl}
-          alt=""
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-        />
-      )}
+      <img
+        src={previewUrl}
+        alt=""
+        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+      />
       <div className="absolute inset-0 bg-black/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
     </div>
   )
+}
+
+function getMediaPosterUrl(bookmark: BookmarkRecord, mediaIndex = 0) {
+  const mediaItem = bookmark.media?.[mediaIndex]
+
+  if (!mediaItem) {
+    return undefined
+  }
+
+  if (mediaItem.posterUrl) {
+    return mediaItem.posterUrl
+  }
+
+  const rawMedia = (bookmark.rawPayload as any)?.legacy?.extended_entities?.media?.[mediaIndex]
+  return rawMedia?.media_url_https ?? rawMedia?.media_url ?? undefined
 }
 
 function BookmarkCard({
@@ -611,7 +617,8 @@ function BookmarkMediaSection({
 }) {
   const primaryMedia = bookmark.media?.[0]
   const mediaUrl = primaryMedia?.url
-  const isVideo = primaryMedia?.type === "video"
+  const isVideo = primaryMedia?.type === "video" || primaryMedia?.type === "animated_gif"
+  const mediaPosterUrl = getMediaPosterUrl(bookmark, 0) ?? mediaUrl
 
   if (!mediaUrl) {
     return null
@@ -621,20 +628,23 @@ function BookmarkMediaSection({
     <section data-testid="inspector-media-section" className="options-inspector-section options-inspector-divider">
       <div className="options-overline">{getSectionOverline(locale, copy.mediaTitle, "Media")}</div>
       {isVideo ? (
-        <div className="options-inspector-media-shell mt-3">
-          <video
-            data-testid="inspector-media-video"
-            src={mediaUrl}
-            controls
-            preload="metadata"
-            className="h-72 w-full object-cover"
-          />
-          {bookmark.media && bookmark.media.length > 1 ? (
-            <div className="options-inspector-media-count">
-              {bookmark.media.length}
+        <button
+          type="button"
+          data-testid="inspector-media-trigger"
+          className="options-inspector-media-trigger mt-3"
+          onClick={() => onPreview(mediaUrl)}>
+          <div className="options-inspector-media-shell">
+            <img src={mediaPosterUrl} alt="" className="h-72 w-full object-cover" />
+            <div className="options-inspector-media-center-play">
+              <AppIcon name="play" size={28} />
             </div>
-          ) : null}
-        </div>
+            {bookmark.media && bookmark.media.length > 1 ? (
+              <div className="options-inspector-media-count">
+                {bookmark.media.length}
+              </div>
+            ) : null}
+          </div>
+        </button>
       ) : (
         <button
           type="button"
@@ -937,6 +947,7 @@ function BookmarkInspector({
                     key={previewMediaUrl}
                     data-testid="media-lightbox-video"
                     src={previewMediaUrl}
+                    poster={activePreviewMedia?.posterUrl}
                     controls
                     preload="metadata"
                     className="options-media-lightbox-image"

@@ -13,19 +13,25 @@ function unwrapTweetResult(result: any) {
   return result
 }
 
-function getPlayableMediaUrl(item: any) {
+function getMediaPayload(item: any) {
   const type = item?.type
-  const fallbackUrl = item?.media_url_https ?? item?.media_url ?? ""
+  const posterUrl = item?.media_url_https ?? item?.media_url ?? ""
 
   if (type !== "video" && type !== "animated_gif") {
-    return fallbackUrl
+    return {
+      url: posterUrl,
+      posterUrl: undefined
+    }
   }
 
   const mp4Variants = (item?.video_info?.variants ?? [])
     .filter((variant: any) => variant?.content_type === "video/mp4" && variant?.url)
     .sort((left: any, right: any) => (right?.bitrate ?? 0) - (left?.bitrate ?? 0))
 
-  return mp4Variants[0]?.url ?? fallbackUrl
+  return {
+    url: mp4Variants[0]?.url ?? posterUrl,
+    posterUrl
+  }
 }
 
 export function parseBookmarkEntries(response: any) {
@@ -61,11 +67,16 @@ export function parseBookmarkEntries(response: any) {
           createdAtOnX: legacy?.created_at ?? "",
           savedAt: seenAt,
           lastSeenAt: seenAt,
-          media: (legacy?.extended_entities?.media ?? []).map((item: any) => ({
-            type: item?.type,
-            url: getPlayableMediaUrl(item),
-            altText: item?.ext_alt_text
-          })),
+          media: (legacy?.extended_entities?.media ?? []).map((item: any) => {
+            const mediaPayload = getMediaPayload(item)
+
+            return {
+              type: item?.type,
+              url: mediaPayload.url,
+              posterUrl: mediaPayload.posterUrl,
+              altText: item?.ext_alt_text
+            }
+          }),
           metrics: {
             likes: legacy?.favorite_count ?? 0,
             retweets: legacy?.retweet_count ?? 0,

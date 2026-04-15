@@ -246,4 +246,5 @@ test("parseBookmarkEntries prefers playable mp4 variants for video media", () =>
   assert.equal(result.bookmarks.length, 1)
   assert.equal(result.bookmarks[0].media?.[0]?.type, "video")
   assert.equal(result.bookmarks[0].media?.[0]?.url, "https://video.twimg.com/ext_tw_video/vid/1280x720/video-720.mp4")
+  assert.equal(result.bookmarks[0].media?.[0]?.posterUrl, "https://pbs.twimg.com/ext_tw_video_thumb/poster.jpg")
 })

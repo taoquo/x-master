@@ -1116,7 +1116,7 @@ test("OptionsApp renders a dedicated media section in the inspector when a bookm
   assert.equal(findByTestId(container, "media-lightbox"), null)
 })
 
-test("OptionsApp plays video media directly in the drawer without overlay affordances", async () => {
+test("OptionsApp previews video media as a poster in the drawer and plays it in the modal", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await upsertBookmarks([
@@ -1126,7 +1126,7 @@ test("OptionsApp plays video media directly in the drawer without overlay afford
       authorName: "Alice",
       authorHandle: "alice",
       text: "Video bookmark",
-      media: [{ type: "video", url: "https://example.com/video.mp4" }],
+      media: [{ type: "video", url: "https://example.com/video.mp4", posterUrl: "https://example.com/video-poster.jpg" }],
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
       rawPayload: {}
@@ -1142,15 +1142,75 @@ test("OptionsApp plays video media directly in the drawer without overlay afford
   })
   await settle()
 
-  const drawerVideo = findByTestId(container, "inspector-media-video") as HTMLVideoElement | null
+  const cardPoster = container.querySelector('[data-card-media-index="0"] img') as HTMLImageElement | null
+  const cardVideo = container.querySelector('[data-card-media-index="0"] video') as HTMLVideoElement | null
+  const posterButton = findByTestId(container, "inspector-media-trigger") as HTMLButtonElement | null
+  const posterImage = container.querySelector('[data-testid="inspector-media-trigger"] img') as HTMLImageElement | null
 
-  assert.ok(drawerVideo)
-  assert.equal(drawerVideo?.getAttribute("src"), "https://example.com/video.mp4")
-  assert.notEqual(drawerVideo?.getAttribute("controls"), null)
-  assert.match(drawerVideo?.className ?? "", /h-72/)
-  assert.equal(findByTestId(container, "inspector-media-trigger"), null)
-  assert.equal(container.querySelector(".options-inspector-media-badge"), null)
-  assert.equal(findByTestId(container, "media-lightbox-video"), null)
+  assert.ok(cardPoster)
+  assert.equal(cardPoster?.getAttribute("src"), "https://example.com/video-poster.jpg")
+  assert.equal(cardVideo, null)
+  assert.ok(posterButton)
+  assert.ok(posterImage)
+  assert.equal(posterImage?.getAttribute("src"), "https://example.com/video-poster.jpg")
+  assert.equal(findByTestId(container, "inspector-media-video"), null)
+
+  await act(async () => {
+    posterButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const lightboxVideo = findByTestId(container, "media-lightbox-video") as HTMLVideoElement | null
+
+  assert.ok(lightboxVideo)
+  assert.equal(lightboxVideo?.getAttribute("src"), "https://example.com/video.mp4")
+  assert.notEqual(lightboxVideo?.getAttribute("controls"), null)
+})
+
+test("OptionsApp falls back to rawPayload poster data for legacy video bookmarks", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-media-video-legacy",
+      tweetUrl: "https://x.com/alice/status/tweet-media-video-legacy",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Legacy video bookmark",
+      media: [{ type: "video", url: "https://example.com/video.mp4" }],
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {
+        legacy: {
+          extended_entities: {
+            media: [
+              {
+                type: "video",
+                media_url_https: "https://example.com/video-poster-from-raw.jpg"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ])
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const firstCard = getBookmarkCards(container)[0]
+  await act(async () => {
+    firstCard.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const cardPoster = container.querySelector('[data-card-media-index="0"] img') as HTMLImageElement | null
+  const drawerPoster = container.querySelector('[data-testid="inspector-media-trigger"] img') as HTMLImageElement | null
+
+  assert.ok(cardPoster)
+  assert.ok(drawerPoster)
+  assert.equal(cardPoster?.getAttribute("src"), "https://example.com/video-poster-from-raw.jpg")
+  assert.equal(drawerPoster?.getAttribute("src"), "https://example.com/video-poster-from-raw.jpg")
 })
 
 test("OptionsApp closes the detail drawer on Escape", async () => {
