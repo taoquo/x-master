@@ -5,6 +5,7 @@ import {
   ArrowSquareOut,
   BookmarkSimple,
   ChatCircle,
+  CaretDown,
   Check,
   Copy,
   FunnelSimple,
@@ -59,6 +60,7 @@ type AppIconName =
   | "heart"
   | "share"
   | "export"
+  | "caretDown"
 
 interface AppIconProps {
   name: AppIconName
@@ -131,6 +133,8 @@ export function AppIcon({ name, size = 18, className }: AppIconProps) {
       return <ShareNetwork {...commonProps} />
     case "export":
       return <Export {...commonProps} />
+    case "caretDown":
+      return <CaretDown {...commonProps} />
     default:
       return null
   }

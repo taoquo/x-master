@@ -38,7 +38,11 @@ X Bookmark Manager is a Chrome extension for people who save too much on X and s
 
 ## Install the Extension
 
-Build it locally:
+Install from the Chrome Web Store:
+
+[X Bookmark Manager on Chrome Web Store](https://chromewebstore.google.com/detail/x-bookmark-manager/olefipkonojnpmkikdlpacchbpfdleef)
+
+Or build it locally:
 
 ```bash
 npm install

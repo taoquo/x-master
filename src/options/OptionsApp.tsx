@@ -7,10 +7,17 @@ import type {
 } from "../lib/types.ts"
 import {
   filterBookmarks,
+  filterBookmarksByAuthors,
   filterBookmarksByFlags,
   sortBookmarks,
   type BookmarkSortOrder,
 } from "../lib/search/searchBookmarks.ts"
+import {
+  buildAuthorSidebarItems,
+  formatAuthorLabel,
+  getVisibleAuthorSidebarItems,
+  type AuthorSidebarItem
+} from "./authorSidebar.ts"
 import { useWorkspaceData } from "./hooks/useWorkspaceData.ts"
 import { getSettings, saveSettings } from "../lib/storage/settings.ts"
 import { EmptyState, StatusBadge, SurfaceCard } from "../ui/components.tsx"
@@ -95,6 +102,10 @@ function getOptionsCopy(locale: Locale) {
       unread: "未读",
       archived: "已归档",
       author: "作者",
+      authorsTitle: "作者",
+      searchAuthors: "搜索作者",
+      searchAuthorsPlaceholder: "搜索作者...",
+      showMore: "展开更多",
       allAuthors: "所有作者",
       tag: "标签",
       allTags: "所有标签",
@@ -202,6 +213,10 @@ function getOptionsCopy(locale: Locale) {
     unread: "Unread",
     archived: "Archived",
     author: "Author",
+    authorsTitle: "Authors",
+    searchAuthors: "Search authors",
+    searchAuthorsPlaceholder: "Search authors...",
+    showMore: "Show more",
     allAuthors: "All authors",
     tag: "Tag",
     allTags: "All tags",
@@ -906,7 +921,18 @@ function WorkspaceSidebar({
   copy,
   lastSyncLabel,
   activeTagIds,
+  activeAuthorHandles,
+  authorItems,
+  authorSearchQuery,
+  authorsExpanded,
+  isTagsCollapsed,
+  isAuthorsCollapsed,
   onTagToggle,
+  onAuthorToggle,
+  onAuthorSearchQueryChange,
+  onToggleTagsCollapsed,
+  onToggleAuthorsCollapsed,
+  onExpandAuthors,
   onCreateTag,
   onDeleteTag,
   setLocale,
@@ -919,7 +945,18 @@ function WorkspaceSidebar({
   copy: OptionsCopy
   lastSyncLabel: string
   activeTagIds: string[]
+  activeAuthorHandles: string[]
+  authorItems: AuthorSidebarItem[]
+  authorSearchQuery: string
+  authorsExpanded: boolean
+  isTagsCollapsed: boolean
+  isAuthorsCollapsed: boolean
   onTagToggle: (tagId: string) => void
+  onAuthorToggle: (authorHandle: string) => void
+  onAuthorSearchQueryChange: (value: string) => void
+  onToggleTagsCollapsed: () => void
+  onToggleAuthorsCollapsed: () => void
+  onExpandAuthors: () => void
   onCreateTag: (name: string) => Promise<unknown>
   onDeleteTag: (tagId: string) => Promise<unknown>
   setLocale: (locale: Locale) => Promise<void>
@@ -934,6 +971,15 @@ function WorkspaceSidebar({
   const [isSubmittingDraftTag, setIsSubmittingDraftTag] = useState(false)
   const draftTagInputRef = useRef<HTMLInputElement | null>(null)
   const draftTagBlurIntentRef = useRef<"idle" | "submit" | "cancel">("idle")
+  const { items: visibleAuthorItems, shouldShowToggle: shouldShowAuthorToggle } = getVisibleAuthorSidebarItems({
+    authorItems,
+    searchQuery: authorSearchQuery,
+    expanded: authorsExpanded
+  })
+  const isAllBookmarksSelected = activeTagIds.includes("all") && activeAuthorHandles.length === 0
+  const authorSearchId = createFieldId("authors", "search")
+  const tagSelectionCount = activeTagIds.includes("all") ? 0 : activeTagIds.length
+  const authorSelectionCount = activeAuthorHandles.length
 
   useEffect(() => {
     if (!isCreatingTagInline || !draftTagInputRef.current) {
@@ -1038,133 +1084,242 @@ function WorkspaceSidebar({
       </section>
 
       <section data-testid="sidebar-lists-section" className="options-sidebar-lists">
-        <div className="options-sidebar-lists-head">
-          <div className="options-sidebar-section-head">
-            <div className="options-overline">{getSectionOverline(locale, "标签", "Tags")}</div>
-            <button
-              type="button"
-              data-testid="sidebar-create-tag"
-              aria-label={copy.createTagLabel}
-              onClick={handleCreateTagClick}
-              className="options-create-tag-button">
-              <span aria-hidden="true">+</span>
-            </button>
-          </div>
-        </div>
-
         <div data-testid="sidebar-lists-scroll" className="options-sidebar-lists-scroll scroll-shell min-h-0 flex-1 overflow-y-auto">
-          <div data-testid="sidebar-list-tree" className="space-y-1">
-            <div
-              role="button"
-              tabIndex={0}
-              data-list-button="all"
-              onClick={() => onTagToggle("all")}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault()
-                  onTagToggle("all")
-                }
-              }}
-              className={cn(
-                "options-nav-row options-nav-row-all w-full text-left",
-                activeTagIds.includes("all") && "options-nav-row-active"
-              )}>
-              <span className="options-nav-row-main">
-                <AppIcon name="globe" size={14} className="options-nav-row-icon" />
-                <span>{copy.allBookmarks}</span>
-              </span>
-              <span className="options-nav-count">{workspace.stats.totalBookmarks}</span>
-            </div>
-
-            {isCreatingTagInline ? (
-              <div data-testid="sidebar-create-tag-row" className="options-nav-row options-nav-row-draft">
-                <span className="options-nav-row-main">
-                  <AppIcon name="hash" size={14} className="options-nav-row-icon" />
-                  <input
-                    ref={draftTagInputRef}
-                    type="text"
-                    value={draftTagName}
-                    data-testid="sidebar-create-tag-input"
-                    aria-label={copy.createTagLabel}
-                    placeholder={copy.createTagPrompt}
-                    disabled={isSubmittingDraftTag}
-                    className="options-nav-row-input"
-                    onChange={(event) => setDraftTagName(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault()
-                        draftTagBlurIntentRef.current = "submit"
-                        void submitInlineTagDraft(event.currentTarget.value)
-                        return
-                      }
-
-                      if (event.key === "Escape") {
-                        event.preventDefault()
-                        draftTagBlurIntentRef.current = "cancel"
-                        resetInlineTagDraft()
-                      }
-                    }}
-                    onBlur={(event) => {
-                      if (draftTagBlurIntentRef.current === "submit" || draftTagBlurIntentRef.current === "cancel") {
-                        draftTagBlurIntentRef.current = "idle"
-                        return
-                      }
-
-                      void submitInlineTagDraft(event.currentTarget.value)
-                    }}
+          <section data-testid="sidebar-tags-section" className="options-sidebar-group">
+            <div className="options-sidebar-section-head">
+              <div data-testid="sidebar-tags-title" className="options-sidebar-title-group">
+                <span className="options-overline">{getSectionOverline(locale, "标签", "Tags")}</span>
+                <button
+                  type="button"
+                  data-testid="sidebar-create-tag"
+                  aria-label={copy.createTagLabel}
+                  onClick={handleCreateTagClick}
+                  className="options-create-tag-button">
+                  <span aria-hidden="true">+</span>
+                </button>
+              </div>
+              <button
+                type="button"
+                data-testid="sidebar-tags-toggle"
+                aria-expanded={!isTagsCollapsed}
+                className="options-sidebar-section-toggle"
+                onClick={onToggleTagsCollapsed}>
+                <span className="options-sidebar-section-toggle-trailing">
+                  {tagSelectionCount ? <span className="options-nav-count">{tagSelectionCount}</span> : null}
+                  <AppIcon
+                    name="caretDown"
+                    size={12}
+                    className={cn("options-sidebar-section-caret", isTagsCollapsed && "is-collapsed")}
                   />
                 </span>
-              </div>
-            ) : null}
+              </button>
+            </div>
 
-            {workspace.tags.map((tag) => {
-              const isSelected = activeTagIds.includes(tag.id)
-              return (
+            {!isTagsCollapsed ? (
+              <div data-testid="sidebar-tags-content" className="options-sidebar-group-content">
+              <div data-testid="sidebar-list-tree" className="space-y-1">
                 <div
-                  key={tag.id}
                   role="button"
                   tabIndex={0}
-                  data-list-button={tag.id}
-                  onClick={() => onTagToggle(tag.id)}
+                  data-list-button="all"
+                  onClick={() => onTagToggle("all")}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault()
-                      onTagToggle(tag.id)
+                      onTagToggle("all")
                     }
                   }}
                   className={cn(
-                    "options-nav-row options-nav-row-tag w-full text-left",
-                    isSelected && "options-nav-row-active"
+                    "options-nav-row options-nav-row-all w-full text-left",
+                    isAllBookmarksSelected && "options-nav-row-active"
                   )}>
                   <span className="options-nav-row-main">
-                    <AppIcon name="hash" size={14} className="options-nav-row-icon" />
-                    <span className="truncate">{tag.name}</span>
+                    <AppIcon name="globe" size={14} className="options-nav-row-icon" />
+                    <span>{copy.allBookmarks}</span>
                   </span>
-                  <span className="options-nav-row-trailing">
-                    <span className="options-nav-count">{tagCountById.get(tag.id) ?? 0}</span>
-                    {isSelected ? (
-                      <span className="options-nav-row-check" aria-hidden="true">
-                        <AppIcon name="check" size={12} />
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        data-testid="sidebar-delete-tag"
-                        className="options-nav-row-delete"
-                        aria-label={`${copy.deleteLabel} ${tag.name}`}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          handleDeleteTagClick(tag.id, tag.name)
-                        }}
-                      >
-                        <AppIcon name="trash" size={12} />
-                      </button>
-                    )}
-                  </span>
+                  <span className="options-nav-count">{workspace.stats.totalBookmarks}</span>
                 </div>
-              )
-            })}
-          </div>
+
+                {isCreatingTagInline ? (
+                  <div data-testid="sidebar-create-tag-row" className="options-nav-row options-nav-row-draft">
+                    <span className="options-nav-row-main">
+                      <AppIcon name="hash" size={14} className="options-nav-row-icon" />
+                      <input
+                        ref={draftTagInputRef}
+                        type="text"
+                        value={draftTagName}
+                        data-testid="sidebar-create-tag-input"
+                        aria-label={copy.createTagLabel}
+                        placeholder={copy.createTagPrompt}
+                        disabled={isSubmittingDraftTag}
+                        className="options-nav-row-input"
+                        onChange={(event) => setDraftTagName(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault()
+                            draftTagBlurIntentRef.current = "submit"
+                            void submitInlineTagDraft(event.currentTarget.value)
+                            return
+                          }
+
+                          if (event.key === "Escape") {
+                            event.preventDefault()
+                            draftTagBlurIntentRef.current = "cancel"
+                            resetInlineTagDraft()
+                          }
+                        }}
+                        onBlur={(event) => {
+                          if (draftTagBlurIntentRef.current === "submit" || draftTagBlurIntentRef.current === "cancel") {
+                            draftTagBlurIntentRef.current = "idle"
+                            return
+                          }
+
+                          void submitInlineTagDraft(event.currentTarget.value)
+                        }}
+                      />
+                    </span>
+                  </div>
+                ) : null}
+
+                {workspace.tags.map((tag) => {
+                  const isSelected = activeTagIds.includes(tag.id)
+                  return (
+                    <div
+                      key={tag.id}
+                      role="button"
+                      tabIndex={0}
+                      data-list-button={tag.id}
+                      onClick={() => onTagToggle(tag.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault()
+                          onTagToggle(tag.id)
+                        }
+                      }}
+                      className={cn(
+                        "options-nav-row options-nav-row-tag w-full text-left",
+                        isSelected && "options-nav-row-active"
+                      )}>
+                      <span className="options-nav-row-main">
+                        <AppIcon name="hash" size={14} className="options-nav-row-icon" />
+                        <span className="truncate">{tag.name}</span>
+                      </span>
+                      <span className="options-nav-row-trailing">
+                        <span className="options-nav-count">{tagCountById.get(tag.id) ?? 0}</span>
+                        {isSelected ? (
+                          <span className="options-nav-row-check" aria-hidden="true">
+                            <AppIcon name="check" size={12} />
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            data-testid="sidebar-delete-tag"
+                            className="options-nav-row-delete"
+                            aria-label={`${copy.deleteLabel} ${tag.name}`}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              handleDeleteTagClick(tag.id, tag.name)
+                            }}
+                          >
+                            <AppIcon name="trash" size={12} />
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              </div>
+            ) : null}
+          </section>
+
+          <section data-testid="sidebar-authors-section" className="options-sidebar-group options-sidebar-group-authors">
+            <div className="options-sidebar-section-head">
+              <div data-testid="sidebar-authors-title" className="options-sidebar-title-group">
+                <span className="options-overline">{copy.authorsTitle}</span>
+              </div>
+              <button
+                type="button"
+                data-testid="sidebar-authors-toggle-header"
+                aria-expanded={!isAuthorsCollapsed}
+                className="options-sidebar-section-toggle"
+                onClick={onToggleAuthorsCollapsed}>
+                <span className="options-sidebar-section-toggle-trailing">
+                  {authorSelectionCount ? <span className="options-nav-count">{authorSelectionCount}</span> : null}
+                  <AppIcon
+                    name="caretDown"
+                    size={12}
+                    className={cn("options-sidebar-section-caret", isAuthorsCollapsed && "is-collapsed")}
+                  />
+                </span>
+              </button>
+            </div>
+
+            {!isAuthorsCollapsed ? (
+              <div data-testid="sidebar-authors-content" className="options-sidebar-group-content mt-3 space-y-3">
+                <FieldBlock label={copy.searchAuthors} htmlFor={authorSearchId} labelClassName="sr-only">
+                  <TextInputField
+                    id={authorSearchId}
+                    type="search"
+                    value={authorSearchQuery}
+                    onChange={onAuthorSearchQueryChange}
+                    placeholder={copy.searchAuthorsPlaceholder}
+                    dataTestId="sidebar-authors-search"
+                    ariaLabel={copy.searchAuthors}
+                    className="options-sidebar-search-input w-full"
+                  />
+                </FieldBlock>
+
+                <div className="space-y-1">
+                  {visibleAuthorItems.map((author) => {
+                    const isSelected = activeAuthorHandles.includes(author.authorHandle)
+
+                    return (
+                      <div
+                        key={author.authorHandle}
+                        role="button"
+                        tabIndex={0}
+                        data-author-button={author.authorHandle}
+                        onClick={() => onAuthorToggle(author.authorHandle)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault()
+                            onAuthorToggle(author.authorHandle)
+                          }
+                        }}
+                        className={cn("options-nav-row w-full text-left", isSelected && "options-nav-row-active")}>
+                        <span className="options-nav-row-main min-w-0">
+                          <span className="options-nav-row-icon text-[12px] font-semibold">@</span>
+                          <span className="min-w-0">
+                            <span className="block truncate">{author.authorName || formatAuthorLabel(author)}</span>
+                            <span className="options-meta-copy block truncate">{formatAuthorLabel(author)}</span>
+                          </span>
+                        </span>
+                        <span className="options-nav-row-trailing">
+                          <span className="options-nav-count">{author.count}</span>
+                          {isSelected ? (
+                            <span className="options-nav-row-check" aria-hidden="true">
+                              <AppIcon name="check" size={12} />
+                            </span>
+                          ) : null}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {!authorsExpanded && shouldShowAuthorToggle ? (
+                  <button
+                    type="button"
+                    data-testid="sidebar-authors-show-more"
+                    onClick={onExpandAuthors}
+                    className="options-footer-chip">
+                    {copy.showMore}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
         </div>
       </section>
 
@@ -1524,6 +1679,11 @@ function OptionsScreen() {
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(280)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(360)
   const [activeTagIds, setActiveTagIds] = useState<string[]>(["all"])
+  const [activeAuthorHandles, setActiveAuthorHandles] = useState<string[]>([])
+  const [authorSearchQuery, setAuthorSearchQuery] = useState("")
+  const [authorsExpanded, setAuthorsExpanded] = useState(false)
+  const [isTagsCollapsed, setIsTagsCollapsed] = useState(false)
+  const [isAuthorsCollapsed, setIsAuthorsCollapsed] = useState(true)
   const [query, setQuery] = useState("")
   const [sortOrder, setSortOrder] = useState<BookmarkSortOrder>("timeline")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
@@ -1604,6 +1764,7 @@ function OptionsScreen() {
   }, [leftSidebarWidth, rightSidebarWidth])
 
   const tagsById = useMemo(() => new Map(workspace.tags.map((tag) => [tag.id, tag])), [workspace.tags])
+  const authorItems = useMemo(() => buildAuthorSidebarItems(workspace.bookmarks), [workspace.bookmarks])
   const bookmarkTagIdsByBookmarkId = useMemo(() => {
     const map = new Map<string, Set<string>>()
 
@@ -1625,7 +1786,7 @@ function OptionsScreen() {
 
       return sortBookmarks(
         filterBookmarksByFlags(
-          filterBookmarks(scopedBookmarks, query),
+          filterBookmarks(filterBookmarksByAuthors(scopedBookmarks, activeAuthorHandles), query),
           {
             onlyWithMedia,
             onlyLongform
@@ -1639,6 +1800,7 @@ function OptionsScreen() {
       onlyWithMedia,
       query,
       sortOrder,
+      activeAuthorHandles,
       activeTagIds,
       bookmarkTagIdsByBookmarkId,
       workspace.bookmarks
@@ -1671,6 +1833,16 @@ function OptionsScreen() {
     })
   }, [workspace.tags])
 
+  useEffect(() => {
+    setActiveAuthorHandles((current) => {
+      const validAuthorHandles = current.filter((authorHandle) =>
+        authorItems.some((author) => author.authorHandle === authorHandle)
+      )
+
+      return haveSameItems(current, validAuthorHandles) ? current : validAuthorHandles
+    })
+  }, [authorItems])
+
   const selectedBookmark =
     visibleBookmarks.find((bookmark) => bookmark.tweetId === selectedBookmarkId) ??
     workspace.bookmarks.find((bookmark) => bookmark.tweetId === selectedBookmarkId) ??
@@ -1689,11 +1861,25 @@ function OptionsScreen() {
 
   const searchId = createFieldId("filters", "search")
   const lastSyncLabel = formatTimestamp(workspace.summary.lastSyncedAt, locale)
-  const currentScopeLabel = activeTagIds.includes("all")
-    ? copy.allBookmarks
-    : activeTagIds
-        .map((tagId) => workspace.tags.find((tag) => tag.id === tagId)?.name ?? tagId)
-        .join(" + ")
+  const selectedAuthor = activeAuthorHandles[0]
+    ? authorItems.find((author) => author.authorHandle === activeAuthorHandles[0]) ?? null
+    : null
+  const activeTagNames = activeTagIds.includes("all")
+    ? []
+    : activeTagIds.map((tagId) => workspace.tags.find((tag) => tag.id === tagId)?.name ?? tagId)
+  const currentScopeLabel = (() => {
+    const scopeParts: string[] = []
+
+    if (selectedAuthor) {
+      scopeParts.push(`${copy.authorPrefix} · ${formatAuthorLabel(selectedAuthor)}`)
+    }
+
+    if (activeTagNames.length) {
+      scopeParts.push(`${activeTagNames.length > 1 ? copy.tagsTitle : copy.tagPrefix} · ${activeTagNames.join(" + ")}`)
+    }
+
+    return scopeParts.length ? scopeParts.join(" + ") : copy.allBookmarks
+  })()
   const activeRefinementChips = [
     onlyWithMedia ? { key: "media", label: copy.hasMedia } : null,
     onlyLongform ? { key: "longform", label: copy.longform } : null
@@ -1719,6 +1905,7 @@ function OptionsScreen() {
   function handleTagToggle(tagId: string) {
     if (tagId === "all") {
       setActiveTagIds(["all"])
+      setActiveAuthorHandles([])
       return
     }
 
@@ -1733,6 +1920,10 @@ function OptionsScreen() {
 
       return next.length ? next : ["all"]
     })
+  }
+
+  function handleAuthorToggle(authorHandle: string) {
+    setActiveAuthorHandles((current) => (current[0] === authorHandle ? [] : [authorHandle]))
   }
 
   return (
@@ -1759,7 +1950,18 @@ function OptionsScreen() {
                 copy={copy}
                 lastSyncLabel={lastSyncLabel}
                 activeTagIds={activeTagIds}
+                activeAuthorHandles={activeAuthorHandles}
+                authorItems={authorItems}
+                authorSearchQuery={authorSearchQuery}
+                authorsExpanded={authorsExpanded}
+                isTagsCollapsed={isTagsCollapsed}
+                isAuthorsCollapsed={isAuthorsCollapsed}
                 onTagToggle={handleTagToggle}
+                onAuthorToggle={handleAuthorToggle}
+                onAuthorSearchQueryChange={setAuthorSearchQuery}
+                onToggleTagsCollapsed={() => setIsTagsCollapsed((current) => !current)}
+                onToggleAuthorsCollapsed={() => setIsAuthorsCollapsed((current) => !current)}
+                onExpandAuthors={() => setAuthorsExpanded(true)}
                 onCreateTag={workspace.handleCreateTag}
                 onDeleteTag={workspace.handleDeleteTag}
                 setLocale={setLocale}
