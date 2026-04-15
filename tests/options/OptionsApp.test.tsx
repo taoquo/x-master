@@ -109,8 +109,8 @@ test("OptionsApp renders the Chinese locale shell and keeps demo shell active", 
 
   assert.match(container.textContent ?? "", /书签/)
   assert.match(container.textContent ?? "", /标签/)
-  assert.match(container.textContent ?? "", /详情/)
   assert.match(container.textContent ?? "", /偏好设置/)
+  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
   assert.ok(findByTestId(container, "options-brand-logo"))
 
   assert.equal(findByTestId(container, "toggle-preferences-panel"), null)
@@ -156,14 +156,11 @@ test("OptionsApp uses the shared badge and status surface language", async () =>
   await settle()
 
   const statusBadge = container.querySelector('[data-testid="lists-sidebar"] .status-success') as HTMLElement | null
-  const inspectorEmptyState = container.querySelector('[data-testid="workspace-inspector"] .workspace-empty-state') as HTMLElement | null
 
   assert.ok(statusBadge)
-  assert.ok(inspectorEmptyState)
   assert.equal(dom.window.document.documentElement.dataset.theme, "dark")
   assert.match(statusBadge.className, /workspace-badge/)
-  assert.doesNotMatch(inspectorEmptyState.className, /panel-elevated/)
-  assert.doesNotMatch(inspectorEmptyState.className, /panel-surface/)
+  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
   assert.match(findByTestId(container, "lists-sidebar")?.textContent ?? "", /偏好设置/)
 })
 
@@ -313,17 +310,15 @@ test("OptionsApp renders the Figma shell with editorial rails", async () => {
   const overview = findByTestId(container, "workspace-overview")
   const sidebar = findByTestId(container, "lists-sidebar")
   const library = findByTestId(container, "library-workspace")
-  const inspector = container.querySelector('[data-testid="workspace-inspector"] [data-testid="inspector-section-stack"]')
 
   assert.ok(overview)
   assert.ok(sidebar)
   assert.ok(library)
-  assert.ok(inspector)
-  assert.match(overview?.className ?? "", /xl:grid-cols-\[256px_minmax\(0,1fr\)_288px\]/)
+  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+  assert.match(overview?.className ?? "", /xl:grid-cols-\[256px_minmax\(0,1fr\)\]/)
   assert.match(sidebar?.textContent ?? "", /工作区/)
   assert.match(sidebar?.textContent ?? "", /偏好设置/)
   assert.match(library?.textContent ?? "", /资料库/)
-  assert.match(container.textContent ?? "", /选择一个书签以查看详情/)
 
   const firstCard = getBookmarkCards(container)[0]
   await act(async () => {
@@ -331,8 +326,8 @@ test("OptionsApp renders the Figma shell with editorial rails", async () => {
   })
   await settle()
 
-  assert.match(container.textContent ?? "", /元数据/)
-  assert.match(container.textContent ?? "", /内容摘要/)
+  assert.ok(findByTestId(container, "workspace-detail-drawer"))
+  assert.ok(findByTestId(container, "inspector-section-stack"))
 })
 
 test("OptionsApp renders the english demo shell by default and hides legacy options panels", async () => {
@@ -356,7 +351,7 @@ test("OptionsApp renders the english demo shell by default and hides legacy opti
 
   assert.ok(findByTestId(container, "lists-sidebar"))
   assert.ok(findByTestId(container, "library-workspace"))
-  assert.ok(findByTestId(container, "workspace-inspector"))
+  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
   assert.match(container.textContent ?? "", /Workspace/)
   assert.match(container.textContent ?? "", /Archive/)
   assert.match(container.textContent ?? "", /All bookmarks/)
@@ -592,7 +587,7 @@ test("OptionsApp renders the demo inspector and localized copy", async () => {
   const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
-  assert.match(container.textContent ?? "", /选择一个书签以查看详情/)
+  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
 
   const card = getBookmarkCards(container)[0] as HTMLElement
   await act(async () => {
@@ -600,12 +595,11 @@ test("OptionsApp renders the demo inspector and localized copy", async () => {
   })
   await settle()
 
-  assert.match(container.textContent ?? "", /元数据/)
-  assert.match(container.textContent ?? "", /详情/)
+  assert.ok(findByTestId(container, "workspace-detail-drawer"))
   assert.match(container.textContent ?? "", /Alice/)
   assert.match(container.textContent ?? "", /@alice/)
-  assert.match(container.textContent ?? "", /内容摘要/)
-  assert.match(container.textContent ?? "", /在 X 中打开/)
+  assert.match(container.textContent ?? "", /Inspector content summary/)
+  assert.ok(findByTestId(container, "detail-open-x-link"))
   assert.match(container.textContent ?? "", /添加标签/)
 })
 
@@ -951,13 +945,12 @@ test("OptionsApp filters results by selected sidebar tag", async () => {
   assert.ok(findByTestId(container, "workspace-shell"))
   assert.ok(findByTestId(container, "library-workspace"))
   assert.ok(findByTestId(container, "lists-sidebar"))
-  assert.ok(findByTestId(container, "workspace-inspector"))
+  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
   assert.ok(findByTestId(container, "workspace-toolbar"))
   assert.ok(findByTestId(container, "sidebar-lists-scroll"))
   assert.ok(findByTestId(container, "sidebar-list-tree"))
   assert.ok(findByTestId(container, "library-results-scroll"))
   assert.ok(findByTestId(container, "results-stack"))
-  assert.ok(findByTestId(container, "inspector-section-stack"))
   assert.equal(findByTestId(container, "inline-list-name-input"), null)
   assert.equal(getBookmarkCards(container).length, 2)
 
@@ -999,14 +992,15 @@ test("OptionsApp uses rail layout and shared field/button primitives", async () 
   assert.ok(library)
   assert.ok(syncButton)
   assert.ok(searchInput)
-  assert.match(overview?.className ?? "", /xl:grid-cols-\[256px_minmax\(0,1fr\)_288px\]/)
+  assert.match(overview?.className ?? "", /xl:grid-cols-\[256px_minmax\(0,1fr\)\]/)
   assert.match(sidebar?.className ?? "", /options-sidebar-shell/)
   assert.match(library?.className ?? "", /options-main-shell/)
   assert.match(syncButton?.className ?? "", /workspace-sync-primary/)
   assert.match(searchInput.className, /options-toolbar-field/)
+  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
 })
 
-test("OptionsApp renders the detail inspector with metadata, summary, and tag actions", async () => {
+test("OptionsApp opens the detail drawer on card click and clears selection when it closes", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await upsertBookmarks([
@@ -1038,18 +1032,31 @@ test("OptionsApp renders the detail inspector with metadata, summary, and tag ac
   })
   await settle()
 
+  const drawer = findByTestId(container, "workspace-detail-drawer")
   const inspector = container.querySelector(".options-inspector-shell") as HTMLElement | null
   const attachTagSelect = container.querySelector('[data-testid="attach-tag-select"]') as HTMLSelectElement | null
   const openOnXButton = findButton(container, "Open on X")
+  const openOnXIcon = findByTestId(container, "detail-open-x-link") as HTMLButtonElement | null
+  const closeButton = findByTestId(container, "detail-drawer-close") as HTMLButtonElement | null
 
+  assert.ok(drawer)
   assert.ok(inspector)
   assert.ok(attachTagSelect)
-  assert.ok(openOnXButton)
+  assert.equal(openOnXButton, undefined)
+  assert.ok(openOnXIcon)
+  assert.ok(closeButton)
   assert.match(inspector.className, /options-inspector-shell/)
   assert.match(attachTagSelect.className, /options-inspector-field/)
-  assert.match(container.textContent ?? "", /Metadata/)
-  assert.match(container.textContent ?? "", /Summary/)
+  assert.match(firstCard.className, /options-result-card-selected/)
   assert.match(container.textContent ?? "", /Add tag/)
+
+  await act(async () => {
+    closeButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+  assert.doesNotMatch(firstCard.className, /options-result-card-selected/)
 })
 
 test("OptionsApp renders a dedicated media section in the inspector when a bookmark has media", async () => {
@@ -1082,7 +1089,11 @@ test("OptionsApp renders a dedicated media section in the inspector when a bookm
   assert.match(container.textContent ?? "", /Media/)
 
   const mediaButton = findByTestId(container, "inspector-media-trigger") as HTMLButtonElement | null
+  const mediaPreviewImage = container.querySelector('[data-testid="inspector-media-trigger"] img') as HTMLImageElement | null
   assert.ok(mediaButton)
+  assert.ok(mediaPreviewImage)
+  assert.match(mediaPreviewImage.className, /h-72/)
+  assert.equal(container.querySelector(".options-inspector-media-badge"), null)
 
   await act(async () => {
     mediaButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
@@ -1103,6 +1114,79 @@ test("OptionsApp renders a dedicated media section in the inspector when a bookm
   await settle()
 
   assert.equal(findByTestId(container, "media-lightbox"), null)
+})
+
+test("OptionsApp plays video media directly in the drawer without overlay affordances", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-media-video",
+      tweetUrl: "https://x.com/alice/status/tweet-media-video",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Video bookmark",
+      media: [{ type: "video", url: "https://example.com/video.mp4" }],
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const firstCard = getBookmarkCards(container)[0]
+  await act(async () => {
+    firstCard.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const drawerVideo = findByTestId(container, "inspector-media-video") as HTMLVideoElement | null
+
+  assert.ok(drawerVideo)
+  assert.equal(drawerVideo?.getAttribute("src"), "https://example.com/video.mp4")
+  assert.notEqual(drawerVideo?.getAttribute("controls"), null)
+  assert.match(drawerVideo?.className ?? "", /h-72/)
+  assert.equal(findByTestId(container, "inspector-media-trigger"), null)
+  assert.equal(container.querySelector(".options-inspector-media-badge"), null)
+  assert.equal(findByTestId(container, "media-lightbox-video"), null)
+})
+
+test("OptionsApp closes the detail drawer on Escape", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-drawer-escape",
+      tweetUrl: "https://x.com/alice/status/tweet-drawer-escape",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Escape closes the drawer",
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const card = getBookmarkCards(container)[0] as HTMLElement
+  await act(async () => {
+    card.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.ok(findByTestId(container, "workspace-detail-drawer"))
+
+  await act(async () => {
+    dom.window.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+  })
+  await settle()
+
+  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+  assert.doesNotMatch(card.className, /options-result-card-selected/)
 })
 
 test("OptionsApp media preview supports multiple assets with previous and next controls", async () => {
@@ -1510,17 +1594,18 @@ test("OptionsApp keeps sidebar lists and library results in separate scroll regi
   const sidebarFooter = findByTestId(container, "sidebar-footer-section")
   const sidebarScroll = findByTestId(container, "sidebar-lists-scroll")
   const library = findByTestId(container, "library-workspace")
-  const inspector = findByTestId(container, "workspace-inspector")
   const libraryHeader = findByTestId(container, "library-header-section")
   const librarySummary = findByTestId(container, "library-results-summary")
   const toolbar = findByTestId(container, "workspace-toolbar")
   const resultsScroll = findByTestId(container, "library-results-scroll")
+  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
   const firstCard = getBookmarkCards(container)[0]
   await act(async () => {
     firstCard.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
 
+  const inspector = findByTestId(container, "workspace-detail-drawer")
   const inspectorMeta = findByTestId(container, "inspector-metadata-section")
   const inspectorSummary = findByTestId(container, "inspector-summary-section")
   const inspectorTags = findByTestId(container, "inspector-tags-section")
@@ -1623,7 +1708,7 @@ test("OptionsApp truncates the sidebar title instead of overflowing", async () =
   assert.match(title.className, /truncate/)
 })
 
-test("OptionsApp renders left and right split handles in three-pane mode", async () => {
+test("OptionsApp keeps only the left split handle in drawer mode", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await saveSettings({
@@ -1641,7 +1726,7 @@ test("OptionsApp renders left and right split handles in three-pane mode", async
   await settle()
 
   assert.ok(findByTestId(container, "split-handle-left"))
-  assert.ok(findByTestId(container, "split-handle-right"))
+  assert.equal(findByTestId(container, "split-handle-right"), null)
 })
 
 test("OptionsApp persists updated pane widths after dragging a split handle", async () => {
@@ -1732,7 +1817,7 @@ test("OptionsApp keeps the real three-pane shell visible while the first workspa
   assert.ok(findByTestId(container, "lists-sidebar"))
   assert.ok(findByTestId(container, "workspace-sidebar-sync"))
   assert.ok(findByTestId(container, "workspace-toolbar"))
-  assert.ok(findByTestId(container, "workspace-inspector"))
+  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
 })
 
 test("OptionsApp shows command errors near the sync controls", async () => {

@@ -597,7 +597,9 @@ function BookmarkMediaSection({
   copy: OptionsCopy
   onPreview: (mediaUrl: string) => void
 }) {
-  const mediaUrl = bookmark.media?.[0]?.url
+  const primaryMedia = bookmark.media?.[0]
+  const mediaUrl = primaryMedia?.url
+  const isVideo = primaryMedia?.type === "video"
 
   if (!mediaUrl) {
     return null
@@ -606,23 +608,37 @@ function BookmarkMediaSection({
   return (
     <section data-testid="inspector-media-section" className="options-inspector-section options-inspector-divider">
       <div className="options-overline">{getSectionOverline(locale, copy.mediaTitle, "Media")}</div>
-      <button
-        type="button"
-        data-testid="inspector-media-trigger"
-        className="options-inspector-media-trigger mt-3"
-        onClick={() => onPreview(mediaUrl)}>
-        <div className="options-inspector-media-shell">
-          <img src={mediaUrl} alt="" className="h-28 w-full object-cover" />
-          <div className="options-inspector-media-badge">
-            <AppIcon name="image" size={14} />
-          </div>
+      {isVideo ? (
+        <div className="options-inspector-media-shell mt-3">
+          <video
+            data-testid="inspector-media-video"
+            src={mediaUrl}
+            controls
+            preload="metadata"
+            className="h-72 w-full object-cover"
+          />
           {bookmark.media && bookmark.media.length > 1 ? (
             <div className="options-inspector-media-count">
               {bookmark.media.length}
             </div>
           ) : null}
         </div>
-      </button>
+      ) : (
+        <button
+          type="button"
+          data-testid="inspector-media-trigger"
+          className="options-inspector-media-trigger mt-3"
+          onClick={() => onPreview(mediaUrl)}>
+          <div className="options-inspector-media-shell">
+            <img src={mediaUrl} alt="" className="h-72 w-full object-cover" />
+            {bookmark.media && bookmark.media.length > 1 ? (
+              <div className="options-inspector-media-count">
+                {bookmark.media.length}
+              </div>
+            ) : null}
+          </div>
+        </button>
+      )}
     </section>
   )
 }
@@ -636,6 +652,7 @@ function BookmarkInspector({
   copy,
   onAttachTag,
   onDetachTag,
+  onClose,
 }: {
   bookmark: BookmarkRecord | null
   tags: TagRecord[]
@@ -645,6 +662,7 @@ function BookmarkInspector({
   copy: OptionsCopy
   onAttachTag: (tagId: string) => Promise<void>
   onDetachTag: (tagId: string) => Promise<void>
+  onClose: () => void
 }) {
   const [selectedTagId, setSelectedTagId] = useState("")
   const [previewMediaIndex, setPreviewMediaIndex] = useState<number | null>(null)
@@ -701,7 +719,24 @@ function BookmarkInspector({
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [mediaItems, previewMediaIndex])
 
-  const previewMediaUrl = previewMediaIndex === null ? null : mediaItems[previewMediaIndex]?.url ?? null
+  useEffect(() => {
+    if (!bookmark || typeof window === "undefined") {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && previewMediaIndex === null) {
+        onClose()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [bookmark, onClose, previewMediaIndex])
+
+  const activePreviewMedia = previewMediaIndex === null ? null : mediaItems[previewMediaIndex] ?? null
+  const previewMediaUrl = activePreviewMedia?.url ?? null
+  const previewMediaIsVideo = activePreviewMedia?.type === "video"
 
   function handleOpenPreview(mediaUrl: string) {
     const nextIndex = mediaItems.findIndex((item) => item.url === mediaUrl)
@@ -760,29 +795,44 @@ function BookmarkInspector({
   return (
     <SurfaceCard
       chrome="bare"
-      className="options-inspector-shell xl:h-[100dvh]">
+      className="options-inspector-shell options-detail-drawer xl:h-[100dvh]">
+      <div className="options-detail-drawer-header">
+        <div className="options-inspector-author-row min-w-0">
+          <div className="options-inspector-avatar">{authorInitials}</div>
+          <div className="min-w-0">
+            <p className="truncate text-[1rem] font-semibold text-[var(--text-primary)]">{bookmark.authorName}</p>
+            <p className="options-meta-copy truncate">@{bookmark.authorHandle}</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          data-testid="detail-drawer-close"
+          aria-label={copy.detailsTitle}
+          className="options-detail-drawer-close"
+          onClick={onClose}>
+          <AppIcon name="close" size={16} />
+        </button>
+      </div>
       <div
         ref={inspectorScrollRef}
         data-testid="inspector-section-stack"
-        className="scroll-shell flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-5">
-        <section data-testid="inspector-metadata-section" className="options-inspector-section">
-          <div className="options-overline">{getSectionOverline(locale, copy.metadataTitle, "Metadata")}</div>
-          <h2 className="options-display-title-xs mt-3">{copy.detailsTitle}</h2>
-
-          <div className="options-inspector-author-row mt-6">
-            <div className="options-inspector-avatar">{authorInitials}</div>
-            <div className="min-w-0">
-              <p className="truncate text-[0.96rem] font-semibold text-[var(--text-primary)]">{bookmark.authorName}</p>
-              <p className="options-meta-copy truncate">@{bookmark.authorHandle}</p>
-            </div>
+        className="scroll-shell flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-6">
+        <section data-testid="inspector-metadata-section" className="options-detail-drawer-meta">
+          <div className="options-detail-drawer-meta-row">
+            <p className="options-meta-copy">{detailTimestamp}</p>
+            <button
+              type="button"
+              data-testid="detail-open-x-link"
+              aria-label={copy.openOnX}
+              className="options-detail-drawer-open-link"
+              onClick={() => window.open(bookmark.tweetUrl, "_blank", "noopener,noreferrer")}>
+              <AppIcon name="external" size={14} />
+            </button>
           </div>
-
-          <p className="options-meta-copy mt-4">{detailTimestamp}</p>
         </section>
 
-        <section data-testid="inspector-summary-section" className="options-inspector-section options-inspector-divider">
-          <div className="options-overline">{getSectionOverline(locale, copy.summaryTitle, "Summary")}</div>
-          <p className="options-body-copy options-inspector-summary mt-3">{bookmark.text}</p>
+        <section data-testid="inspector-summary-section" className="options-inspector-section options-detail-drawer-content">
+          <p className="options-body-copy options-inspector-summary">{bookmark.text}</p>
         </section>
 
         <BookmarkMediaSection
@@ -791,16 +841,6 @@ function BookmarkInspector({
           copy={copy}
           onPreview={handleOpenPreview}
         />
-
-        <section className="options-inspector-section options-inspector-divider">
-          <button
-            type="button"
-            className="options-secondary-button options-open-x-button w-full justify-center"
-            onClick={() => window.open(bookmark.tweetUrl, "_blank", "noopener,noreferrer")}>
-            <AppIcon name="external" size={14} />
-            <span>{copy.openOnX}</span>
-          </button>
-        </section>
 
         <section data-testid="inspector-tags-section" className="options-inspector-section options-inspector-divider">
           <div className="options-overline">{getSectionOverline(locale, copy.tagsTitle, "Tags")}</div>
@@ -880,13 +920,24 @@ function BookmarkInspector({
                 <div className="options-media-lightbox-nav-spacer" aria-hidden="true" />
               )}
               <div className="options-media-lightbox-content">
-                <img
-                  key={previewMediaUrl}
-                  data-testid="media-lightbox-image"
-                  src={previewMediaUrl}
-                  alt=""
-                  className="options-media-lightbox-image"
-                />
+                {previewMediaIsVideo ? (
+                  <video
+                    key={previewMediaUrl}
+                    data-testid="media-lightbox-video"
+                    src={previewMediaUrl}
+                    controls
+                    preload="metadata"
+                    className="options-media-lightbox-image"
+                  />
+                ) : (
+                  <img
+                    key={previewMediaUrl}
+                    data-testid="media-lightbox-image"
+                    src={previewMediaUrl}
+                    alt=""
+                    className="options-media-lightbox-image"
+                  />
+                )}
               </div>
               {hasMultipleMedia ? (
                 <button
@@ -1867,6 +1918,7 @@ function OptionsScreen() {
     visibleBookmarks.find((bookmark) => bookmark.tweetId === selectedBookmarkId) ??
     workspace.bookmarks.find((bookmark) => bookmark.tweetId === selectedBookmarkId) ??
     null
+  const detailDrawerWidth = Math.min(520, Math.max(440, rightSidebarWidth))
 
   const tagNamesByBookmarkId = useMemo(() => {
     const map = new Map<string, string[]>()
@@ -1978,11 +2030,11 @@ function OptionsScreen() {
             style={
               typeof window !== "undefined" && window.innerWidth >= 768
                 ? {
-                    gridTemplateColumns: `${leftSidebarWidth}px 12px minmax(0, 1fr) 12px ${rightSidebarWidth}px`
+                    gridTemplateColumns: `${leftSidebarWidth}px 12px minmax(0, 1fr)`
                   }
                 : undefined
             }
-            className="grid gap-0 xl:min-h-0 xl:h-[100dvh] xl:grid-cols-[256px_minmax(0,1fr)_288px] xl:items-stretch">
+            className="relative grid gap-0 xl:min-h-0 xl:h-[100dvh] xl:grid-cols-[256px_minmax(0,1fr)] xl:items-stretch">
             <>
               <WorkspaceSidebar
                 workspace={workspace}
@@ -2064,59 +2116,38 @@ function OptionsScreen() {
                 onResultsScroll={handleResultsScroll}
               />
 
-              <div
-                role="separator"
-                aria-orientation="vertical"
-                data-testid="split-handle-right"
-                className="workspace-split-handle hidden md:block"
-                onPointerDown={(event) => {
-                  event.preventDefault()
-                  resizeStateRef.current = {
-                    side: "right",
-                    startX: event.clientX,
-                    startWidth: rightSidebarWidth
-                  }
-                  document.documentElement.classList.add("is-pane-resizing")
-                }}
-                onMouseDown={(event) => {
-                  event.preventDefault()
-                  resizeStateRef.current = {
-                    side: "right",
-                    startX: event.clientX,
-                    startWidth: rightSidebarWidth
-                  }
-                  document.documentElement.classList.add("is-pane-resizing")
-                }}
-              />
+              {coldStartLoading ? null : selectedBookmark ? (
+                <section
+                  data-testid="workspace-detail-drawer"
+                  className="options-detail-drawer-shell"
+                  style={{ width: `${detailDrawerWidth}px` }}>
+                  <div data-testid="workspace-inspector" className="h-full">
+                    <BookmarkInspector
+                      bookmark={selectedBookmark}
+                      tags={workspace.tags}
+                      bookmarkTags={workspace.bookmarkTags}
+                      isSavingTags={workspace.isSavingTags}
+                      locale={locale}
+                      copy={copy}
+                      onAttachTag={async (tagId) => {
+                        if (!selectedBookmark) {
+                          return
+                        }
 
-              <section data-testid="workspace-inspector">
-                {coldStartLoading ? (
-                  <LoadingPanel title={copy.detailsTitle} />
-                ) : (
-                  <BookmarkInspector
-                    bookmark={selectedBookmark}
-                    tags={workspace.tags}
-                    bookmarkTags={workspace.bookmarkTags}
-                    isSavingTags={workspace.isSavingTags}
-                    locale={locale}
-                    copy={copy}
-                    onAttachTag={async (tagId) => {
-                      if (!selectedBookmark) {
-                        return
-                      }
+                        await workspace.handleAttachTag(selectedBookmark.tweetId, tagId)
+                      }}
+                      onDetachTag={async (tagId) => {
+                        if (!selectedBookmark) {
+                          return
+                        }
 
-                      await workspace.handleAttachTag(selectedBookmark.tweetId, tagId)
-                    }}
-                    onDetachTag={async (tagId) => {
-                      if (!selectedBookmark) {
-                        return
-                      }
-
-                      await workspace.handleDetachTag(selectedBookmark.tweetId, tagId)
-                    }}
-                  />
-                )}
-              </section>
+                        await workspace.handleDetachTag(selectedBookmark.tweetId, tagId)
+                      }}
+                      onClose={() => setSelectedBookmarkId(undefined)}
+                    />
+                  </div>
+                </section>
+              ) : null}
             </>
           </div>
         </div>
