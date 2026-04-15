@@ -186,3 +186,76 @@ test("OptionsApp keeps the tag create action beside the title and aligns the aut
     dom.window.close()
   }
 })
+
+test("OptionsApp restores large result sets in batches after clearing an author filter", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    ...Array.from({ length: 10 }, (_, index) => ({
+      tweetId: `tweet-batch-alice-${index + 1}`,
+      tweetUrl: `https://x.com/alice/status/${index + 1}`,
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: `Alice batch ${index + 1}`,
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: `2026-03-15T01:${String(index).padStart(2, "0")}:00.000Z`,
+      rawPayload: {}
+    })),
+    ...Array.from({ length: 80 }, (_, index) => ({
+      tweetId: `tweet-batch-bob-${index + 1}`,
+      tweetUrl: `https://x.com/bob/status/${index + 1}`,
+      authorName: "Bob",
+      authorHandle: "bob",
+      text: `Bob batch ${index + 1}`,
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: `2026-03-15T02:${String(index).padStart(2, "0")}:00.000Z`,
+      rawPayload: {}
+    }))
+  ])
+
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom, root } = render(React.createElement(OptionsApp))
+
+  try {
+    await settle()
+
+    const authorsToggle = findByTestId(container, "sidebar-authors-toggle-header") as HTMLButtonElement | null
+    assert.ok(authorsToggle)
+
+    await act(async () => {
+      authorsToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    })
+    await settle()
+
+    const aliceButton = container.querySelector('[data-author-button="alice"]') as HTMLButtonElement | null
+    assert.ok(aliceButton)
+
+    await act(async () => {
+      aliceButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    })
+    await settle()
+
+    assert.equal(container.querySelectorAll("[data-bookmark-card]").length, 10)
+
+    await act(async () => {
+      aliceButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    })
+    await settle()
+
+    assert.equal(container.querySelectorAll("[data-bookmark-card]").length, 80)
+    assert.match(findByTestId(container, "library-results-summary")?.textContent ?? "", /90 results/)
+  } finally {
+    await act(async () => {
+      root.unmount()
+    })
+    dom.window.close()
+  }
+})

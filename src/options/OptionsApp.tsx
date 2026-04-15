@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react"
+import React, { startTransition, useEffect, useMemo, useRef, useState } from "react"
 import type {
   BookmarkRecord,
   BookmarkTagRecord,
@@ -316,6 +316,8 @@ function createFieldId(scope: string, name: string) {
 }
 
 const SORT_ORDER_SEQUENCE: BookmarkSortOrder[] = ["timeline", "saved-asc", "created-desc", "likes-desc"]
+const INITIAL_RESULTS_RENDER_LIMIT = 80
+const RESULTS_RENDER_INCREMENT = 80
 
 function getSortLabel(copy: OptionsCopy, sortOrder: BookmarkSortOrder) {
   switch (sortOrder) {
@@ -1568,9 +1570,11 @@ function BookmarkResultsPane({
   selectedBookmarkId,
   setSelectedBookmarkId,
   visibleBookmarks,
+  renderedBookmarks,
   activeRefinementChips,
   tagNamesByBookmarkId,
-  clearRefinement
+  clearRefinement,
+  onResultsScroll
 }: {
   workspace: ReturnType<typeof useWorkspaceData>
   isLoading: boolean
@@ -1593,9 +1597,11 @@ function BookmarkResultsPane({
   selectedBookmarkId: string | undefined
   setSelectedBookmarkId: React.Dispatch<React.SetStateAction<string | undefined>>
   visibleBookmarks: BookmarkRecord[]
+  renderedBookmarks: BookmarkRecord[]
   activeRefinementChips: Array<{ key: string; label: string }>
   tagNamesByBookmarkId: Map<string, string[]>
   clearRefinement: (key: string) => void
+  onResultsScroll: (event: React.UIEvent<HTMLDivElement>) => void
 }) {
   return (
     <section data-testid="library-workspace" className="options-main-shell min-h-[420px] min-w-0 overflow-hidden p-0 xl:h-[100dvh]">
@@ -1623,7 +1629,10 @@ function BookmarkResultsPane({
           clearRefinement={clearRefinement}
         />
 
-        <div data-testid="library-results-scroll" className="scroll-shell min-h-0 flex-1 overflow-y-auto">
+        <div
+          data-testid="library-results-scroll"
+          className="scroll-shell min-h-0 flex-1 overflow-y-auto"
+          onScroll={onResultsScroll}>
           {isLoading ? (
             <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-6 lg:px-8">
               <div className="space-y-4">
@@ -1640,7 +1649,7 @@ function BookmarkResultsPane({
                   "content-start gap-4",
                   viewMode === "grid" ? "options-results-grid grid grid-cols-1 lg:grid-cols-2" : "options-results-list flex flex-col"
                 )}>
-              {visibleBookmarks.map((bookmark, index) => {
+              {renderedBookmarks.map((bookmark, index) => {
                 const currentTagNames = tagNamesByBookmarkId.get(bookmark.tweetId) ?? []
                 const isSelected = selectedBookmarkId === bookmark.tweetId
 
@@ -1691,6 +1700,7 @@ function OptionsScreen() {
   const [onlyWithMedia, setOnlyWithMedia] = useState(false)
   const [onlyLongform, setOnlyLongform] = useState(false)
   const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | undefined>(undefined)
+  const [renderLimit, setRenderLimit] = useState(INITIAL_RESULTS_RENDER_LIMIT)
   const resizeStateRef = useRef<null | { side: "left" | "right"; startX: number; startWidth: number }>(null)
   const paneWidthsRef = useRef({ left: 280, right: 360 })
 
@@ -1806,6 +1816,10 @@ function OptionsScreen() {
       workspace.bookmarks
     ]
   )
+  const renderedBookmarks = useMemo(
+    () => visibleBookmarks.slice(0, Math.min(renderLimit, visibleBookmarks.length)),
+    [renderLimit, visibleBookmarks]
+  )
 
   useEffect(() => {
     const visibleBookmarkIds = new Set(visibleBookmarks.map((bookmark) => bookmark.tweetId))
@@ -1819,6 +1833,10 @@ function OptionsScreen() {
       setSelectedBookmarkId(undefined)
     }
   }, [selectedBookmarkId, visibleBookmarks])
+
+  useEffect(() => {
+    setRenderLimit(Math.min(INITIAL_RESULTS_RENDER_LIMIT, visibleBookmarks.length || INITIAL_RESULTS_RENDER_LIMIT))
+  }, [visibleBookmarks])
 
   useEffect(() => {
     setActiveTagIds((current) => {
@@ -1923,7 +1941,29 @@ function OptionsScreen() {
   }
 
   function handleAuthorToggle(authorHandle: string) {
-    setActiveAuthorHandles((current) => (current[0] === authorHandle ? [] : [authorHandle]))
+    if (activeAuthorHandles[0] === authorHandle) {
+      startTransition(() => {
+        setActiveAuthorHandles([])
+      })
+      return
+    }
+
+    setActiveAuthorHandles([authorHandle])
+  }
+
+  function handleResultsScroll(event: React.UIEvent<HTMLDivElement>) {
+    if (renderLimit >= visibleBookmarks.length) {
+      return
+    }
+
+    const target = event.currentTarget
+    const remainingScroll = target.scrollHeight - target.scrollTop - target.clientHeight
+
+    if (remainingScroll > 320) {
+      return
+    }
+
+    setRenderLimit((current) => Math.min(current + RESULTS_RENDER_INCREMENT, visibleBookmarks.length))
   }
 
   return (
@@ -2015,9 +2055,11 @@ function OptionsScreen() {
                 selectedBookmarkId={selectedBookmarkId}
                 setSelectedBookmarkId={setSelectedBookmarkId}
                 visibleBookmarks={visibleBookmarks}
+                renderedBookmarks={renderedBookmarks}
                 activeRefinementChips={activeRefinementChips}
                 tagNamesByBookmarkId={tagNamesByBookmarkId}
                 clearRefinement={clearRefinement}
+                onResultsScroll={handleResultsScroll}
               />
 
               <div
