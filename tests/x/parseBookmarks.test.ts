@@ -173,3 +173,77 @@ test("parseBookmarkEntries skips tweet entries without a rest_id", () => {
   assert.equal(result.bookmarks.length, 1)
   assert.equal(result.bookmarks[0].tweetId, "789")
 })
+
+test("parseBookmarkEntries prefers playable mp4 variants for video media", () => {
+  const result = parseBookmarkEntries({
+    data: {
+      bookmark_timeline_v2: {
+        timeline: {
+          instructions: [
+            {
+              type: "TimelineAddEntries",
+              entries: [
+                {
+                  entryId: "tweet-video-1",
+                  content: {
+                    itemContent: {
+                      tweet_results: {
+                        result: {
+                          rest_id: "video-1",
+                          legacy: {
+                            full_text: "video bookmark",
+                            created_at: "Thu Mar 18 00:00:00 +0000 2026",
+                            extended_entities: {
+                              media: [
+                                {
+                                  type: "video",
+                                  media_url_https: "https://pbs.twimg.com/ext_tw_video_thumb/poster.jpg",
+                                  video_info: {
+                                    variants: [
+                                      {
+                                        content_type: "application/x-mpegURL",
+                                        url: "https://video.twimg.com/ext_tw_video/master.m3u8"
+                                      },
+                                      {
+                                        bitrate: 832000,
+                                        content_type: "video/mp4",
+                                        url: "https://video.twimg.com/ext_tw_video/vid/640x360/video-360.mp4"
+                                      },
+                                      {
+                                        bitrate: 2176000,
+                                        content_type: "video/mp4",
+                                        url: "https://video.twimg.com/ext_tw_video/vid/1280x720/video-720.mp4"
+                                      }
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          core: {
+                            user_results: {
+                              result: {
+                                legacy: {
+                                  name: "Video User",
+                                  screen_name: "video_user"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  })
+
+  assert.equal(result.bookmarks.length, 1)
+  assert.equal(result.bookmarks[0].media?.[0]?.type, "video")
+  assert.equal(result.bookmarks[0].media?.[0]?.url, "https://video.twimg.com/ext_tw_video/vid/1280x720/video-720.mp4")
+})

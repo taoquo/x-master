@@ -477,7 +477,9 @@ function TextInputField({
 }
 
 function PreviewMedia({ bookmark, index }: { bookmark: BookmarkRecord; index: number }) {
-  const mediaUrl = bookmark.media?.[0]?.url
+  const primaryMedia = bookmark.media?.[0]
+  const mediaUrl = primaryMedia?.url
+  const isVideo = primaryMedia?.type === "video" || primaryMedia?.type === "animated_gif"
 
   if (!mediaUrl) {
     return null
@@ -485,11 +487,21 @@ function PreviewMedia({ bookmark, index }: { bookmark: BookmarkRecord; index: nu
 
   return (
     <div className="workspace-media-frame options-card-media relative aspect-video overflow-hidden bg-[var(--tag-bg)]" data-card-media-index={index}>
-      <img
-        src={mediaUrl}
-        alt=""
-        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-      />
+      {isVideo ? (
+        <video
+          src={mediaUrl}
+          muted
+          playsInline
+          preload="metadata"
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+        />
+      ) : (
+        <img
+          src={mediaUrl}
+          alt=""
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+        />
+      )}
       <div className="absolute inset-0 bg-black/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
     </div>
   )

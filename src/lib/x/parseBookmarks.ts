@@ -13,6 +13,21 @@ function unwrapTweetResult(result: any) {
   return result
 }
 
+function getPlayableMediaUrl(item: any) {
+  const type = item?.type
+  const fallbackUrl = item?.media_url_https ?? item?.media_url ?? ""
+
+  if (type !== "video" && type !== "animated_gif") {
+    return fallbackUrl
+  }
+
+  const mp4Variants = (item?.video_info?.variants ?? [])
+    .filter((variant: any) => variant?.content_type === "video/mp4" && variant?.url)
+    .sort((left: any, right: any) => (right?.bitrate ?? 0) - (left?.bitrate ?? 0))
+
+  return mp4Variants[0]?.url ?? fallbackUrl
+}
+
 export function parseBookmarkEntries(response: any) {
   const instructions = getTimelineInstructions(response)
   const addEntries = instructions.find((instruction: any) => instruction?.type === "TimelineAddEntries")
@@ -48,7 +63,7 @@ export function parseBookmarkEntries(response: any) {
           lastSeenAt: seenAt,
           media: (legacy?.extended_entities?.media ?? []).map((item: any) => ({
             type: item?.type,
-            url: item?.media_url_https ?? item?.media_url ?? "",
+            url: getPlayableMediaUrl(item),
             altText: item?.ext_alt_text
           })),
           metrics: {
