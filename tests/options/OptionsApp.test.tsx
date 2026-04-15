@@ -489,8 +489,10 @@ test("OptionsApp switches between grid and list views and shows english demo fil
   assert.ok(filterTrigger)
   assert.ok(sortTrigger)
   assert.match(resultsStack?.className ?? "", /options-results-grid/)
+  assert.match(resultsStack?.className ?? "", /options-results-masonry/)
   assert.match(sortTrigger?.textContent ?? "", /Recently saved/)
   assert.match(getBookmarkCards(container)[0]?.textContent ?? "", /Bob/)
+  assert.doesNotMatch(getBookmarkCards(container)[0]?.className ?? "", /min-h-\[220px\]/)
 
   await act(async () => {
     ;(sortTrigger as HTMLButtonElement).dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
@@ -548,12 +550,14 @@ test("OptionsApp switches between grid and list views and shows english demo fil
   })
   await settle()
   assert.match(findByTestId(container, "results-stack")?.className ?? "", /options-results-list/)
+  assert.doesNotMatch(findByTestId(container, "results-stack")?.className ?? "", /options-results-masonry/)
 
   await act(async () => {
     gridToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
   assert.match(findByTestId(container, "results-stack")?.className ?? "", /options-results-grid/)
+  assert.match(findByTestId(container, "results-stack")?.className ?? "", /options-results-masonry/)
 })
 
 test("OptionsApp renders the demo inspector and localized copy", async () => {

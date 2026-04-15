@@ -1136,6 +1136,29 @@
     min-height: 0;
   }
 
+  .options-results-masonry {
+    column-gap: 16px;
+  }
+
+  @media (min-width: 1024px) {
+    .options-results-masonry {
+      column-gap: 24px;
+    }
+  }
+
+  .options-results-masonry .options-result-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 16px;
+    width: 100%;
+  }
+
+  @media (min-width: 1024px) {
+    .options-results-masonry .options-result-card {
+      margin-bottom: 24px;
+    }
+  }
+
   .options-results-list .options-result-card {
     min-height: 0;
   }
@@ -1221,7 +1244,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-top: auto;
+    margin-top: 8px;
     padding-top: 8px;
     border-top: 1px solid color-mix(in srgb, var(--options-border) 28%, transparent);
   }

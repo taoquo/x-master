@@ -522,7 +522,7 @@ function BookmarkCard({
       data-bookmark-card={bookmark.tweetId}
       onClick={onSelect}
       className={cn(
-        "options-result-card group relative flex min-h-[220px] flex-col overflow-hidden",
+        "options-result-card group relative flex flex-col overflow-hidden",
         selected && "options-result-card-selected"
       )}>
       <PreviewMedia bookmark={bookmark} index={index} />
@@ -1647,7 +1647,9 @@ function BookmarkResultsPane({
                 data-testid="results-stack"
                 className={cn(
                   "content-start gap-4",
-                  viewMode === "grid" ? "options-results-grid grid grid-cols-1 lg:grid-cols-2" : "options-results-list flex flex-col"
+                  viewMode === "grid"
+                    ? "options-results-grid options-results-masonry columns-1 lg:columns-2"
+                    : "options-results-list flex flex-col"
                 )}>
               {renderedBookmarks.map((bookmark, index) => {
                 const currentTagNames = tagNamesByBookmarkId.get(bookmark.tweetId) ?? []
