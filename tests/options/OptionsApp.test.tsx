@@ -600,7 +600,7 @@ test("OptionsApp renders the demo inspector and localized copy", async () => {
   assert.match(container.textContent ?? "", /@alice/)
   assert.match(container.textContent ?? "", /Inspector content summary/)
   assert.ok(findByTestId(container, "detail-open-x-link"))
-  assert.match(container.textContent ?? "", /添加标签/)
+  assert.equal(findByTestId(container, "attach-tag-trigger"), null)
 })
 
 test("OptionsApp theme toggle keeps system preference reachable", async () => {
@@ -876,16 +876,19 @@ test("OptionsApp supports adding existing tags in the inspector without legacy b
   })
   await settle()
 
+  const addTagTrigger = findByTestId(container, "attach-tag-trigger") as HTMLButtonElement | null
+  assert.ok(addTagTrigger)
+  assert.equal(container.querySelector('[data-testid="attach-tag-select"]'), null)
+
+  await act(async () => {
+    addTagTrigger!.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
   const attachTagSelect = container.querySelector('[data-testid="attach-tag-select"]') as HTMLSelectElement
   assert.ok(attachTagSelect)
   await act(async () => {
     setSelectValue(attachTagSelect, importantTag.id, dom.window)
-  })
-
-  const addTagButton = findButton(container, "Add tag")
-  assert.ok(addTagButton)
-  await act(async () => {
-    addTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
 
@@ -893,6 +896,8 @@ test("OptionsApp supports adding existing tags in the inspector without legacy b
   assert.ok(currentTags)
   assert.doesNotMatch(currentTags.textContent ?? "", /No tags yet/)
   assert.match(currentTags.textContent ?? "", /Important/)
+  assert.equal(container.querySelector('[data-testid="attach-tag-select"]'), null)
+  assert.equal(findByTestId(container, "attach-tag-trigger"), null)
 
 })
 
@@ -1034,21 +1039,20 @@ test("OptionsApp opens the detail drawer on card click and clears selection when
 
   const drawer = findByTestId(container, "workspace-detail-drawer")
   const inspector = container.querySelector(".options-inspector-shell") as HTMLElement | null
-  const attachTagSelect = container.querySelector('[data-testid="attach-tag-select"]') as HTMLSelectElement | null
+  const addTagTrigger = findByTestId(container, "attach-tag-trigger") as HTMLButtonElement | null
   const openOnXButton = findButton(container, "Open on X")
   const openOnXIcon = findByTestId(container, "detail-open-x-link") as HTMLButtonElement | null
   const closeButton = findByTestId(container, "detail-drawer-close") as HTMLButtonElement | null
 
   assert.ok(drawer)
   assert.ok(inspector)
-  assert.ok(attachTagSelect)
+  assert.equal(addTagTrigger, null)
   assert.equal(openOnXButton, undefined)
   assert.ok(openOnXIcon)
   assert.ok(closeButton)
   assert.match(inspector.className, /options-inspector-shell/)
-  assert.match(attachTagSelect.className, /options-inspector-field/)
   assert.match(firstCard.className, /options-result-card-selected/)
-  assert.match(container.textContent ?? "", /Add tag/)
+  assert.equal(container.querySelector('[data-testid="attach-tag-select"]'), null)
 
   await act(async () => {
     closeButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))

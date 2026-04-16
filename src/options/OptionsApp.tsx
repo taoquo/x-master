@@ -248,7 +248,7 @@ function getOptionsCopy(locale: Locale) {
     noTagsYet: "No tags yet.",
     attachExistingTag: "Attach existing tag",
     selectTag: "Select a tag",
-    addTag: "Add tag",
+    addTag: "Add a tag",
     assignmentTitle: "Assignment",
     bookmarkFocus: "Bookmark focus",
     primaryList: "Primary list",
@@ -687,6 +687,7 @@ function BookmarkInspector({
   onClose: () => void
 }) {
   const [selectedTagId, setSelectedTagId] = useState("")
+  const [isAttachTagOpen, setIsAttachTagOpen] = useState(false)
   const [previewMediaIndex, setPreviewMediaIndex] = useState<number | null>(null)
   const inspectorScrollRef = useRef<HTMLDivElement | null>(null)
   const mediaItems = bookmark?.media ?? []
@@ -694,6 +695,7 @@ function BookmarkInspector({
 
   useEffect(() => {
     setSelectedTagId("")
+    setIsAttachTagOpen(false)
     setPreviewMediaIndex(null)
     if (inspectorScrollRef.current) {
       if (typeof inspectorScrollRef.current.scrollTo === "function") {
@@ -878,33 +880,48 @@ function BookmarkInspector({
                 <AppIcon name="close" size={12} />
               </button>
             ))}
-          </div>
+            {availableTagOptions.length ? (
+              isAttachTagOpen ? (
+                <div data-testid="attach-tag-inline-shell" className="options-tag-inline-editor">
+                  <SelectField
+                    id={attachSelectId}
+                    dataTestId="attach-tag-select"
+                    value={selectedTagId}
+                    onChange={(nextTagId) => {
+                      setSelectedTagId(nextTagId)
 
-          <div className="mt-6 grid gap-4">
-            <FieldBlock
-              label={copy.attachExistingTag}
-              htmlFor={attachSelectId}
-              labelClassName="options-overline !font-medium !tracking-[0.12em] !text-[var(--text-quaternary)]">
-              <SelectField
-                id={attachSelectId}
-                dataTestId="attach-tag-select"
-                value={selectedTagId}
-                onChange={setSelectedTagId}
-                options={[
-                  { value: "", label: copy.selectTag },
-                  ...availableTagOptions.map((tag) => ({ value: tag.id, label: tag.name }))
-                ]}
-                className="options-inspector-field"
-              />
-            </FieldBlock>
-            <button
-              type="button"
-              onClick={() => void onAttachTag(selectedTagId)}
-              disabled={isSavingTags || !selectedTagId}
-              className="options-secondary-button options-dashed-action w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
-              <AppIcon name="tag" size={14} />
-              <span>{copy.addTag}</span>
-            </button>
+                      if (!nextTagId) {
+                        return
+                      }
+
+                      void onAttachTag(nextTagId)
+                        .then(() => {
+                          setSelectedTagId("")
+                          setIsAttachTagOpen(false)
+                        })
+                        .catch(() => {
+                          setSelectedTagId("")
+                          setIsAttachTagOpen(false)
+                        })
+                    }}
+                    options={[
+                      { value: "", label: copy.addTag },
+                      ...availableTagOptions.map((tag) => ({ value: tag.id, label: tag.name }))
+                    ]}
+                    className="options-tag-inline-select"
+                  />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  data-testid="attach-tag-trigger"
+                  aria-label={copy.addTag}
+                  className="chip-button options-tag-pill options-tag-pill-add"
+                  onClick={() => setIsAttachTagOpen(true)}>
+                  <span aria-hidden="true">+</span>
+                </button>
+              )
+            ) : null}
           </div>
         </section>
       </div>

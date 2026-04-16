@@ -1580,6 +1580,33 @@
     padding: 0 6px 0 10px;
   }
 
+  .options-tag-pill-add {
+    min-width: 28px;
+    justify-content: center;
+    padding: 0;
+    color: var(--text-tertiary);
+    background: color-mix(in srgb, var(--options-surface) 72%, #f1f5f9);
+    border: 1px dashed color-mix(in srgb, var(--options-border) 82%, transparent);
+  }
+
+  .options-tag-pill-add:hover {
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--options-surface) 88%, #f8fafc);
+  }
+
+  .options-tag-inline-editor {
+    min-width: 110px;
+    max-width: min(240px, 100%);
+    flex: 0 1 auto;
+  }
+
+  .options-tag-inline-select {
+    min-height: 28px;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--options-surface) 90%, #f8fafc);
+    padding: 4px 10px;
+  }
+
   .options-inspector-author-row {
     display: flex;
     align-items: center;
