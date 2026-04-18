@@ -20,7 +20,7 @@ import {
 } from "./authorSidebar.ts"
 import { useWorkspaceData } from "./hooks/useWorkspaceData.ts"
 import { getSettings, saveSettings } from "../lib/storage/settings.ts"
-import { EmptyState, StatusBadge, SurfaceCard } from "../ui/components.tsx"
+import { StatusBadge, SurfaceCard } from "../ui/components.tsx"
 import { BrandLogo } from "../ui/branding.tsx"
 import { ExtensionUiProvider, useExtensionUi } from "../ui/provider.tsx"
 import { AppIcon } from "../ui/icons.tsx"
@@ -118,8 +118,11 @@ function getOptionsCopy(locale: Locale) {
       tagSelectedWith: "为选中项添加标签",
       chooseTag: "选择标签",
       applyTag: "应用标签",
+      emptyFeedTitle: "还没有保存任何书签",
+      emptyFeedDescription: "从 X 保存内容后，书签会以当前卡片流布局出现在这里。",
       noBookmarksTitle: "当前筛选条件下没有匹配的书签",
-      noBookmarksDescription: "",
+      noBookmarksDescription: "试试调整搜索词、标签或作者范围。",
+      loadingFeedTitle: "正在整理你的书签",
       detailsTitle: "详情",
       detailsDescription: "",
       noBookmarkSelectedTitle: "尚未选择书签",
@@ -152,6 +155,9 @@ function getOptionsCopy(locale: Locale) {
       selected: "已选择",
       noList: "未分组",
       loadingStateDescription: "正在从扩展运行时加载本地状态。",
+      loadFailedTitle: "书签加载失败",
+      loadFailedDescription: "暂时无法读取本地工作区数据，你可以立即重试。",
+      retryLoad: "重新加载",
       scopedTo: "当前范围",
       listPrefix: "列表",
       searchPrefix: "搜索",
@@ -229,8 +235,11 @@ function getOptionsCopy(locale: Locale) {
     tagSelectedWith: "Tag selected with",
     chooseTag: "Choose tag",
     applyTag: "Apply tag",
+    emptyFeedTitle: "No bookmarks saved yet",
+    emptyFeedDescription: "Once you save items from X, they will appear here in the current card feed layout.",
     noBookmarksTitle: "No bookmarks match the current filters",
-    noBookmarksDescription: "",
+    noBookmarksDescription: "Try adjusting your search, tags, or author scope.",
+    loadingFeedTitle: "Loading your bookmark feed",
     detailsTitle: "Details",
     detailsDescription: "",
     noBookmarkSelectedTitle: "No bookmark selected",
@@ -263,6 +272,9 @@ function getOptionsCopy(locale: Locale) {
     selected: "selected",
     noList: "No list",
     loadingStateDescription: "Loading local state from the extension runtime.",
+    loadFailedTitle: "Failed to load bookmarks",
+    loadFailedDescription: "The local workspace could not be read right now. Try loading it again.",
+    retryLoad: "Retry load",
     scopedTo: "Scoped to",
     listPrefix: "List",
     searchPrefix: "Search",
@@ -379,6 +391,75 @@ function InlineMessage({
         className
       )}>
       {message}
+    </div>
+  )
+}
+
+function FeedStatusCard({
+  testId,
+  icon,
+  overline,
+  title,
+  description,
+  tone = "default",
+  action
+}: {
+  testId: string
+  icon: React.ReactNode
+  overline: string
+  title: string
+  description: string
+  tone?: "default" | "error"
+  action?: React.ReactNode
+}) {
+  return (
+    <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-6 lg:px-8">
+      <div data-testid={testId} className={cn("options-feed-state-shell", tone === "error" && "is-error")}>
+        <div className="options-feed-state-icon">{icon}</div>
+        <div className="space-y-3">
+          <div className="options-feed-state-overline">{overline}</div>
+          <h3 className="options-feed-state-title">{title}</h3>
+          <p className="options-feed-state-copy">{description}</p>
+        </div>
+        {action ? <div className="options-feed-state-actions">{action}</div> : null}
+      </div>
+    </div>
+  )
+}
+
+function FeedLoadingState({ copy }: { copy: OptionsCopy }) {
+  return (
+    <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-6 lg:px-8">
+      <div data-testid="feed-loading-state" className="options-feed-skeleton-shell">
+        <div className="options-feed-skeleton-head">
+          <div className="space-y-3">
+            <div className="options-feed-state-overline">{copy.loadingFeedTitle}</div>
+            <div className="h-5 w-56 animate-pulse rounded-full bg-[var(--surface-muted)]" />
+            <div className="h-4 w-80 max-w-full animate-pulse rounded-full bg-[var(--surface-muted)]" />
+          </div>
+          <div className="h-10 w-32 animate-pulse rounded-[12px] bg-[var(--surface-muted)]" />
+        </div>
+
+        <div className="options-feed-skeleton-grid" aria-hidden="true">
+          {[228, 276, 244, 296, 236, 260].map((height, index) => (
+            <div key={`${height}-${index}`} className="options-feed-skeleton-card">
+              <div className="mb-5 flex items-center gap-3">
+                <div className="h-11 w-11 animate-pulse rounded-full bg-[var(--surface-muted)]" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="h-4 w-24 animate-pulse rounded-full bg-[var(--surface-muted)]" />
+                  <div className="h-3 w-16 animate-pulse rounded-full bg-[var(--surface-muted)]" />
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="h-4 w-full animate-pulse rounded-full bg-[var(--surface-muted)]" />
+                <div className="h-4 w-[88%] animate-pulse rounded-full bg-[var(--surface-muted)]" />
+                <div className="h-4 w-[64%] animate-pulse rounded-full bg-[var(--surface-muted)]" />
+              </div>
+              <div className="mt-5 animate-pulse rounded-[16px] bg-[var(--surface-muted)]" style={{ height }} />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
@@ -1694,13 +1775,17 @@ function BookmarkResultsPane({
   clearRefinement: (key: string) => void
   onResultsScroll: (event: React.UIEvent<HTMLDivElement>) => void
 }) {
+  const hasAnyBookmarks = workspace.bookmarks.length > 0
+  const hasFeedRefinement = currentScopeLabel !== copy.allBookmarks || Boolean(query.trim()) || activeRefinementChips.length > 0
+  const showLoadErrorState = Boolean(workspace.loadError) && !hasAnyBookmarks
+
   return (
     <section data-testid="library-workspace" className="options-main-shell min-h-[420px] min-w-0 overflow-hidden p-0 xl:h-[100dvh]">
       <div className="flex h-full min-h-0 flex-col">
         <WorkspaceToolbar
           locale={locale}
           copy={copy}
-          loadError={workspace.loadError}
+          loadError={showLoadErrorState ? null : workspace.loadError}
           currentScopeLabel={currentScopeLabel}
           visibleBookmarksCount={visibleBookmarks.length}
           query={query}
@@ -1725,13 +1810,26 @@ function BookmarkResultsPane({
           className="scroll-shell min-h-0 flex-1 overflow-y-auto"
           onScroll={onResultsScroll}>
           {isLoading ? (
-            <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-6 lg:px-8">
-              <div className="space-y-4">
-                <div className="h-32 animate-pulse rounded-[16px] bg-[var(--surface-muted)]" />
-                <div className="h-32 animate-pulse rounded-[16px] bg-[var(--surface-muted)]" />
-                <div className="h-32 animate-pulse rounded-[16px] bg-[var(--surface-muted)]" />
-              </div>
-            </div>
+            <FeedLoadingState copy={copy} />
+          ) : showLoadErrorState ? (
+            <FeedStatusCard
+              testId="feed-error-state"
+              icon={<AppIcon name="sync" size={24} />}
+              overline={copy.infoLabel}
+              title={copy.loadFailedTitle}
+              description={workspace.loadError ?? copy.loadFailedDescription}
+              tone="error"
+              action={
+                <button
+                  type="button"
+                  data-testid="feed-error-retry"
+                  className="options-secondary-button"
+                  onClick={() => void workspace.refreshData()}>
+                  <AppIcon name="sync" size={16} />
+                  {copy.retryLoad}
+                </button>
+              }
+            />
           ) : visibleBookmarks.length ? (
             <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-6 lg:px-8">
               <div
@@ -1761,12 +1859,13 @@ function BookmarkResultsPane({
             </div>
             </div>
           ) : (
-            <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-6 lg:px-8">
-              <EmptyState
-                title={copy.noBookmarksTitle}
-                description={copy.noBookmarksDescription}
-              />
-            </div>
+            <FeedStatusCard
+              testId="feed-empty-state"
+              icon={<AppIcon name={hasFeedRefinement ? "filter" : "bookmark"} size={24} />}
+              overline={copy.infoLabel}
+              title={hasAnyBookmarks || hasFeedRefinement ? copy.noBookmarksTitle : copy.emptyFeedTitle}
+              description={hasAnyBookmarks || hasFeedRefinement ? copy.noBookmarksDescription : copy.emptyFeedDescription}
+            />
           )}
         </div>
       </div>

@@ -1872,6 +1872,16 @@ test("OptionsApp shows load errors in the workspace area", async () => {
   }
 })
 
+test("OptionsApp renders a feed skeleton during the first workspace load", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  const { container } = render(React.createElement(OptionsApp))
+
+  assert.ok(findByTestId(container, "feed-loading-state"))
+  assert.equal(findByTestId(container, "results-stack"), null)
+})
+
 test("OptionsApp keeps the real three-pane shell visible while the first workspace load is still pending", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
@@ -1882,6 +1892,83 @@ test("OptionsApp keeps the real three-pane shell visible while the first workspa
   assert.ok(findByTestId(container, "workspace-sidebar-sync"))
   assert.ok(findByTestId(container, "workspace-toolbar"))
   assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+})
+
+test("OptionsApp shows a dedicated empty feed state when no bookmarks exist yet", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "light",
+    lastSyncSummary: {
+      status: "idle",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 0
+    },
+    classificationRules: []
+  })
+
+  const { container } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const emptyState = findByTestId(container, "feed-empty-state")
+  assert.ok(emptyState)
+  assert.match(emptyState.textContent ?? "", /还没有保存任何书签/)
+  assert.equal(findByTestId(container, "results-stack"), null)
+})
+
+test("OptionsApp retries feed loading from the error state and recovers the results", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-retry-success",
+      tweetUrl: "https://x.com/alice/status/tweet-retry-success",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Retry success bookmark",
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const storageLocal = chrome.storage.local as { get: (...args: unknown[]) => Promise<unknown> }
+  const originalGet = storageLocal.get
+  let remainingFailures = 3
+  storageLocal.get = async (...args) => {
+    if (remainingFailures > 0) {
+      remainingFailures -= 1
+      throw new Error("Load failed on purpose")
+    }
+
+    return originalGet(...args)
+  }
+
+  try {
+    const { container, dom } = render(React.createElement(OptionsApp))
+    await settle()
+
+    const retryButton = findByTestId(container, "feed-error-retry") as HTMLButtonElement | null
+    assert.ok(findByTestId(container, "feed-error-state"))
+    assert.ok(retryButton)
+    assert.match(container.textContent ?? "", /Load failed on purpose/)
+    assert.equal(findByTestId(container, "results-stack"), null)
+
+    await act(async () => {
+      retryButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    })
+    await settle()
+
+    assert.equal(findByTestId(container, "feed-error-state"), null)
+    assert.ok(findByTestId(container, "results-stack"))
+    assert.match(container.textContent ?? "", /Retry success bookmark/)
+  } finally {
+    storageLocal.get = originalGet
+  }
 })
 
 test("OptionsApp shows command errors near the sync controls", async () => {
