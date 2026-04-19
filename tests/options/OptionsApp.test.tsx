@@ -472,19 +472,41 @@ test("OptionsApp switches between grid and list views and shows english demo fil
   const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
+  const resultsScroll = findByTestId(container, "library-results-scroll")
+  const header = findByTestId(container, "library-header-section")
+  const toolbar = findByTestId(container, "workspace-toolbar")
+  const resultsShell = container.querySelector('[data-testid="results-shell"]')
   const resultsStack = findByTestId(container, "results-stack")
   const listToggle = findByTestId(container, "view-toggle-list") as HTMLButtonElement | null
   const gridToggle = findByTestId(container, "view-toggle-grid") as HTMLButtonElement | null
   const filterTrigger = findByTestId(container, "filter-trigger") as HTMLButtonElement | null
   const sortTrigger = findByTestId(container, "sort-trigger")
+  const resultsCount = container.querySelector('[data-testid="results-count"]')
+  const summary = container.querySelector(".options-main-header-summary")
+  const searchInput = container.querySelector("#filters-search") as HTMLInputElement | null
 
+  assert.ok(resultsScroll)
+  assert.ok(header)
+  assert.ok(toolbar)
   assert.ok(resultsStack)
+  assert.ok(resultsShell)
   assert.ok(listToggle)
   assert.ok(gridToggle)
   assert.ok(filterTrigger)
   assert.ok(sortTrigger)
+  assert.ok(resultsCount)
+  assert.ok(summary)
+  assert.ok(searchInput)
+  assert.match(header?.className ?? "", /options-main-header/)
+  assert.match(summary?.className ?? "", /options-main-header-summary/)
+  assert.match(resultsCount?.className ?? "", /options-main-header-summary-value/)
+  assert.match(searchInput?.className ?? "", /options-toolbar-field-compact/)
+  assert.equal(resultsScroll?.contains(toolbar as Node), true)
+  assert.equal(resultsShell?.contains(toolbar as Node), true)
+  assert.match(resultsShell?.className ?? "", /options-results-shell-grid/)
   assert.match(resultsStack?.className ?? "", /options-results-grid/)
   assert.match(resultsStack?.className ?? "", /options-results-masonry/)
+  assert.match(resultsStack?.className ?? "", /options-results-stack-grid/)
   assert.match(sortTrigger?.textContent ?? "", /Recently saved/)
   assert.match(getBookmarkCards(container)[0]?.textContent ?? "", /Bob/)
   assert.doesNotMatch(getBookmarkCards(container)[0]?.className ?? "", /min-h-\[220px\]/)
@@ -544,15 +566,260 @@ test("OptionsApp switches between grid and list views and shows english demo fil
     listToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
-  assert.match(findByTestId(container, "results-stack")?.className ?? "", /options-results-list/)
+  const listResultsShell = container.querySelector('[data-testid="results-shell"]')
+  const listResultsStack = findByTestId(container, "results-stack")
+  const listCard = getBookmarkCards(container)[0] as HTMLElement | undefined
+  assert.match(listResultsShell?.className ?? "", /options-results-shell-list/)
+  assert.match(listResultsStack?.className ?? "", /options-results-list/)
+  assert.match(listResultsStack?.className ?? "", /options-results-stack-list/)
   assert.doesNotMatch(findByTestId(container, "results-stack")?.className ?? "", /options-results-masonry/)
+  assert.match(listCard?.className ?? "", /options-result-card-list/)
+  assert.ok(listCard?.querySelector(".options-card-layout"))
+  assert.ok(listCard?.querySelector(".options-card-column"))
+  assert.ok(listCard?.querySelector(".options-card-side"))
+  assert.ok(listCard?.querySelector(".options-card-media-inline"))
+  assert.equal(listCard?.querySelectorAll(".options-card-stat").length, 3)
+  assert.match(listCard?.querySelector(".options-card-stat-list")?.textContent ?? "", /2/)
+  assert.equal(listCard?.querySelectorAll(".options-card-actions-start button").length, 0)
 
   await act(async () => {
     gridToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
+  const resetGridResultsShell = container.querySelector('[data-testid="results-shell"]')
+  assert.match(resetGridResultsShell?.className ?? "", /options-results-shell-grid/)
   assert.match(findByTestId(container, "results-stack")?.className ?? "", /options-results-grid/)
   assert.match(findByTestId(container, "results-stack")?.className ?? "", /options-results-masonry/)
+  assert.match(findByTestId(container, "results-stack")?.className ?? "", /options-results-stack-grid/)
+  assert.doesNotMatch(getBookmarkCards(container)[0]?.className ?? "", /options-result-card-list/)
+})
+
+test("OptionsApp keeps a shared card hierarchy across short, long, and media bookmarks", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-card-short",
+      tweetUrl: "https://x.com/alice/status/tweet-card-short",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Short bookmark",
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-card-long",
+      tweetUrl: "https://x.com/bob/status/tweet-card-long",
+      authorName: "Bob",
+      authorHandle: "bob",
+      text: "L".repeat(360),
+      createdAtOnX: "2026-04-09T07:20:00.000Z",
+      savedAt: "2026-04-09T08:30:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-card-media",
+      tweetUrl: "https://x.com/carol/status/tweet-card-media",
+      authorName: "Carol",
+      authorHandle: "carol",
+      text: "Bookmark with media",
+      media: [{ type: "photo", url: "https://example.com/image.jpg" }],
+      createdAtOnX: "2026-04-09T09:20:00.000Z",
+      savedAt: "2026-04-09T08:20:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const { container } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const cards = getBookmarkCards(container) as HTMLElement[]
+  assert.equal(cards.length, 3)
+
+  for (const card of cards) {
+    assert.ok(card.querySelector(".options-card-main"))
+    assert.ok(card.querySelector(".options-card-header"))
+    assert.ok(card.querySelector(".options-card-author"))
+    assert.ok(card.querySelector(".options-card-author-name"))
+    assert.ok(card.querySelector(".options-card-author-handle"))
+    assert.ok(card.querySelector(".options-card-copy-wrap"))
+    assert.ok(card.querySelector(".options-card-actions"))
+  }
+
+  const shortCard = container.querySelector('[data-bookmark-card="tweet-card-short"]') as HTMLElement | null
+  const longCard = container.querySelector('[data-bookmark-card="tweet-card-long"]') as HTMLElement | null
+  const mediaCard = container.querySelector('[data-bookmark-card="tweet-card-media"]') as HTMLElement | null
+
+  assert.ok(shortCard)
+  assert.ok(longCard)
+  assert.ok(mediaCard)
+  assert.equal(shortCard?.querySelector(".options-card-media"), null)
+  assert.equal(longCard?.querySelector(".options-card-media"), null)
+  assert.ok(mediaCard?.querySelector(".options-card-media"))
+  assert.match(mediaCard?.querySelector(".options-card-copy")?.className ?? "", /is-media/)
+  assert.match(shortCard?.querySelector(".options-card-main")?.className ?? "", /options-card-main/)
+  assert.match(longCard?.querySelector(".options-card-main")?.className ?? "", /options-card-main/)
+})
+
+test("OptionsApp adapts list summary density to media tags and text length", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-list-copy-short",
+      tweetUrl: "https://x.com/alice/status/tweet-list-copy-short",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Short summary.",
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-list-copy-base",
+      tweetUrl: "https://x.com/bob/status/tweet-list-copy-base",
+      authorName: "Bob",
+      authorHandle: "bob",
+      text: "This is a medium length summary for the list view that should stay readable and can safely use the fuller three-line treatment when there are no media or tag chips competing for vertical space.",
+      createdAtOnX: "2026-04-09T07:20:00.000Z",
+      savedAt: "2026-04-09T08:30:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-list-copy-media",
+      tweetUrl: "https://x.com/carol/status/tweet-list-copy-media",
+      authorName: "Carol",
+      authorHandle: "carol",
+      text: "Media summary should tighten up in list mode to keep the overall row height stable.",
+      media: [{ type: "photo", url: "https://example.com/image.jpg" }],
+      createdAtOnX: "2026-04-09T09:20:00.000Z",
+      savedAt: "2026-04-09T08:20:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-list-copy-tagged",
+      tweetUrl: "https://x.com/dan/status/tweet-list-copy-tagged",
+      authorName: "Dan",
+      authorHandle: "dan",
+      text: "Tagged summaries should not expand to the loosest three-line mode because the tag row already adds another layer under the body copy in the compact list layout.",
+      createdAtOnX: "2026-04-09T09:40:00.000Z",
+      savedAt: "2026-04-09T08:40:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  const designTag = await createTag({ name: "Design" })
+  await attachTagToBookmark({ bookmarkId: "tweet-list-copy-tagged", tagId: designTag.id })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const listToggle = findByTestId(container, "view-toggle-list") as HTMLButtonElement | null
+  assert.ok(listToggle)
+
+  await act(async () => {
+    listToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const shortCopy = container.querySelector('[data-bookmark-card="tweet-list-copy-short"] .options-card-copy') as HTMLElement | null
+  const baseCopy = container.querySelector('[data-bookmark-card="tweet-list-copy-base"] .options-card-copy') as HTMLElement | null
+  const mediaCopy = container.querySelector('[data-bookmark-card="tweet-list-copy-media"] .options-card-copy') as HTMLElement | null
+  const taggedCopy = container.querySelector('[data-bookmark-card="tweet-list-copy-tagged"] .options-card-copy') as HTMLElement | null
+
+  assert.ok(shortCopy)
+  assert.ok(baseCopy)
+  assert.ok(mediaCopy)
+  assert.ok(taggedCopy)
+  assert.match(shortCopy?.className ?? "", /is-list-1line/)
+  assert.match(baseCopy?.className ?? "", /is-list-3line/)
+  assert.match(mediaCopy?.className ?? "", /is-list-2line/)
+  assert.match(taggedCopy?.className ?? "", /is-list-2line/)
+})
+
+test("OptionsApp stabilizes list cards with explicit templates and capped tags", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "light",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-list-template-compact",
+      tweetUrl: "https://x.com/alice/status/tweet-list-template-compact",
+      authorName: "Alexandria Catherine Montgomery-Wu",
+      authorHandle: "alexandria_super_long_handle",
+      text: "Short note.",
+      metrics: { likes: 1245, replies: 12, retweets: 8 },
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-list-template-tagged",
+      tweetUrl: "https://x.com/bob/status/tweet-list-template-tagged",
+      authorName: "Bob Longlastname The Third",
+      authorHandle: "bob_with_very_long_handle_name",
+      text: "This tagged bookmark should keep a stable list-row height even when many tags want to appear at once, so the UI needs to cap the visible pills and collapse the remainder into a compact overflow indicator.",
+      metrics: { likes: 9876, replies: 54, retweets: 32 },
+      createdAtOnX: "2026-04-09T07:20:00.000Z",
+      savedAt: "2026-04-09T08:30:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-list-template-media",
+      tweetUrl: "https://x.com/carol/status/tweet-list-template-media",
+      authorName: "Carol",
+      authorHandle: "carol",
+      text: "Media rows should use the dedicated media template.",
+      media: [{ type: "photo", url: "https://example.com/image.jpg" }],
+      metrics: { likes: 45, replies: 4, retweets: 3 },
+      createdAtOnX: "2026-04-09T09:20:00.000Z",
+      savedAt: "2026-04-09T08:20:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const tags = await Promise.all([
+    createTag({ name: "Design" }),
+    createTag({ name: "Systems" }),
+    createTag({ name: "Research" }),
+    createTag({ name: "Product" })
+  ])
+  for (const tag of tags) {
+    await attachTagToBookmark({ bookmarkId: "tweet-list-template-tagged", tagId: tag.id })
+  }
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const listToggle = findByTestId(container, "view-toggle-list") as HTMLButtonElement | null
+  assert.ok(listToggle)
+
+  await act(async () => {
+    listToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const compactCard = container.querySelector('[data-bookmark-card="tweet-list-template-compact"]') as HTMLElement | null
+  const taggedCard = container.querySelector('[data-bookmark-card="tweet-list-template-tagged"]') as HTMLElement | null
+  const mediaCard = container.querySelector('[data-bookmark-card="tweet-list-template-media"]') as HTMLElement | null
+  const taggedTags = Array.from(taggedCard?.querySelectorAll(".options-card-tag") ?? []).map((node) => node.textContent?.trim() ?? "")
+
+  assert.ok(compactCard)
+  assert.ok(taggedCard)
+  assert.ok(mediaCard)
+  assert.match(compactCard?.className ?? "", /options-result-card-list-template-compact/)
+  assert.match(taggedCard?.className ?? "", /options-result-card-list-template-tagged/)
+  assert.match(mediaCard?.className ?? "", /options-result-card-list-template-media/)
+  assert.match(taggedCard?.querySelector(".options-card-author-name")?.className ?? "", /truncate/)
+  assert.equal(taggedTags.length, 3)
+  assert.equal(taggedTags[2], "+2")
+  assert.equal(new Set(taggedTags.slice(0, 2)).size, 2)
 })
 
 test("OptionsApp renders the demo inspector and localized copy", async () => {
@@ -717,6 +984,194 @@ test("OptionsApp disables transitions briefly during theme swaps", async () => {
 
   assert.equal(dom.window.document.documentElement.dataset.theme, "dark")
   assert.equal(dom.window.document.documentElement.dataset.themeSwitching, undefined)
+})
+
+test("OptionsApp applies shared theme surface hooks to primary shells", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-theme-surface",
+      tweetUrl: "https://x.com/alice/status/tweet-theme-surface",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Theme surface bookmark",
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "dark",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const sidebar = findByTestId(container, "lists-sidebar")
+  const toolbar = findByTestId(container, "workspace-toolbar")
+  const resultsShell = container.querySelector('[data-testid="results-shell"]')
+  const card = getBookmarkCards(container)[0]
+
+  assert.equal(dom.window.document.documentElement.dataset.theme, "dark")
+  assert.match(sidebar?.className ?? "", /options-theme-panel/)
+  assert.match(toolbar?.className ?? "", /options-theme-panel/)
+  assert.match(resultsShell?.className ?? "", /options-theme-surface/)
+  assert.match(card?.className ?? "", /options-theme-elevated/)
+})
+
+test("OptionsApp applies shared theme surface hooks to secondary overlays and feed states", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "dark",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const filterTrigger = findByTestId(container, "filter-trigger") as HTMLButtonElement | null
+  assert.ok(filterTrigger)
+
+  await act(async () => {
+    filterTrigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const filterPopover = findByTestId(container, "filter-popover")
+  const emptyState = findByTestId(container, "feed-empty-state")
+
+  assert.equal(dom.window.document.documentElement.dataset.theme, "dark")
+  assert.match(filterPopover?.className ?? "", /options-theme-elevated/)
+  assert.match(emptyState?.className ?? "", /options-theme-panel/)
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-theme-lightbox",
+      tweetUrl: "https://x.com/alice/status/tweet-theme-lightbox",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Lightbox theme bookmark",
+      media: [{ type: "photo", url: "https://example.com/theme-lightbox.jpg" }],
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  dom.window.dispatchEvent(new dom.window.FocusEvent("focus"))
+  await settle()
+  await settle()
+
+  const card = getBookmarkCards(container)[0] as HTMLElement
+  await act(async () => {
+    card.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const mediaButton = findByTestId(container, "inspector-media-trigger") as HTMLButtonElement | null
+  assert.ok(mediaButton)
+
+  await act(async () => {
+    mediaButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const mediaLightbox = findByTestId(container, "media-lightbox")
+  const mediaShell = container.querySelector(".options-media-lightbox-shell")
+  const mediaContent = container.querySelector(".options-media-lightbox-content")
+
+  assert.ok(mediaLightbox)
+  assert.match(mediaLightbox?.className ?? "", /options-theme-overlay/)
+  assert.match(mediaShell?.className ?? "", /options-theme-panel/)
+  assert.match(mediaContent?.className ?? "", /options-theme-elevated/)
+})
+
+test("OptionsApp applies shared theme hooks to chips pills and secondary actions", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-theme-controls",
+      tweetUrl: "https://x.com/alice/status/tweet-theme-controls",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Theme control bookmark",
+      media: [{ type: "photo", url: "https://example.com/theme-controls.jpg" }],
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  const importantTag = await createTag({ name: "Important" })
+  const followUpTag = await createTag({ name: "Follow Up" })
+  await attachTagToBookmark({ bookmarkId: "tweet-theme-controls", tagId: importantTag.id })
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "dark",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const filterTrigger = findByTestId(container, "filter-trigger") as HTMLButtonElement | null
+  assert.ok(filterTrigger)
+  await act(async () => {
+    filterTrigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const hasMediaToggle = container.querySelector('[data-testid="filter-option-media"] input') as HTMLInputElement | null
+  assert.ok(hasMediaToggle)
+  await act(async () => {
+    hasMediaToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const activeChip = container.querySelector(".options-chip") as HTMLElement | null
+  assert.ok(activeChip)
+  assert.match(activeChip?.className ?? "", /options-theme-elevated/)
+
+  const firstCard = getBookmarkCards(container)[0] as HTMLElement
+  await act(async () => {
+    firstCard.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const openOnXButton = findByTestId(container, "detail-open-x-link") as HTMLButtonElement | null
+  const addTagTrigger = findByTestId(container, "attach-tag-trigger") as HTMLButtonElement | null
+  assert.ok(openOnXButton)
+  assert.ok(addTagTrigger)
+  assert.match(openOnXButton?.className ?? "", /options-theme-elevated/)
+  assert.match(addTagTrigger?.className ?? "", /options-theme-elevated/)
+
+  await act(async () => {
+    addTagTrigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const attachTagSelect = container.querySelector('[data-testid="attach-tag-select"]') as HTMLSelectElement
+  assert.ok(attachTagSelect)
+  await act(async () => {
+    setSelectValue(attachTagSelect, followUpTag.id, dom.window)
+  })
+  await settle()
+
+  const currentTagButton = container.querySelector('[data-testid="current-tags"] .options-tag-pill') as HTMLElement | null
+  assert.ok(currentTagButton)
+  assert.match(currentTagButton?.className ?? "", /options-theme-elevated/)
 })
 
 test("OptionsApp applies demo multi-tag AND filtering and falls back to all", async () => {
@@ -1061,6 +1516,40 @@ test("OptionsApp opens the detail drawer on card click and clears selection when
 
   assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
   assert.doesNotMatch(firstCard.className, /options-result-card-selected/)
+})
+
+test("OptionsApp supports keyboard selection from bookmark cards", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-keyboard-card",
+      tweetUrl: "https://x.com/alice/status/tweet-keyboard-card",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Keyboard interaction bookmark",
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const card = getBookmarkCards(container)[0] as HTMLElement
+  assert.equal(card.getAttribute("role"), "button")
+  assert.equal(card.getAttribute("tabindex"), "0")
+  assert.equal(card.getAttribute("aria-pressed"), "false")
+
+  await act(async () => {
+    card.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+  })
+  await settle()
+
+  assert.ok(findByTestId(container, "workspace-detail-drawer"))
+  assert.match(card.className, /options-result-card-selected/)
+  assert.equal(card.getAttribute("aria-pressed"), "true")
 })
 
 test("OptionsApp renders a dedicated media section in the inspector when a bookmark has media", async () => {
@@ -1600,6 +2089,11 @@ test("OptionsApp renders an explorer sidebar and demo toolbar controls", async (
   assert.ok(syncPanel)
   assert.ok(sidebarStatus)
   assert.ok(searchInput)
+  assert.match(toolbar?.className ?? "", /options-toolbar-shell/)
+  assert.ok(toolbar?.querySelector(".options-toolbar-primary"))
+  assert.ok(toolbar?.querySelector(".options-toolbar-search"))
+  assert.ok(toolbar?.querySelector(".options-toolbar-controls"))
+  assert.ok(toolbar?.querySelector(".options-toolbar-summary-row"))
   assert.match(sidebarStatus.textContent ?? "", /Workspace/)
   assert.match(container.textContent ?? "", /Tags/)
   assert.match(syncPanel.textContent ?? "", /Last sync/)
@@ -1698,7 +2192,7 @@ test("OptionsApp keeps sidebar lists and library results in separate scroll regi
   assert.equal(library.contains(librarySummary), true)
   assert.equal(library.contains(toolbar), true)
   assert.equal(library.contains(resultsScroll), true)
-  assert.equal(resultsScroll.contains(toolbar), false)
+  assert.equal(resultsScroll.contains(toolbar), true)
 })
 
 test("OptionsApp renders a single tags summary and preferences inside the left sidebar", async () => {

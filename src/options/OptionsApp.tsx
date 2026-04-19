@@ -55,6 +55,55 @@ function getSectionOverline(locale: Locale, zhLabel: string, enLabel: string) {
   return locale === "zh-CN" ? zhLabel : enLabel
 }
 
+function formatCompactCount(value: number | undefined, locale: Locale) {
+  return new Intl.NumberFormat(locale, {
+    notation: "compact",
+    maximumFractionDigits: value && value >= 1000 ? 1 : 0
+  }).format(value ?? 0)
+}
+
+function getListCopyDensityClass(text: string, hasMedia: boolean, hasTags: boolean) {
+  const textLength = text.trim().length
+
+  if (hasMedia) {
+    return "is-list-2line"
+  }
+
+  if (!hasTags && textLength <= 48) {
+    return "is-list-1line"
+  }
+
+  if (hasTags || textLength >= 240) {
+    return "is-list-2line"
+  }
+
+  return "is-list-3line"
+}
+
+function getVisibleCardTagNames(tagNames: string[], viewMode: "grid" | "list") {
+  if (viewMode !== "list" || tagNames.length <= 2) {
+    return tagNames
+  }
+
+  return [...tagNames.slice(0, 2), `+${tagNames.length - 2}`]
+}
+
+function getListCardTemplateClass(hasMedia: boolean, hasTags: boolean, copyDensityClass: string) {
+  if (hasMedia) {
+    return "options-result-card-list-template-media"
+  }
+
+  if (hasTags) {
+    return "options-result-card-list-template-tagged"
+  }
+
+  if (copyDensityClass === "is-list-1line") {
+    return "options-result-card-list-template-compact"
+  }
+
+  return "options-result-card-list-template-default"
+}
+
 function getOptionsCopy(locale: Locale) {
   if (locale === "zh-CN") {
     return {
@@ -413,52 +462,48 @@ function FeedStatusCard({
   action?: React.ReactNode
 }) {
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-6 lg:px-8">
-      <div data-testid={testId} className={cn("options-feed-state-shell", tone === "error" && "is-error")}>
-        <div className="options-feed-state-icon">{icon}</div>
-        <div className="space-y-3">
-          <div className="options-feed-state-overline">{overline}</div>
-          <h3 className="options-feed-state-title">{title}</h3>
-          <p className="options-feed-state-copy">{description}</p>
-        </div>
-        {action ? <div className="options-feed-state-actions">{action}</div> : null}
+    <div data-testid={testId} className={cn("options-feed-state-shell options-theme-panel", tone === "error" && "is-error")}>
+      <div className="options-feed-state-icon">{icon}</div>
+      <div className="space-y-3">
+        <div className="options-feed-state-overline">{overline}</div>
+        <h3 className="options-feed-state-title">{title}</h3>
+        <p className="options-feed-state-copy">{description}</p>
       </div>
+      {action ? <div className="options-feed-state-actions">{action}</div> : null}
     </div>
   )
 }
 
 function FeedLoadingState({ copy }: { copy: OptionsCopy }) {
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-6 lg:px-8">
-      <div data-testid="feed-loading-state" className="options-feed-skeleton-shell">
-        <div className="options-feed-skeleton-head">
-          <div className="space-y-3">
-            <div className="options-feed-state-overline">{copy.loadingFeedTitle}</div>
-            <div className="h-5 w-56 animate-pulse rounded-full bg-[var(--surface-muted)]" />
-            <div className="h-4 w-80 max-w-full animate-pulse rounded-full bg-[var(--surface-muted)]" />
-          </div>
-          <div className="h-10 w-32 animate-pulse rounded-[12px] bg-[var(--surface-muted)]" />
+    <div data-testid="feed-loading-state" className="options-feed-skeleton-shell options-theme-panel">
+      <div className="options-feed-skeleton-head">
+        <div className="space-y-3">
+          <div className="options-feed-state-overline">{copy.loadingFeedTitle}</div>
+          <div className="h-5 w-56 animate-pulse rounded-full bg-[var(--surface-muted)]" />
+          <div className="h-4 w-80 max-w-full animate-pulse rounded-full bg-[var(--surface-muted)]" />
         </div>
+        <div className="h-10 w-32 animate-pulse rounded-[12px] bg-[var(--surface-muted)]" />
+      </div>
 
-        <div className="options-feed-skeleton-grid" aria-hidden="true">
-          {[228, 276, 244, 296, 236, 260].map((height, index) => (
-            <div key={`${height}-${index}`} className="options-feed-skeleton-card">
-              <div className="mb-5 flex items-center gap-3">
-                <div className="h-11 w-11 animate-pulse rounded-full bg-[var(--surface-muted)]" />
-                <div className="min-w-0 flex-1 space-y-2">
-                  <div className="h-4 w-24 animate-pulse rounded-full bg-[var(--surface-muted)]" />
-                  <div className="h-3 w-16 animate-pulse rounded-full bg-[var(--surface-muted)]" />
-                </div>
+      <div className="options-feed-skeleton-grid" aria-hidden="true">
+        {[228, 276, 244, 296, 236, 260].map((height, index) => (
+          <div key={`${height}-${index}`} className="options-feed-skeleton-card">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="h-11 w-11 animate-pulse rounded-full bg-[var(--surface-muted)]" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="h-4 w-24 animate-pulse rounded-full bg-[var(--surface-muted)]" />
+                <div className="h-3 w-16 animate-pulse rounded-full bg-[var(--surface-muted)]" />
               </div>
-              <div className="space-y-3">
-                <div className="h-4 w-full animate-pulse rounded-full bg-[var(--surface-muted)]" />
-                <div className="h-4 w-[88%] animate-pulse rounded-full bg-[var(--surface-muted)]" />
-                <div className="h-4 w-[64%] animate-pulse rounded-full bg-[var(--surface-muted)]" />
-              </div>
-              <div className="mt-5 animate-pulse rounded-[16px] bg-[var(--surface-muted)]" style={{ height }} />
             </div>
-          ))}
-        </div>
+            <div className="space-y-3">
+              <div className="h-4 w-full animate-pulse rounded-full bg-[var(--surface-muted)]" />
+              <div className="h-4 w-[88%] animate-pulse rounded-full bg-[var(--surface-muted)]" />
+              <div className="h-4 w-[64%] animate-pulse rounded-full bg-[var(--surface-muted)]" />
+            </div>
+            <div className="mt-5 animate-pulse rounded-[16px] bg-[var(--surface-muted)]" style={{ height }} />
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -557,7 +602,15 @@ function TextInputField({
   )
 }
 
-function PreviewMedia({ bookmark, index }: { bookmark: BookmarkRecord; index: number }) {
+function PreviewMedia({
+  bookmark,
+  index,
+  className
+}: {
+  bookmark: BookmarkRecord
+  index: number
+  className?: string
+}) {
   const primaryMedia = bookmark.media?.[0]
   const mediaUrl = primaryMedia?.url
   const isVideo = primaryMedia?.type === "video" || primaryMedia?.type === "animated_gif"
@@ -568,7 +621,12 @@ function PreviewMedia({ bookmark, index }: { bookmark: BookmarkRecord; index: nu
   }
 
   return (
-    <div className="workspace-media-frame options-card-media relative aspect-video overflow-hidden bg-[var(--tag-bg)]" data-card-media-index={index}>
+    <div
+      className={cn(
+        "workspace-media-frame options-card-media relative aspect-video overflow-hidden bg-[var(--tag-bg)]",
+        className
+      )}
+      data-card-media-index={index}>
       <img
         src={previewUrl}
         alt=""
@@ -599,6 +657,7 @@ function BookmarkCard({
   index,
   currentTagNames,
   selected,
+  viewMode,
   locale,
   onSelect
 }: {
@@ -606,6 +665,7 @@ function BookmarkCard({
   index: number
   currentTagNames: string[]
   selected: boolean
+  viewMode: "grid" | "list"
   locale: Locale
   onSelect: () => void
 }) {
@@ -615,70 +675,113 @@ function BookmarkCard({
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("") || bookmark.authorHandle.slice(0, 2).toUpperCase()
+  const showsInlineMedia = viewMode === "list" && !!bookmark.media?.length
+  const mediaPreview = <PreviewMedia bookmark={bookmark} index={index} className={showsInlineMedia ? "options-card-media-inline" : undefined} />
+  const hasTags = currentTagNames.length > 0
+  const visibleTagNames = getVisibleCardTagNames(currentTagNames, viewMode)
+  const listCopyDensityClass = getListCopyDensityClass(bookmark.text, !!bookmark.media?.length, hasTags)
+  const listCardTemplateClass = viewMode === "list" ? getListCardTemplateClass(!!bookmark.media?.length, hasTags, listCopyDensityClass) : undefined
+  const metricItems = [
+    { key: "reply", icon: "comment" as const, value: bookmark.metrics?.replies ?? 0 },
+    { key: "retweet", icon: "share" as const, value: bookmark.metrics?.retweets ?? 0 },
+    { key: "like", icon: "heart" as const, value: bookmark.metrics?.likes ?? 0 }
+  ]
 
   return (
     <article
       data-bookmark-card={bookmark.tweetId}
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
       onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          onSelect()
+        }
+      }}
       className={cn(
-        "options-result-card group relative flex flex-col overflow-hidden",
+        "options-result-card options-theme-elevated group relative flex flex-col overflow-hidden",
+        viewMode === "list" && "options-result-card-list",
+        listCardTemplateClass,
         selected && "options-result-card-selected"
       )}>
-      <PreviewMedia bookmark={bookmark} index={index} />
+      {!showsInlineMedia ? mediaPreview : null}
 
       <div className="options-card-body flex flex-1 flex-col">
-        <div className="flex items-start gap-3">
-          <div className="options-card-avatar">{authorInitials}</div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="truncate text-[0.95rem] font-semibold text-[var(--text-primary)]">{bookmark.authorName}</div>
-                <div className="options-meta-copy truncate">@{bookmark.authorHandle}</div>
-              </div>
-              <div className="options-card-timestamp shrink-0">
-                {formatTimestamp(bookmark.savedAt, locale)}
+        <div className="options-card-layout">
+          <div className="options-card-column">
+            <div className="options-card-main">
+              <div className="options-card-avatar">{authorInitials}</div>
+              <div className="options-card-content">
+                <div className="options-card-header">
+                  <div className="options-card-author min-w-0">
+                    <div className="options-card-author-name truncate">{bookmark.authorName}</div>
+                    <div className="options-card-author-handle truncate">@{bookmark.authorHandle}</div>
+                  </div>
+                  <div className="options-card-timestamp shrink-0">
+                    {formatTimestamp(bookmark.savedAt, locale)}
+                  </div>
+                </div>
+
+                <div className="options-card-copy-wrap">
+                  <p className={cn("options-card-copy", viewMode === "list" && listCopyDensityClass, !!bookmark.media?.length && "is-media")}>
+                    {truncateText(bookmark.text, bookmark.media?.length ? 180 : 260)}
+                  </p>
+                </div>
+
+                {visibleTagNames.length ? (
+                  <div className="options-card-tags">
+                    {visibleTagNames.map((tagName) => (
+                      <span key={tagName} className="options-card-tag">
+                        {tagName}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
 
-            <div className="options-card-copy-wrap">
-              <p className={cn("options-card-copy", !!bookmark.media?.length && "is-media")}>
-                {truncateText(bookmark.text, bookmark.media?.length ? 180 : 260)}
-              </p>
+            <div className="options-card-actions">
+              {viewMode === "list" ? (
+                <div className="options-card-stat-list options-card-actions-start" aria-hidden="true">
+                  {metricItems.map((item) => (
+                    <span key={item.key} className="options-card-stat">
+                      <AppIcon name={item.icon} size={14} />
+                      <span>{formatCompactCount(item.value, locale)}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="options-card-actions-start">
+                  <button type="button" className="options-card-action" tabIndex={-1} aria-hidden="true">
+                    <AppIcon name="comment" size={16} />
+                  </button>
+                  <button type="button" className="options-card-action" tabIndex={-1} aria-hidden="true">
+                    <AppIcon name="heart" size={16} />
+                  </button>
+                  <button type="button" className="options-card-action" tabIndex={-1} aria-hidden="true">
+                    <AppIcon name="share" size={16} />
+                  </button>
+                </div>
+              )}
+              <button
+                type="button"
+                className="options-card-action"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  window.open(bookmark.tweetUrl, "_blank", "noopener,noreferrer")
+                }}>
+                <AppIcon name="external" size={16} />
+              </button>
             </div>
-
-            {currentTagNames.length ? (
-              <div className="options-card-tags">
-                {currentTagNames.map((tagName) => (
-                  <span key={tagName} className="options-card-tag">
-                    {tagName}
-                  </span>
-                ))}
-              </div>
-            ) : null}
           </div>
-        </div>
 
-        <div className="options-card-actions">
-          <div className="options-card-actions-start">
-            <button type="button" className="options-card-action" tabIndex={-1} aria-hidden="true">
-              <AppIcon name="comment" size={16} />
-            </button>
-            <button type="button" className="options-card-action" tabIndex={-1} aria-hidden="true">
-              <AppIcon name="heart" size={16} />
-            </button>
-            <button type="button" className="options-card-action" tabIndex={-1} aria-hidden="true">
-              <AppIcon name="share" size={16} />
-            </button>
-          </div>
-          <button
-            type="button"
-            className="options-card-action"
-            onClick={(event) => {
-              event.stopPropagation()
-              window.open(bookmark.tweetUrl, "_blank", "noopener,noreferrer")
-            }}>
-            <AppIcon name="external" size={16} />
-          </button>
+          {showsInlineMedia ? (
+            <div className="options-card-side">
+              {mediaPreview}
+            </div>
+          ) : null}
         </div>
       </div>
     </article>
@@ -929,7 +1032,7 @@ function BookmarkInspector({
               type="button"
               data-testid="detail-open-x-link"
               aria-label={copy.openOnX}
-              className="options-detail-drawer-open-link"
+              className="options-detail-drawer-open-link options-open-x-button options-theme-elevated"
               onClick={() => window.open(bookmark.tweetUrl, "_blank", "noopener,noreferrer")}>
               <AppIcon name="external" size={14} />
             </button>
@@ -956,7 +1059,7 @@ function BookmarkInspector({
                 key={tag.id}
                 type="button"
                 onClick={() => void onDetachTag(tag.id)}
-                className="chip-button options-tag-pill">
+                className="chip-button options-tag-pill options-theme-elevated">
                 <span>{tag.name}</span>
                 <AppIcon name="close" size={12} />
               </button>
@@ -997,7 +1100,7 @@ function BookmarkInspector({
                   type="button"
                   data-testid="attach-tag-trigger"
                   aria-label={copy.addTag}
-                  className="chip-button options-tag-pill options-tag-pill-add"
+                  className="chip-button options-tag-pill options-tag-pill-add options-theme-elevated"
                   onClick={() => setIsAttachTagOpen(true)}>
                   <span aria-hidden="true">+</span>
                 </button>
@@ -1007,7 +1110,7 @@ function BookmarkInspector({
         </section>
       </div>
       {previewMediaUrl ? (
-        <div data-testid="media-lightbox" className="options-media-lightbox">
+        <div data-testid="media-lightbox" className="options-media-lightbox options-theme-overlay">
           <button
             type="button"
             data-testid="media-lightbox-backdrop"
@@ -1015,7 +1118,7 @@ function BookmarkInspector({
             className="options-media-lightbox-backdrop"
             onClick={() => setPreviewMediaIndex(null)}
           />
-          <div className="options-media-lightbox-shell">
+          <div className="options-media-lightbox-shell options-theme-panel">
             <div className="options-media-lightbox-toolbar">
               <button
                 type="button"
@@ -1039,7 +1142,7 @@ function BookmarkInspector({
               ) : (
                 <div className="options-media-lightbox-nav-spacer" aria-hidden="true" />
               )}
-              <div className="options-media-lightbox-content">
+              <div className="options-media-lightbox-content options-theme-elevated">
                 {previewMediaIsVideo ? (
                   <video
                     key={previewMediaUrl}
@@ -1217,7 +1320,7 @@ function WorkspaceSidebar({
   return (
     <aside
       data-testid="lists-sidebar"
-      className="options-demo-sidebar options-sidebar-shell flex min-h-[420px] min-w-0 flex-col overflow-hidden">
+      className="options-demo-sidebar options-sidebar-shell options-theme-panel flex min-h-[420px] min-w-0 flex-col overflow-hidden">
       <section data-testid="sidebar-status-section" className="options-sidebar-hero">
         <div className="options-sidebar-hero-head">
           <div className="options-sidebar-hero-meta">
@@ -1290,8 +1393,8 @@ function WorkspaceSidebar({
             </div>
 
             {!isTagsCollapsed ? (
-              <div data-testid="sidebar-tags-content" className="options-sidebar-group-content">
-              <div data-testid="sidebar-list-tree" className="space-y-1">
+              <div data-testid="sidebar-tags-content" className="options-sidebar-group-content options-sidebar-group-content-tags">
+              <div data-testid="sidebar-list-tree" className="options-sidebar-rows">
                 <div
                   role="button"
                   tabIndex={0}
@@ -1430,7 +1533,7 @@ function WorkspaceSidebar({
             </div>
 
             {!isAuthorsCollapsed ? (
-              <div data-testid="sidebar-authors-content" className="options-sidebar-group-content mt-3 space-y-3">
+              <div data-testid="sidebar-authors-content" className="options-sidebar-group-content options-sidebar-group-content-authors">
                 <FieldBlock label={copy.searchAuthors} htmlFor={authorSearchId} labelClassName="sr-only">
                   <TextInputField
                     id={authorSearchId}
@@ -1444,7 +1547,7 @@ function WorkspaceSidebar({
                   />
                 </FieldBlock>
 
-                <div className="space-y-1">
+                <div className="options-sidebar-rows">
                   {visibleAuthorItems.map((author) => {
                     const isSelected = activeAuthorHandles.includes(author.authorHandle)
 
@@ -1582,24 +1685,24 @@ function WorkspaceToolbar({
 
   return (
     <div data-testid="library-header-section" className="options-main-header space-y-4">
-      <div className="space-y-2">
-        <div className="flex items-end justify-between gap-4">
-          <div className="min-w-0">
+      <div className="options-main-header-top">
+        <div className="options-main-header-row">
+          <div className="options-main-header-copy min-w-0">
             <div className="options-overline">{getSectionOverline(locale, copy.libraryTitle, "Archive")}</div>
             <h2 className="options-display-title-sm mt-3 truncate font-bold">{currentScopeLabel}</h2>
           </div>
-          <div className="text-right">
-            <div className="options-results-value font-bold">{visibleBookmarksCount}</div>
-            <div className="options-overline mt-1">{copy.results}</div>
+          <div className="options-main-header-summary text-right">
+            <div data-testid="results-count" className="options-results-value options-main-header-summary-value font-bold">{visibleBookmarksCount}</div>
+            <div className="options-overline options-main-header-summary-label mt-1">{copy.results}</div>
           </div>
         </div>
       </div>
 
       <InlineMessage message={loadError} className="!rounded-[6px] !border-[var(--border-subtle)] !bg-[var(--tag-bg)] !px-3 !py-2 !text-[12px]" />
 
-      <div data-testid="workspace-toolbar" className="flex flex-col gap-4">
-        <div className="flex items-center gap-3">
-          <div className="relative min-w-0 flex-1">
+      <div data-testid="workspace-toolbar" className="options-toolbar-shell options-theme-panel">
+        <div className="options-toolbar-primary">
+          <div className="options-toolbar-search relative min-w-0 flex-1">
             <AppIcon name="search" size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
             <TextInputField
               id={searchId}
@@ -1608,15 +1711,15 @@ function WorkspaceToolbar({
               value={query}
               placeholder={copy.searchPlaceholder}
               onChange={setQuery}
-              className="workspace-input options-toolbar-field pl-10 pr-4"
+              className="workspace-input options-toolbar-field options-toolbar-field-compact pl-10 pr-4"
             />
           </div>
 
-          <div className="options-toolbar-inline">
+          <div className="options-toolbar-controls options-toolbar-inline">
             <div className="relative">
               <button
                 type="button"
-                data-testid="filter-trigger"
+              data-testid="filter-trigger"
                 className="options-toolbar-action"
                 aria-expanded={filterPopoverOpen}
                 onClick={() => setFilterPopoverOpen((current) => !current)}>
@@ -1626,7 +1729,7 @@ function WorkspaceToolbar({
               </button>
 
               {filterPopoverOpen ? (
-                <div data-testid="filter-popover" className="options-filter-popover">
+                <div data-testid="filter-popover" className="options-filter-popover options-theme-elevated">
                   <div className="space-y-1.5 pb-3">
                     <h4 className="text-sm font-medium leading-none text-[var(--text-primary)]">{copy.filterConditions}</h4>
                     <p className="text-xs text-[var(--text-secondary)]">{copy.filterDescription}</p>
@@ -1691,7 +1794,7 @@ function WorkspaceToolbar({
           </div>
         </div>
 
-        <div className="options-toolbar-context-row flex items-center justify-between gap-4 text-sm">
+        <div className="options-toolbar-summary-row options-toolbar-context-row">
           <div data-testid="active-filters-row" className="options-active-filters">
             <span className="options-active-filters-label">{copy.activeFilters}</span>
             {activeRefinementChips.length ? (
@@ -1701,7 +1804,7 @@ function WorkspaceToolbar({
                     key={chip.key}
                     type="button"
                     onClick={() => clearRefinement(chip.key)}
-                    className="chip-button options-chip !px-3 !py-1.5 !text-xs">
+                    className="chip-button options-chip options-theme-elevated !px-3 !py-1.5 !text-xs">
                     <span>{chip.label}</span>
                     <AppIcon name="close" size={12} />
                   </button>
@@ -1782,91 +1885,97 @@ function BookmarkResultsPane({
   return (
     <section data-testid="library-workspace" className="options-main-shell min-h-[420px] min-w-0 overflow-hidden p-0 xl:h-[100dvh]">
       <div className="flex h-full min-h-0 flex-col">
-        <WorkspaceToolbar
-          locale={locale}
-          copy={copy}
-          loadError={showLoadErrorState ? null : workspace.loadError}
-          currentScopeLabel={currentScopeLabel}
-          visibleBookmarksCount={visibleBookmarks.length}
-          query={query}
-          setQuery={setQuery}
-          searchId={searchId}
-          sortOrder={sortOrder}
-          setSortOrder={setSortOrder}
-          viewMode={viewMode}
-          setViewMode={setViewMode}
-          filterPopoverOpen={filterPopoverOpen}
-          setFilterPopoverOpen={setFilterPopoverOpen}
-          onlyWithMedia={onlyWithMedia}
-          setOnlyWithMedia={setOnlyWithMedia}
-          onlyLongform={onlyLongform}
-          setOnlyLongform={setOnlyLongform}
-          activeRefinementChips={activeRefinementChips}
-          clearRefinement={clearRefinement}
-        />
-
         <div
           data-testid="library-results-scroll"
           className="scroll-shell min-h-0 flex-1 overflow-y-auto"
           onScroll={onResultsScroll}>
-          {isLoading ? (
-            <FeedLoadingState copy={copy} />
-          ) : showLoadErrorState ? (
-            <FeedStatusCard
-              testId="feed-error-state"
-              icon={<AppIcon name="sync" size={24} />}
-              overline={copy.infoLabel}
-              title={copy.loadFailedTitle}
-              description={workspace.loadError ?? copy.loadFailedDescription}
-              tone="error"
-              action={
-                <button
-                  type="button"
-                  data-testid="feed-error-retry"
-                  className="options-secondary-button"
-                  onClick={() => void workspace.refreshData()}>
-                  <AppIcon name="sync" size={16} />
-                  {copy.retryLoad}
-                </button>
-              }
+          <div
+            data-testid="results-shell"
+            className={cn(
+              "options-results-shell options-theme-surface mx-auto w-full px-5 pb-10 pt-4 lg:px-8",
+              viewMode === "grid" ? "options-results-shell-grid" : "options-results-shell-list"
+            )}>
+            <WorkspaceToolbar
+              locale={locale}
+              copy={copy}
+              loadError={showLoadErrorState ? null : workspace.loadError}
+              currentScopeLabel={currentScopeLabel}
+              visibleBookmarksCount={visibleBookmarks.length}
+              query={query}
+              setQuery={setQuery}
+              searchId={searchId}
+              sortOrder={sortOrder}
+              setSortOrder={setSortOrder}
+              viewMode={viewMode}
+              setViewMode={setViewMode}
+              filterPopoverOpen={filterPopoverOpen}
+              setFilterPopoverOpen={setFilterPopoverOpen}
+              onlyWithMedia={onlyWithMedia}
+              setOnlyWithMedia={setOnlyWithMedia}
+              onlyLongform={onlyLongform}
+              setOnlyLongform={setOnlyLongform}
+              activeRefinementChips={activeRefinementChips}
+              clearRefinement={clearRefinement}
             />
-          ) : visibleBookmarks.length ? (
-            <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-6 lg:px-8">
+
+            {isLoading ? (
+              <FeedLoadingState copy={copy} />
+            ) : showLoadErrorState ? (
+              <FeedStatusCard
+                testId="feed-error-state"
+                icon={<AppIcon name="sync" size={24} />}
+                overline={copy.infoLabel}
+                title={copy.loadFailedTitle}
+                description={workspace.loadError ?? copy.loadFailedDescription}
+                tone="error"
+                action={
+                  <button
+                    type="button"
+                    data-testid="feed-error-retry"
+                    className="options-secondary-button"
+                    onClick={() => void workspace.refreshData()}>
+                    <AppIcon name="sync" size={16} />
+                    {copy.retryLoad}
+                  </button>
+                }
+              />
+            ) : visibleBookmarks.length ? (
               <div
                 data-testid="results-stack"
                 className={cn(
-                  "content-start gap-4",
+                  "content-start",
                   viewMode === "grid"
-                    ? "options-results-grid options-results-masonry columns-1 lg:columns-2"
-                    : "options-results-list flex flex-col"
+                    ? "options-results-grid options-results-masonry options-results-stack-grid columns-1 lg:columns-2"
+                    : "options-results-list options-results-stack-list flex flex-col"
                 )}>
-              {renderedBookmarks.map((bookmark, index) => {
-                const currentTagNames = tagNamesByBookmarkId.get(bookmark.tweetId) ?? []
-                const isSelected = selectedBookmarkId === bookmark.tweetId
+                {renderedBookmarks.map((bookmark, index) => {
+                  const currentTagNames = tagNamesByBookmarkId.get(bookmark.tweetId) ?? []
+                  const isSelected = selectedBookmarkId === bookmark.tweetId
 
-                return (
-                  <BookmarkCard
-                    key={bookmark.tweetId}
-                    bookmark={bookmark}
-                    index={index}
-                    currentTagNames={currentTagNames}
-                    selected={isSelected}
-                    locale={locale}
-                    onSelect={() => setSelectedBookmarkId(bookmark.tweetId)}
-                  />
-                )
-              })}
-            </div>
-            </div>
-          ) : (
-            <FeedStatusCard
-              testId="feed-empty-state"
-              icon={<AppIcon name={hasFeedRefinement ? "filter" : "bookmark"} size={24} />}
-              overline={copy.infoLabel}
-              title={hasAnyBookmarks || hasFeedRefinement ? copy.noBookmarksTitle : copy.emptyFeedTitle}
-              description={hasAnyBookmarks || hasFeedRefinement ? copy.noBookmarksDescription : copy.emptyFeedDescription}
-            />
-          )}
+                  return (
+                    <BookmarkCard
+                      key={bookmark.tweetId}
+                      bookmark={bookmark}
+                      index={index}
+                      currentTagNames={currentTagNames}
+                      selected={isSelected}
+                      viewMode={viewMode}
+                      locale={locale}
+                      onSelect={() => setSelectedBookmarkId(bookmark.tweetId)}
+                    />
+                  )
+                })}
+              </div>
+            ) : (
+              <FeedStatusCard
+                testId="feed-empty-state"
+                icon={<AppIcon name={hasFeedRefinement ? "filter" : "bookmark"} size={24} />}
+                overline={copy.infoLabel}
+                title={hasAnyBookmarks || hasFeedRefinement ? copy.noBookmarksTitle : copy.emptyFeedTitle}
+                description={hasAnyBookmarks || hasFeedRefinement ? copy.noBookmarksDescription : copy.emptyFeedDescription}
+              />
+            )}
+          </div>
         </div>
       </div>
     </section>

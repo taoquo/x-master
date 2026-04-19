@@ -120,11 +120,15 @@ test("OptionsApp styles the authors search input and keeps show more without col
     })
     await settle()
 
+    const authorsContent = findByTestId(container, "sidebar-authors-content")
     const searchInput = findByTestId(container, "sidebar-authors-search") as HTMLInputElement | null
     const showMoreButton = findByTestId(container, "sidebar-authors-show-more") as HTMLButtonElement | null
 
+    assert.ok(authorsContent)
     assert.ok(searchInput)
     assert.ok(showMoreButton)
+    assert.match(authorsContent?.className ?? "", /options-sidebar-group-content/)
+    assert.ok(authorsContent?.querySelector(".options-sidebar-rows"))
     assert.match(searchInput.className, /options-sidebar-search-input/)
     assert.equal(container.textContent?.includes("Collapse"), false)
   } finally {
@@ -165,6 +169,8 @@ test("OptionsApp keeps the tag create action beside the title and aligns the aut
     assert.ok(titleLabel)
     assert.ok(authorsTitle)
     assert.ok(authorsToggle)
+    assert.match(tagsContent?.className ?? "", /options-sidebar-group-content/)
+    assert.ok(tagsContent?.querySelector(".options-sidebar-rows"))
     assert.equal(createTagButton?.parentElement, titleLabel)
     assert.equal(tagsToggle?.contains(createTagButton as Node), false)
     assert.equal(authorsTitle?.parentElement, authorsToggle?.parentElement)
@@ -179,6 +185,7 @@ test("OptionsApp keeps the tag create action beside the title and aligns the aut
 
     assert.ok(findByTestId(container, "sidebar-tags-content"))
     assert.ok(findByTestId(container, "sidebar-create-tag-input"))
+    assert.ok(findByTestId(container, "sidebar-tags-content")?.querySelector(".options-sidebar-rows"))
   } finally {
     await act(async () => {
       root.unmount()
