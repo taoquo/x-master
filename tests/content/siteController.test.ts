@@ -233,11 +233,17 @@ test("bookmarks controller injects one quick-tag button per article and opens th
   const overlayHost = dom.window.document.querySelector('[data-site-tag-popover-host="true"]')
   const popover = queryShadow<HTMLDivElement>(overlayHost, '[data-testid="site-tag-popover"]')
   const backdrop = queryShadow<HTMLDivElement>(overlayHost, '[data-testid="site-tag-modal-backdrop"]')
+  const viewport = queryShadow<HTMLDivElement>(overlayHost, '[data-testid="site-tag-popover-viewport"]')
   assert.ok(popover)
   assert.ok(backdrop)
+  assert.ok(viewport)
   assert.deepEqual(calls, ["prepare"])
   assert.match(popover.textContent ?? "", /管理这条推文的标签/)
   assert.match(popover.textContent ?? "", /可用标签/)
+  assert.match(popover.className, /theme-panel/)
+  assert.match(popover.className, /popover/)
+  assert.match(backdrop.className, /theme-overlay/)
+  assert.match(viewport?.className ?? "", /viewport/)
 
   const initialPopover = popover
   const initialBackdrop = backdrop
@@ -260,8 +266,13 @@ test("bookmarks controller injects one quick-tag button per article and opens th
 
   const createInput = queryShadow<HTMLInputElement>(overlayHost, '[data-testid="site-tag-create-input"]')
   const createSubmit = queryShadow<HTMLButtonElement>(overlayHost, '[data-testid="site-tag-create-submit"]')
+  const tweetCard = queryShadow<HTMLDivElement>(overlayHost, '[data-testid="site-tag-tweet-card"]')
   assert.ok(createInput)
   assert.ok(createSubmit)
+  assert.ok(tweetCard)
+  assert.match(tweetCard?.className ?? "", /theme-elevated/)
+  assert.match(tweetCard?.className ?? "", /tweet-card/)
+  assert.match(createSubmit?.className ?? "", /theme-button-primary/)
   createInput.value = "Research"
   createInput.dispatchEvent(new dom.window.Event("input", { bubbles: true, composed: true }))
   createSubmit.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, composed: true }))

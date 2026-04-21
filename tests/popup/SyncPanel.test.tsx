@@ -35,7 +35,13 @@ test("SyncPanel renders sync summary and triggers manual sync", async () => {
   await settle()
 
   assert.ok(container.querySelector('[data-testid="popup-sync-panel"]'))
+  assert.ok(container.querySelector('[data-testid="popup-sync-card"]'))
   assert.ok(container.querySelector('[data-testid="popup-sync-stats"]'))
+  assert.match(container.querySelector('[data-testid="popup-sync-card"]')?.className ?? "", /options-theme-panel/)
+  assert.match(container.querySelector('[data-testid="popup-sync-card"]')?.className ?? "", /popup-sync-card-body/)
+  assert.equal(container.querySelectorAll('[data-testid="popup-sync-stats"] .options-theme-elevated').length, 4)
+  assert.equal(container.querySelectorAll('[data-testid="popup-sync-stats"] .popup-sync-stat-card').length, 4)
+  assert.match(button.className, /popup-sync-button/)
   assert.match(container.textContent ?? "", /success/)
   assert.match(container.textContent ?? "", /Last sync/)
   assert.match(container.textContent ?? "", /5/)

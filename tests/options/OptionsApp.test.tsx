@@ -1518,6 +1518,86 @@ test("OptionsApp opens the detail drawer on card click and clears selection when
   assert.doesNotMatch(firstCard.className, /options-result-card-selected/)
 })
 
+test("OptionsApp prioritizes detail drawer hero summary tags and media sections", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-detail-priority",
+      tweetUrl: "https://x.com/alice/status/tweet-detail-priority",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Detail drawer priority content should read like a focused object view, with a stronger hero, a stable summary card, a dedicated media block, and tags separated into current and add layers.",
+      media: [{ type: "photo", url: "https://example.com/detail-priority.jpg" }],
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  const importantTag = await createTag({ name: "Important" })
+  await createTag({ name: "Later" })
+  await attachTagToBookmark({ bookmarkId: "tweet-detail-priority", tagId: importantTag.id })
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "light",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const card = container.querySelector('[data-bookmark-card="tweet-detail-priority"]') as HTMLElement | null
+  assert.ok(card)
+
+  await act(async () => {
+    card!.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const drawer = findByTestId(container, "workspace-detail-drawer")
+  const hero = findByTestId(container, "detail-hero-section")
+  const heroActions = findByTestId(container, "detail-primary-actions")
+  const meta = findByTestId(container, "inspector-metadata-section")
+  const summary = findByTestId(container, "inspector-summary-section")
+  const media = findByTestId(container, "inspector-media-section")
+  const tags = findByTestId(container, "inspector-tags-section")
+  const currentTags = findByTestId(container, "current-tags")
+  const currentTagGroup = container.querySelector(".options-detail-tag-group-current") as HTMLElement | null
+  const addTagGroup = container.querySelector(".options-detail-tag-group-add") as HTMLElement | null
+  const tagActions = container.querySelector(".options-detail-tag-actions") as HTMLElement | null
+  const attachTrigger = findByTestId(container, "attach-tag-trigger")
+
+  assert.ok(drawer)
+  assert.ok(hero)
+  assert.ok(heroActions)
+  assert.ok(meta)
+  assert.ok(summary)
+  assert.ok(media)
+  assert.ok(tags)
+  assert.ok(currentTags)
+  assert.ok(currentTagGroup)
+  assert.ok(addTagGroup)
+  assert.ok(tagActions)
+  assert.ok(attachTrigger)
+  assert.match(hero?.className ?? "", /options-detail-hero/)
+  assert.match(heroActions?.className ?? "", /options-detail-hero-actions/)
+  assert.match(summary?.className ?? "", /options-detail-summary-card/)
+  assert.match(media?.className ?? "", /options-detail-media-section/)
+  assert.match(media?.className ?? "", /options-detail-media-flow/)
+  assert.match(summary?.className ?? "", /options-detail-summary-flow/)
+  assert.match(tags?.className ?? "", /options-detail-tags-section/)
+  assert.match(currentTagGroup?.className ?? "", /options-detail-tag-group-current/)
+  assert.match(addTagGroup?.className ?? "", /options-detail-tag-group-add/)
+  assert.match(currentTags?.className ?? "", /options-detail-current-tags/)
+  assert.match(tagActions?.className ?? "", /options-detail-tag-actions/)
+  assert.match(currentTags?.textContent ?? "", /Important/)
+  assert.match(attachTrigger?.className ?? "", /options-detail-add-tag/)
+  assert.ok(Array.from(currentTags?.querySelectorAll(".options-tag-pill") ?? []).length >= 1)
+  assert.equal(currentTags?.textContent?.includes("Later"), false)
+})
+
 test("OptionsApp supports keyboard selection from bookmark cards", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()

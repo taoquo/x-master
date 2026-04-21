@@ -83,10 +83,11 @@ export function SyncPanel({
     <SurfaceCard
       title={copy.sync}
       description={copy.syncDescription}
-      className="rounded-[24px] bg-slate-950/80 text-white"
+      className="options-theme-panel rounded-[24px] bg-slate-950/80 text-white"
       bodyClassName="space-y-5"
     >
-      <div data-testid="popup-sync-panel" className="space-y-5">
+      <div data-testid="popup-sync-card" className="popup-sync-card-body options-theme-panel space-y-5">
+        <div data-testid="popup-sync-panel" className="space-y-5">
         <div className="flex items-center justify-between gap-3">
           <StatusBadge status={summary.status} label={statusLabel} />
           <div className="text-right">
@@ -96,19 +97,19 @@ export function SyncPanel({
         </div>
 
         <div data-testid="popup-sync-stats" className="grid grid-cols-2 gap-3 text-white">
-          <div className="panel-elevated rounded-[16px] p-3">
+          <div className="panel-elevated popup-sync-stat-card options-theme-elevated rounded-[16px] p-3">
             <div className="text-[11px] uppercase tracking-[0.14em] text-white/42">{copy.fetched}</div>
             <div className="mt-1 font-mono text-2xl">{summary.fetchedCount}</div>
           </div>
-          <div className="panel-elevated rounded-[16px] p-3">
+          <div className="panel-elevated popup-sync-stat-card options-theme-elevated rounded-[16px] p-3">
             <div className="text-[11px] uppercase tracking-[0.14em] text-white/42">{copy.inserted}</div>
             <div className="mt-1 font-mono text-2xl">{summary.insertedCount}</div>
           </div>
-          <div className="panel-elevated rounded-[16px] p-3">
+          <div className="panel-elevated popup-sync-stat-card options-theme-elevated rounded-[16px] p-3">
             <div className="text-[11px] uppercase tracking-[0.14em] text-white/42">{copy.updated}</div>
             <div className="mt-1 font-mono text-2xl">{summary.updatedCount}</div>
           </div>
-          <div className="panel-elevated rounded-[16px] p-3">
+          <div className="panel-elevated popup-sync-stat-card options-theme-elevated rounded-[16px] p-3">
             <div className="text-[11px] uppercase tracking-[0.14em] text-white/42">{copy.failed}</div>
             <div className="mt-1 font-mono text-2xl">{summary.failedCount}</div>
           </div>
@@ -120,10 +121,11 @@ export function SyncPanel({
           type="button"
           onClick={() => void onSync()}
           disabled={isSyncing}
-          className="primary-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
+          className="primary-button popup-sync-button options-theme-elevated w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
           <AppIcon name="sync" size={16} className={isSyncing ? "animate-spin" : undefined} />
           <span>{isSyncing ? copy.syncing : copy.syncNow}</span>
         </button>
+      </div>
       </div>
     </SurfaceCard>
   )

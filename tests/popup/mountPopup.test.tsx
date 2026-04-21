@@ -42,8 +42,25 @@ test("mountPopup renders english popup copy and the default light theme", async 
   assert.match(dom.window.document.body.textContent ?? "", /Workspace entry/)
   assert.match(dom.window.document.body.textContent ?? "", /Local inventory/)
   assert.ok(dom.window.document.body.querySelector('[data-testid="popup-overview-panel"]'))
+  assert.ok(dom.window.document.body.querySelector('[data-testid="popup-overview-card"]'))
   assert.ok(dom.window.document.body.querySelector('[data-testid="popup-brand-logo"]'))
   assert.ok(dom.window.document.body.querySelector('[data-testid="popup-actions-panel"]'))
+  assert.match(
+    dom.window.document.body.querySelector('[data-testid="popup-overview-card"]')?.className ?? "",
+    /options-theme-panel/
+  )
+  assert.match(
+    dom.window.document.body.querySelector('[data-testid="popup-overview-card"]')?.className ?? "",
+    /popup-overview-card-body/
+  )
+  assert.match(
+    dom.window.document.body.querySelector('[data-testid="popup-actions-panel"] button')?.className ?? "",
+    /options-theme-elevated/
+  )
+  assert.match(
+    dom.window.document.body.querySelector('[data-testid="popup-actions-panel"] button')?.className ?? "",
+    /popup-action-button/
+  )
   assert.match(dom.window.document.body.textContent ?? "", /Sync now/)
   assert.equal(dom.window.document.documentElement.dataset.theme, "light")
 })
@@ -75,5 +92,9 @@ test("mountPopup renders stored english copy and dark theme preference", async (
   assert.match(dom.window.document.body.textContent ?? "", /Workspace entry/)
   assert.match(dom.window.document.body.textContent ?? "", /Local inventory/)
   assert.match(dom.window.document.body.textContent ?? "", /Sync now/)
+  assert.match(
+    dom.window.document.body.querySelector('[data-testid="popup-overview-card"]')?.className ?? "",
+    /options-theme-panel/
+  )
   assert.equal(dom.window.document.documentElement.dataset.theme, "dark")
 })

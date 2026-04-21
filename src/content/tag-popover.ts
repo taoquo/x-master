@@ -5,6 +5,35 @@ const TAG_MODAL_LOGO_PATH = "assets/branding/logo-72.png"
 const POPOVER_STYLE = `
   :host {
     all: initial;
+    --theme-panel-bg: linear-gradient(180deg, rgba(251, 254, 255, 0.98), rgba(240, 250, 251, 0.96));
+    --theme-panel-border: rgba(148, 226, 232, 0.42);
+    --theme-panel-shadow: 0 34px 80px rgba(15, 23, 42, 0.24);
+    --theme-elevated-bg: rgba(255, 255, 255, 0.76);
+    --theme-elevated-border: rgba(148, 163, 184, 0.2);
+    --theme-overlay-backdrop: rgba(15, 23, 42, 0.34);
+    --theme-hover-bg: rgba(255, 255, 255, 0.96);
+    --theme-chip-text: #0f172a;
+    --theme-muted-text: #4b5563;
+    --theme-accent-bg: rgba(15, 23, 42, 0.86);
+    --theme-accent-text: #ffffff;
+    --theme-accent-hover: rgba(15, 23, 42, 0.94);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :host {
+      --theme-panel-bg: linear-gradient(180deg, rgba(17, 24, 39, 0.96), rgba(15, 23, 42, 0.94));
+      --theme-panel-border: rgba(71, 85, 105, 0.42);
+      --theme-panel-shadow: 0 34px 80px rgba(2, 6, 23, 0.54);
+      --theme-elevated-bg: rgba(30, 41, 59, 0.78);
+      --theme-elevated-border: rgba(71, 85, 105, 0.36);
+      --theme-overlay-backdrop: rgba(2, 6, 23, 0.54);
+      --theme-hover-bg: rgba(51, 65, 85, 0.92);
+      --theme-chip-text: #e5e7eb;
+      --theme-muted-text: #cbd5e1;
+      --theme-accent-bg: rgba(59, 130, 246, 0.22);
+      --theme-accent-text: #bfdbfe;
+      --theme-accent-hover: rgba(59, 130, 246, 0.3);
+    }
   }
 
   .backdrop {
@@ -12,9 +41,15 @@ const POPOVER_STYLE = `
     inset: 0;
     background:
       radial-gradient(circle at top, rgba(111, 215, 225, 0.16), transparent 30%),
-      rgba(15, 23, 42, 0.34);
+      var(--theme-overlay-backdrop);
     backdrop-filter: blur(10px);
     animation: fade-in 180ms ease;
+  }
+
+  .theme-overlay {
+    background:
+      radial-gradient(circle at top, rgba(111, 215, 225, 0.16), transparent 30%),
+      var(--theme-overlay-backdrop);
   }
 
   .viewport {
@@ -22,7 +57,7 @@ const POPOVER_STYLE = `
     inset: 0;
     display: grid;
     place-items: center;
-    padding: 24px 16px;
+    padding: 20px 16px;
     box-sizing: border-box;
   }
 
@@ -31,22 +66,36 @@ const POPOVER_STYLE = `
     width: min(480px, calc(100vw - 32px));
     max-height: min(640px, calc(100vh - 48px));
     overflow: auto;
-    border: 1px solid rgba(148, 226, 232, 0.42);
-    border-radius: 28px;
-    background:
-      linear-gradient(180deg, rgba(251, 254, 255, 0.98), rgba(240, 250, 251, 0.96));
+    border: 1px solid var(--theme-panel-border);
+    border-radius: 24px;
+    background: var(--theme-panel-bg);
     box-shadow:
-      0 34px 80px rgba(15, 23, 42, 0.24),
+      var(--theme-panel-shadow),
       inset 0 1px 0 rgba(255, 255, 255, 0.82);
-    color: #0f172a;
+    color: var(--theme-chip-text);
     font-family: Geist, "Avenir Next", "Segoe UI", sans-serif;
     font-size: 13px;
     line-height: 1.5;
     animation: pop-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  .theme-panel {
+    border-color: var(--theme-panel-border);
+    background: var(--theme-panel-bg);
+    box-shadow:
+      var(--theme-panel-shadow),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    color: var(--theme-chip-text);
+  }
+
+  .theme-elevated {
+    background: var(--theme-elevated-bg);
+    border-color: var(--theme-elevated-border);
+    color: var(--theme-chip-text);
+  }
+
   .section {
-    padding: 18px 22px;
+    padding: 16px 20px;
   }
 
   .section + .section {
@@ -55,7 +104,7 @@ const POPOVER_STYLE = `
 
   .hero {
     display: grid;
-    gap: 16px;
+    gap: 14px;
     background:
       radial-gradient(circle at top left, rgba(111, 215, 225, 0.24), transparent 42%),
       linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(241, 249, 250, 0.72));
@@ -76,9 +125,9 @@ const POPOVER_STYLE = `
   }
 
   .brand-badge {
-    width: 44px;
-    height: 44px;
-    border-radius: 14px;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -108,8 +157,8 @@ const POPOVER_STYLE = `
   }
 
   .headline {
-    font-size: 24px;
-    font-weight: 700;
+    font-size: 22px;
+    font-weight: 680;
     letter-spacing: -0.03em;
     line-height: 1.1;
     color: #0f172a;
@@ -117,19 +166,19 @@ const POPOVER_STYLE = `
 
   .subcopy {
     margin-top: 6px;
-    color: #4b5563;
+    color: var(--theme-muted-text);
     font-size: 13px;
   }
 
   .icon-button {
     appearance: none;
-    width: 34px;
-    height: 34px;
+    width: 32px;
+    height: 32px;
     flex: none;
     border: 1px solid rgba(148, 163, 184, 0.24);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.74);
-    color: #334155;
+    background: var(--theme-elevated-bg);
+    color: var(--theme-chip-text);
     font: inherit;
     font-size: 18px;
     line-height: 1;
@@ -138,7 +187,7 @@ const POPOVER_STYLE = `
   }
 
   .icon-button:hover {
-    background: rgba(255, 255, 255, 0.96);
+    background: var(--theme-hover-bg);
     transform: translateY(-1px);
   }
 
@@ -149,10 +198,10 @@ const POPOVER_STYLE = `
   .tweet-card {
     display: grid;
     gap: 8px;
-    padding: 14px 16px;
-    border-radius: 20px;
-    background: rgba(255, 255, 255, 0.62);
-    border: 1px solid rgba(148, 163, 184, 0.16);
+    padding: 13px 15px;
+    border-radius: 16px;
+    background: var(--theme-elevated-bg);
+    border: 1px solid var(--theme-elevated-border);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
   }
 
@@ -161,17 +210,17 @@ const POPOVER_STYLE = `
     align-items: center;
     gap: 8px;
     min-width: 0;
-    color: #4b5563;
+    color: var(--theme-muted-text);
     font-size: 12px;
   }
 
   .tweet-author {
-    color: #0f172a;
+    color: var(--theme-chip-text);
     font-weight: 600;
   }
 
   .tweet-text {
-    color: #1e293b;
+    color: var(--theme-chip-text);
     font-size: 14px;
     line-height: 1.55;
     display: -webkit-box;
@@ -185,7 +234,7 @@ const POPOVER_STYLE = `
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.14em;
@@ -196,7 +245,7 @@ const POPOVER_STYLE = `
   .tags {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
-    gap: 10px;
+    gap: 8px;
   }
 
   .tag-option {
@@ -204,10 +253,10 @@ const POPOVER_STYLE = `
     display: grid;
     gap: 4px;
     min-width: 0;
-    padding: 12px 14px;
-    border-radius: 16px;
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    background: rgba(255, 255, 255, 0.76);
+    padding: 11px 13px;
+    border-radius: 14px;
+    border: 1px solid var(--theme-elevated-border);
+    background: var(--theme-elevated-bg);
     cursor: pointer;
     transition:
       transform 160ms ease,
@@ -243,21 +292,21 @@ const POPOVER_STYLE = `
   .tag-name {
     min-width: 0;
     font-weight: 600;
-    color: #0f172a;
+    color: var(--theme-chip-text);
   }
 
   .tag-state {
     font-size: 12px;
-    color: #5b6b7f;
+    color: var(--theme-muted-text);
   }
 
   .empty,
   .status,
   .error {
-    padding: 16px;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.62);
-    border: 1px dashed rgba(148, 163, 184, 0.24);
+    padding: 14px;
+    border-radius: 14px;
+    background: var(--theme-elevated-bg);
+    border: 1px dashed var(--theme-elevated-border);
     color: #475569;
   }
 
@@ -269,19 +318,20 @@ const POPOVER_STYLE = `
 
   .button {
     appearance: none;
-    border: 1px solid rgba(15, 23, 42, 0.1);
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.76);
-    color: #0f172a;
+    border: 1px solid var(--theme-elevated-border);
+    border-radius: 12px;
+    background: var(--theme-elevated-bg);
+    color: var(--theme-chip-text);
     font: inherit;
     font-weight: 600;
-    padding: 10px 14px;
+    min-height: 36px;
+    padding: 8px 14px;
     cursor: pointer;
     transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
   }
 
   .button:hover {
-    background: rgba(245, 252, 252, 0.98);
+    background: var(--theme-hover-bg);
     border-color: rgba(83, 193, 203, 0.32);
     transform: translateY(-1px);
   }
@@ -295,9 +345,20 @@ const POPOVER_STYLE = `
     opacity: 0.6;
   }
 
+  .theme-button-primary {
+    background: var(--theme-accent-bg);
+    border-color: transparent;
+    color: var(--theme-accent-text);
+  }
+
+  .theme-button-primary:hover {
+    background: var(--theme-accent-hover);
+    border-color: transparent;
+  }
+
   .create-row {
     display: grid;
-    gap: 10px;
+    gap: 8px;
   }
 
   .create-trigger-row {
@@ -308,10 +369,11 @@ const POPOVER_STYLE = `
   .create-input {
     width: 100%;
     box-sizing: border-box;
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.84);
-    padding: 12px 14px;
+    border: 1px solid var(--theme-elevated-border);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--theme-elevated-bg) 88%, white);
+    min-height: 40px;
+    padding: 10px 14px;
     font: inherit;
     color: inherit;
     outline: none;
@@ -328,20 +390,8 @@ const POPOVER_STYLE = `
     gap: 8px;
   }
 
-  .create-actions .button[data-variant="primary"] {
-    background:
-      linear-gradient(180deg, rgba(79, 199, 210, 0.96), rgba(57, 179, 191, 0.96));
-    border-color: rgba(53, 157, 167, 0.44);
-    color: #f8fafc;
-  }
-
-  .create-actions .button[data-variant="primary"]:hover {
-    background:
-      linear-gradient(180deg, rgba(74, 191, 201, 0.98), rgba(51, 168, 180, 0.98));
-  }
-
   .section-note {
-    color: #64748b;
+    color: var(--theme-muted-text);
     font-size: 12px;
     margin-top: 2px;
   }
@@ -525,9 +575,9 @@ export class SiteTagPopover {
     const shadowRootRef = host.attachShadow({ mode: "open" })
     shadowRootRef.innerHTML = `
       <style>${POPOVER_STYLE}</style>
-      <div class="backdrop" data-testid="site-tag-modal-backdrop"></div>
-      <div class="viewport">
-        <div class="popover" data-testid="site-tag-popover" role="dialog" aria-modal="true"></div>
+      <div class="backdrop theme-overlay" data-testid="site-tag-modal-backdrop"></div>
+      <div class="viewport" data-testid="site-tag-popover-viewport">
+        <div class="popover theme-panel" data-testid="site-tag-popover" role="dialog" aria-modal="true"></div>
       </div>
     `
 
@@ -560,7 +610,7 @@ export class SiteTagPopover {
     const tweet = this.state.tweet
     const tweetPreview = tweet
       ? `
-        <div class="tweet-card">
+        <div class="tweet-card theme-elevated" data-testid="site-tag-tweet-card">
           <div class="tweet-meta">
             <span class="tweet-author">${this.escapeHtml(tweet.authorName)}</span>
             <span>@${this.escapeHtml(tweet.authorHandle)}</span>
@@ -586,7 +636,7 @@ export class SiteTagPopover {
                       ${this.state.tags
                         .map(
                           (tag) => `
-                            <label class="tag-option" data-selected="${this.state.selectedTagIds.includes(tag.id) ? "true" : "false"}">
+                            <label class="tag-option theme-elevated" data-selected="${this.state.selectedTagIds.includes(tag.id) ? "true" : "false"}">
                               <input
                                 type="checkbox"
                                 data-testid="site-tag-option-${this.escapeHtml(tag.id)}"
@@ -622,7 +672,7 @@ export class SiteTagPopover {
                         ${this.state.saving ? "disabled" : ""}
                       />
                       <div class="create-actions">
-                        <button class="button" data-testid="site-tag-create-submit" data-variant="primary" ${this.state.saving ? "disabled" : ""}>${copy.createAction}</button>
+                        <button class="button theme-button-primary" data-testid="site-tag-create-submit" data-variant="primary" ${this.state.saving ? "disabled" : ""}>${copy.createAction}</button>
                         <button class="button" data-testid="site-tag-create-cancel" ${this.state.saving ? "disabled" : ""}>${copy.cancel}</button>
                       </div>
                     </div>
