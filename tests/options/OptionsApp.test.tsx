@@ -1740,6 +1740,47 @@ test("OptionsApp previews video media as a poster in the drawer and plays it in 
   assert.notEqual(lightboxVideo?.getAttribute("controls"), null)
 })
 
+test("OptionsApp previews animated gifs as video media in the modal", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-media-gif",
+      tweetUrl: "https://x.com/alice/status/tweet-media-gif",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Animated gif bookmark",
+      media: [{ type: "animated_gif", url: "https://example.com/animated.mp4", posterUrl: "https://example.com/animated-poster.jpg" }],
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const firstCard = getBookmarkCards(container)[0]
+  await act(async () => {
+    firstCard.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const posterButton = findByTestId(container, "inspector-media-trigger") as HTMLButtonElement | null
+  assert.ok(posterButton)
+
+  await act(async () => {
+    posterButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const lightboxVideo = findByTestId(container, "media-lightbox-video") as HTMLVideoElement | null
+
+  assert.ok(lightboxVideo)
+  assert.equal(lightboxVideo?.getAttribute("src"), "https://example.com/animated.mp4")
+  assert.equal(findByTestId(container, "media-lightbox-image"), null)
+})
+
 test("OptionsApp falls back to rawPayload poster data for legacy video bookmarks", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
@@ -1786,6 +1827,57 @@ test("OptionsApp falls back to rawPayload poster data for legacy video bookmarks
   assert.equal(drawerPoster?.getAttribute("src"), "https://example.com/video-poster-from-raw.jpg")
 })
 
+test("OptionsApp reuses legacy rawPayload poster data inside the media modal", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-media-video-legacy-modal",
+      tweetUrl: "https://x.com/alice/status/tweet-media-video-legacy-modal",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Legacy video bookmark for modal",
+      media: [{ type: "video", url: "https://example.com/video.mp4" }],
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {
+        legacy: {
+          extended_entities: {
+            media: [
+              {
+                type: "video",
+                media_url_https: "https://example.com/video-poster-from-raw-modal.jpg"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ])
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const firstCard = getBookmarkCards(container)[0]
+  await act(async () => {
+    firstCard.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const posterButton = findByTestId(container, "inspector-media-trigger") as HTMLButtonElement | null
+  assert.ok(posterButton)
+
+  await act(async () => {
+    posterButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const lightboxVideo = findByTestId(container, "media-lightbox-video") as HTMLVideoElement | null
+
+  assert.ok(lightboxVideo)
+  assert.equal(lightboxVideo?.getAttribute("poster"), "https://example.com/video-poster-from-raw-modal.jpg")
+})
+
 test("OptionsApp closes the detail drawer on Escape", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
@@ -1820,6 +1912,67 @@ test("OptionsApp closes the detail drawer on Escape", async () => {
 
   assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
   assert.doesNotMatch(card.className, /options-result-card-selected/)
+})
+
+test("OptionsApp treats the media modal as a focusable dialog and restores focus on close", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-media-dialog",
+      tweetUrl: "https://x.com/alice/status/tweet-media-dialog",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Media dialog accessibility",
+      media: [{ type: "photo", url: "https://example.com/media-dialog.jpg" }],
+      createdAtOnX: "2026-04-09T08:00:00.000Z",
+      savedAt: "2026-04-09T08:10:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const firstCard = getBookmarkCards(container)[0]
+  await act(async () => {
+    firstCard.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const trigger = findByTestId(container, "inspector-media-trigger") as HTMLButtonElement | null
+  assert.ok(trigger)
+  trigger.focus()
+  assert.equal(dom.window.document.activeElement, trigger)
+
+  await act(async () => {
+    trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const lightbox = findByTestId(container, "media-lightbox") as HTMLDivElement | null
+  const closeButton = findByTestId(container, "media-lightbox-close") as HTMLButtonElement | null
+
+  assert.ok(lightbox)
+  assert.ok(closeButton)
+  assert.equal(lightbox?.getAttribute("role"), "dialog")
+  assert.equal(lightbox?.getAttribute("aria-modal"), "true")
+  assert.equal(dom.window.document.activeElement, closeButton)
+
+  await act(async () => {
+    closeButton.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Tab", bubbles: true }))
+  })
+  await settle()
+
+  assert.equal(dom.window.document.activeElement, closeButton)
+
+  await act(async () => {
+    closeButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.equal(findByTestId(container, "media-lightbox"), null)
+  assert.equal(dom.window.document.activeElement, trigger)
 })
 
 test("OptionsApp media preview supports multiple assets with previous and next controls", async () => {
