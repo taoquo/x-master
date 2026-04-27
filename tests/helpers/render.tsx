@@ -3,6 +3,14 @@ import { JSDOM } from "jsdom"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 
+type RenderResult = {
+  container: HTMLDivElement
+  dom: JSDOM
+  root: ReturnType<typeof createRoot>
+}
+
+const activeRenders = new Set<RenderResult>()
+
 export function render(ui: React.ReactElement, options?: { prefersDark?: boolean }) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>")
   const prefersDark = options?.prefersDark ?? false
@@ -65,7 +73,14 @@ export function render(ui: React.ReactElement, options?: { prefersDark?: boolean
     root.render(ui)
   })
 
-  return { container: dom.window.document.body as unknown as HTMLDivElement, dom, root }
+  const result = {
+    container: dom.window.document.body as unknown as HTMLDivElement,
+    dom,
+    root
+  }
+  activeRenders.add(result)
+
+  return result
 }
 
 export async function settle() {
@@ -75,5 +90,25 @@ export async function settle() {
       await new Promise((resolve) => setTimeout(resolve, 0))
       await Promise.resolve()
     })
+  }
+}
+
+export async function cleanupRender(result: RenderResult) {
+  if (!activeRenders.has(result)) {
+    return
+  }
+
+  activeRenders.delete(result)
+  await act(async () => {
+    result.root.unmount()
+  })
+  result.dom.window.close()
+}
+
+export async function cleanupRenders() {
+  const renders = Array.from(activeRenders)
+
+  for (const result of renders) {
+    await cleanupRender(result)
   }
 }

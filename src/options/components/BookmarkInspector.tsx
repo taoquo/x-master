@@ -435,10 +435,11 @@ function DetailMediaLightbox({
           ) : (
             <div className="options-media-lightbox-nav-spacer" aria-hidden="true" />
           )}
-          <div className="options-media-lightbox-content options-theme-elevated">
+          <div
+            data-testid="media-lightbox-content"
+            className="options-media-lightbox-content options-theme-elevated">
             {previewMediaIsVideo ? (
               <video
-                key={previewMediaUrl}
                 data-testid="media-lightbox-video"
                 src={previewMediaUrl}
                 poster={previewMediaPosterUrl ?? undefined}
@@ -448,7 +449,6 @@ function DetailMediaLightbox({
               />
             ) : (
               <img
-                key={previewMediaUrl}
                 data-testid="media-lightbox-image"
                 src={previewMediaUrl}
                 alt=""
@@ -615,6 +615,32 @@ export function BookmarkInspector({
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [bookmark, onClose, previewMediaIndex])
+
+  useEffect(() => {
+    if (previewMediaIndex === null || mediaItems.length < 2 || typeof Image === "undefined") {
+      return
+    }
+
+    const preloadIndexes = [
+      (previewMediaIndex + 1) % mediaItems.length,
+      (previewMediaIndex - 1 + mediaItems.length) % mediaItems.length
+    ]
+
+    for (const index of new Set(preloadIndexes)) {
+      if (index === previewMediaIndex) {
+        continue
+      }
+
+      const mediaItem = mediaItems[index]
+      if (!mediaItem || isVideoMediaType(mediaItem.type)) {
+        continue
+      }
+
+      const preloadedImage = new Image()
+      preloadedImage.decoding = "async"
+      preloadedImage.src = mediaItem.url
+    }
+  }, [mediaItems, previewMediaIndex])
 
   const activePreviewMedia = previewMediaIndex === null ? null : mediaItems[previewMediaIndex] ?? null
   const previewMediaUrl = activePreviewMedia?.url ?? null

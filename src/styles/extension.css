@@ -2568,14 +2568,17 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 24px;
+    padding: clamp(18px, 3vw, 28px);
   }
 
   .options-media-lightbox-backdrop {
     position: absolute;
     inset: 0;
     border: 0;
-    background: var(--theme-overlay-backdrop);
+    background:
+      radial-gradient(circle at top, rgba(255, 255, 255, 0.12), transparent 36%),
+      linear-gradient(180deg, rgba(15, 23, 42, 0.32), rgba(15, 23, 42, 0.56)),
+      rgba(15, 23, 42, 0.44);
     cursor: zoom-out;
     animation: options-fade-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
   }
@@ -2588,28 +2591,30 @@
     max-height: min(92vh, 980px);
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
-    border-radius: 28px;
-    border: 1px solid var(--theme-panel-border);
+    gap: 14px;
+    border-radius: 30px;
+    border: 1px solid color-mix(in srgb, var(--theme-panel-border) 78%, rgba(255, 255, 255, 0.22));
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-bg) 92%, rgba(255, 255, 255, 0.16)), color-mix(in srgb, var(--theme-panel-bg) 98%, rgba(255, 255, 255, 0.04))),
+      linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-bg) 88%, rgba(255, 255, 255, 0.18)), color-mix(in srgb, var(--theme-panel-bg) 96%, rgba(255, 255, 255, 0.05))),
       var(--theme-panel-bg);
-    padding: 14px;
-    box-shadow: 0 32px 80px -32px rgba(15, 23, 42, 0.48);
-    backdrop-filter: blur(14px);
+    padding: 16px;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 36px 96px -40px rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(16px);
   }
 
   .options-media-lightbox-toolbar {
     display: flex;
     justify-content: flex-end;
-    min-height: 40px;
+    min-height: 42px;
   }
 
   .options-media-lightbox-stage {
     display: grid;
-    grid-template-columns: 76px minmax(0, 1fr) 76px;
+    grid-template-columns: 72px minmax(0, 1fr) 72px;
     align-items: center;
-    gap: 16px;
+    gap: 18px;
   }
 
   .options-media-lightbox-content {
@@ -2621,14 +2626,16 @@
     max-width: min(80vw, 1100px);
     max-height: min(76vh, 800px);
     overflow: hidden;
-    border-radius: 22px;
-    border: 1px solid var(--theme-elevated-border);
+    padding: clamp(10px, 1.6vw, 16px);
+    border-radius: 24px;
+    border: 1px solid color-mix(in srgb, var(--theme-elevated-border) 72%, rgba(255, 255, 255, 0.24));
     background:
-      radial-gradient(circle at top, color-mix(in srgb, var(--theme-elevated-bg) 74%, rgba(148, 163, 184, 0.18)), color-mix(in srgb, var(--theme-elevated-bg) 96%, rgba(15, 23, 42, 0.12)) 72%),
-      var(--theme-elevated-bg);
+      radial-gradient(circle at top, color-mix(in srgb, var(--theme-elevated-bg) 70%, rgba(248, 250, 252, 0.26)), color-mix(in srgb, var(--theme-elevated-bg) 96%, rgba(15, 23, 42, 0.08)) 70%),
+      color-mix(in srgb, var(--theme-elevated-bg) 92%, rgba(148, 163, 184, 0.08));
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 28px 72px -28px rgba(15, 23, 42, 0.4);
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+      0 30px 76px -30px rgba(15, 23, 42, 0.34);
     backdrop-filter: blur(12px);
     animation: options-lightbox-pop 220ms cubic-bezier(0.16, 1, 0.3, 1);
   }
@@ -2638,7 +2645,8 @@
     max-width: 100%;
     max-height: min(76vh, 800px);
     object-fit: contain;
-    animation: options-lightbox-image-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+    border-radius: 18px;
+    animation: options-lightbox-image-in 160ms ease-out;
   }
 
   .options-media-lightbox-close,
@@ -2648,9 +2656,10 @@
     justify-content: center;
     border: 0;
     border-radius: 9999px;
-    background: color-mix(in srgb, var(--theme-panel-bg) 82%, rgba(15, 23, 42, 0.4));
+    background: color-mix(in srgb, var(--theme-panel-bg) 78%, rgba(15, 23, 42, 0.46));
     color: #fff;
     backdrop-filter: blur(10px);
+    opacity: 0.82;
     transition:
       opacity 180ms cubic-bezier(0.16, 1, 0.3, 1),
       background-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
@@ -2660,7 +2669,8 @@
 
   .options-media-lightbox-close:hover,
   .options-media-lightbox-nav:hover {
-    background: color-mix(in srgb, var(--theme-panel-bg) 92%, rgba(15, 23, 42, 0.5));
+    background: color-mix(in srgb, var(--theme-panel-bg) 88%, rgba(15, 23, 42, 0.54));
+    opacity: 1;
     transform: translateY(-1px);
     box-shadow: 0 10px 24px -16px rgba(15, 23, 42, 0.45);
   }
@@ -2700,8 +2710,8 @@
 
   .options-media-lightbox-counter {
     border-radius: 9999px;
-    background: color-mix(in srgb, var(--theme-panel-bg) 84%, rgba(15, 23, 42, 0.4));
-    padding: 7px 12px;
+    background: color-mix(in srgb, var(--theme-panel-bg) 82%, rgba(15, 23, 42, 0.42));
+    padding: 8px 14px;
     font-size: 12px;
     font-weight: 600;
     color: #fff;
@@ -2709,19 +2719,11 @@
   }
 
   @media (hover: hover) {
-    .options-media-lightbox-close,
-    .options-media-lightbox-nav {
-      opacity: 0;
-      pointer-events: none;
-      transform: scale(0.96);
-    }
-
     .options-media-lightbox-shell:hover .options-media-lightbox-close,
     .options-media-lightbox-shell:hover .options-media-lightbox-nav,
     .options-media-lightbox-shell:focus-within .options-media-lightbox-close,
     .options-media-lightbox-shell:focus-within .options-media-lightbox-nav {
       opacity: 1;
-      pointer-events: auto;
       transform: scale(1);
     }
   }
@@ -2784,15 +2786,31 @@
   }
 
   :root[data-theme="dark"] .options-media-lightbox-content {
-    border-color: rgba(148, 163, 184, 0.22);
-    background: rgba(15, 23, 42, 0.42);
+    border-color: rgba(148, 163, 184, 0.26);
+    background:
+      radial-gradient(circle at top, rgba(51, 65, 85, 0.74), rgba(15, 23, 42, 0.9) 70%),
+      rgba(15, 23, 42, 0.78);
   }
 
   :root[data-theme="dark"] .options-media-lightbox-shell {
-    border-color: rgba(148, 163, 184, 0.14);
+    border-color: rgba(148, 163, 184, 0.16);
     background:
-      linear-gradient(180deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.28)),
-      rgba(15, 23, 42, 0.2);
+      linear-gradient(180deg, rgba(30, 41, 59, 0.72), rgba(15, 23, 42, 0.42)),
+      rgba(15, 23, 42, 0.28);
+  }
+
+  :root[data-theme="dark"] .options-media-lightbox-backdrop {
+    background:
+      radial-gradient(circle at top, rgba(96, 165, 250, 0.1), transparent 38%),
+      linear-gradient(180deg, rgba(2, 6, 23, 0.66), rgba(2, 6, 23, 0.9)),
+      rgba(2, 6, 23, 0.76);
+  }
+
+  :root[data-theme="light"] .options-media-lightbox-backdrop {
+    background:
+      radial-gradient(circle at top, rgba(255, 255, 255, 0.5), transparent 38%),
+      linear-gradient(180deg, rgba(226, 232, 240, 0.64), rgba(148, 163, 184, 0.78)),
+      rgba(226, 232, 240, 0.66);
   }
 
   @keyframes options-fade-in {

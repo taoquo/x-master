@@ -10,7 +10,7 @@ import { createList } from "../../src/lib/storage/listsStore.ts"
 import { createEmptySyncSummary } from "../../src/lib/types.ts"
 import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
 import { attachTagToBookmark, createTag } from "../../src/lib/storage/tagsStore.ts"
-import { render, settle } from "../helpers/render.tsx"
+import { cleanupRenders, render, settle } from "../helpers/render.tsx"
 import { installChromeRuntimeHarness } from "../helpers/runtime.ts"
 import { LOAD_WORKSPACE_DATA_MESSAGE } from "../../src/lib/runtime/messages.ts"
 
@@ -58,6 +58,10 @@ function setInputValue(
   element.dispatchEvent(new dom.Event("input", { bubbles: true }))
   element.dispatchEvent(new dom.Event("change", { bubbles: true }))
 }
+
+test.afterEach(async () => {
+  await cleanupRenders()
+})
 
 test("OptionsApp renders the Chinese locale shell and keeps demo shell active", async () => {
   installChromeRuntimeHarness()
@@ -867,7 +871,7 @@ test("OptionsApp renders the demo inspector and localized copy", async () => {
   assert.match(container.textContent ?? "", /@alice/)
   assert.match(container.textContent ?? "", /Inspector content summary/)
   assert.ok(findByTestId(container, "detail-open-x-link"))
-  assert.equal(findByTestId(container, "attach-tag-trigger"), null)
+  assert.match(findByTestId(container, "attach-tag-trigger")?.textContent ?? "", /添加标签/)
 })
 
 test("OptionsApp theme toggle keeps system preference reachable", async () => {
@@ -1501,8 +1505,9 @@ test("OptionsApp opens the detail drawer on card click and clears selection when
 
   assert.ok(drawer)
   assert.ok(inspector)
-  assert.equal(addTagTrigger, null)
-  assert.equal(openOnXButton, undefined)
+  assert.ok(addTagTrigger)
+  assert.match(addTagTrigger?.textContent ?? "", /Add a tag/)
+  assert.ok(openOnXButton)
   assert.ok(openOnXIcon)
   assert.ok(closeButton)
   assert.match(inspector.className, /options-inspector-shell/)
