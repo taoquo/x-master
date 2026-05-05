@@ -2612,6 +2612,8 @@ test("OptionsApp renders a feed skeleton during the first workspace load", async
 
   assert.ok(findByTestId(container, "feed-loading-state"))
   assert.equal(findByTestId(container, "results-stack"), null)
+
+   await settle()
 })
 
 test("OptionsApp keeps the real three-pane shell visible while the first workspace load is still pending", async () => {
@@ -2624,6 +2626,8 @@ test("OptionsApp keeps the real three-pane shell visible while the first workspa
   assert.ok(findByTestId(container, "workspace-sidebar-sync"))
   assert.ok(findByTestId(container, "workspace-toolbar"))
   assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+
+   await settle()
 })
 
 test("OptionsApp shows a dedicated empty feed state when no bookmarks exist yet", async () => {

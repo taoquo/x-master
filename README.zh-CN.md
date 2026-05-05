@@ -99,6 +99,12 @@ tests/    自动化测试
 npm test
 ```
 
+使用项目内置的 `esbuild + Tailwind CSS` 构建链路生成扩展产物：
+
+```bash
+npm run build
+```
+
 运行静态检查：
 
 ```bash
@@ -109,4 +115,3 @@ npm run lint
 ## 构建产物
 
 - 解包目录：`build/chrome-mv3`
-- 压缩包：`build/chrome-mv3.zip`

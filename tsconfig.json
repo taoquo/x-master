@@ -21,9 +21,7 @@
     "allowImportingTsExtensions": true
   },
   "include": [
-    ".plasmo/index.d.ts",
     "src/**/*",
-    "tests/**/*",
-    "plasmo.config.ts"
+    "tests/**/*"
   ]
 }

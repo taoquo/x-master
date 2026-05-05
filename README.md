@@ -99,6 +99,12 @@ Run the extension test suite:
 npm test
 ```
 
+Build the extension with the custom `esbuild + Tailwind CSS` pipeline:
+
+```bash
+npm run build
+```
+
 Run static checks:
 
 ```bash
@@ -109,4 +115,3 @@ npm run lint
 ## Build Output
 
 - Unpacked build: `build/chrome-mv3`
-- Zip artifact: `build/chrome-mv3.zip`
