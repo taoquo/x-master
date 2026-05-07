@@ -4,24 +4,24 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        surface: "#f7f2e9",
-        ink: "#161412",
-        mist: "#edf3ee",
-        cobalt: "#3b82f6",
-        sand: "#e8d7b2"
+        surface: "#FBF7F3",
+        ink: "#191514",
+        mist: "#F3EBE4",
+        brand: "#B83D2E",
+        sand: "#E9DED4"
       },
       boxShadow: {
-        glass: "0 24px 60px -28px rgba(44, 55, 72, 0.22), inset 0 1px 0 rgba(255,255,255,0.62)",
-        soft: "0 18px 44px -26px rgba(28, 36, 51, 0.16)"
+        glass: "0 18px 36px -28px rgba(58, 49, 45, 0.22), inset 0 1px 0 rgba(255,253,249,0.72)",
+        soft: "0 14px 28px -24px rgba(58, 49, 45, 0.18)"
       },
       borderRadius: {
         "4xl": "2rem",
         "5xl": "2.5rem"
       },
       fontFamily: {
-        sans: ['"Geist"', '"Avenir Next"', '"Segoe UI"', "sans-serif"],
-        display: ['"Iowan Old Style"', '"Palatino Linotype"', "Georgia", "serif"],
-        mono: ['"Geist Mono"', '"IBM Plex Mono"', '"SFMono-Regular"', "monospace"]
+        sans: ['"SF Pro Text"', '"PingFang SC"', '"Noto Sans SC"', '"Segoe UI"', "sans-serif"],
+        display: ['"Iowan Old Style"', '"Palatino Linotype"', '"Source Han Serif SC"', "Georgia", "serif"],
+        mono: ['"SFMono-Regular"', '"JetBrains Mono"', '"IBM Plex Mono"', "monospace"]
       },
       animation: {
         "glass-shimmer": "glass-shimmer 7s linear infinite",

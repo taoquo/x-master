@@ -54,12 +54,20 @@ test("mountPopup renders english popup copy and the default light theme", async 
     /popup-overview-card-body/
   )
   assert.match(
+    dom.window.document.body.querySelector('[data-testid="popup-overview-card"]')?.className ?? "",
+    /folio-cover-card/
+  )
+  assert.match(
     dom.window.document.body.querySelector('[data-testid="popup-actions-panel"] button')?.className ?? "",
     /options-theme-elevated/
   )
   assert.match(
     dom.window.document.body.querySelector('[data-testid="popup-actions-panel"] button')?.className ?? "",
     /popup-action-button/
+  )
+  assert.match(
+    dom.window.document.body.querySelector('[data-testid="popup-actions-panel"] button')?.className ?? "",
+    /folio-secondary-action/
   )
   assert.match(dom.window.document.body.textContent ?? "", /Sync now/)
   assert.equal(dom.window.document.documentElement.dataset.theme, "light")

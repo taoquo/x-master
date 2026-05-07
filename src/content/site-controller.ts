@@ -11,6 +11,10 @@ const BOOKMARK_OVERLAY_GAP = 8
 const BUTTON_STYLE = `
   :host {
     all: initial;
+    --folio-paper: #fbf7f3;
+    --folio-border: #e4d7cb;
+    --folio-brand: #b83d2e;
+    --folio-ink: #191514;
   }
 
   button {
@@ -20,13 +24,13 @@ const BUTTON_STYLE = `
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid rgba(142, 217, 226, 0.5);
+    border: 1px solid color-mix(in srgb, var(--folio-brand) 16%, var(--folio-border));
     background:
-      radial-gradient(circle at 30% 30%, rgba(250, 252, 255, 0.98), rgba(232, 246, 248, 0.9) 58%, rgba(206, 238, 240, 0.96));
+      radial-gradient(circle at 30% 30%, rgba(255, 253, 249, 0.98), rgba(246, 236, 228, 0.92) 58%, rgba(240, 225, 214, 0.96));
     border-radius: 999px;
     box-shadow:
-      0 10px 24px rgba(15, 23, 42, 0.12),
-      inset 0 1px 0 rgba(255, 255, 255, 0.72);
+      0 10px 24px rgba(58, 49, 45, 0.16),
+      inset 0 1px 0 rgba(255, 253, 249, 0.78);
     padding: 0;
     cursor: pointer;
     transition:
@@ -46,10 +50,10 @@ const BUTTON_STYLE = `
 
   button:hover {
     transform: translateY(-1px) scale(1.02);
-    border-color: rgba(78, 194, 205, 0.58);
+    border-color: color-mix(in srgb, var(--folio-brand) 34%, var(--folio-border));
     box-shadow:
-      0 14px 30px rgba(15, 23, 42, 0.16),
-      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      0 14px 30px rgba(58, 49, 45, 0.22),
+      inset 0 1px 0 rgba(255, 253, 249, 0.82);
   }
 
   button:active {
@@ -296,7 +300,7 @@ export function createSiteTaggingController({
     const shadowRoot = host.attachShadow({ mode: "open" })
     shadowRoot.innerHTML = `
       <style>${BUTTON_STYLE}</style>
-      <button type="button" data-testid="site-tag-trigger" aria-label="Manage tags">
+      <button type="button" class="folio-site-trigger" data-testid="site-tag-trigger" aria-label="Manage tags">
         <img data-testid="site-tag-trigger-logo" alt="" src="${escapeAttribute(resolveExtensionAssetUrl(TAG_BUTTON_LOGO_PATH))}" />
       </button>
     `

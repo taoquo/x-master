@@ -2,37 +2,42 @@ import type { Locale, SiteTweetDraft, SiteTweetTagState } from "../lib/types.ts"
 import type { SiteTaggingClient } from "./site-client.ts"
 
 const TAG_MODAL_LOGO_PATH = "assets/branding/logo-72.png"
+const WENKAI_REGULAR_PATH = "assets/fonts/LXGWWenKai-Regular.woff2"
+const WENKAI_MEDIUM_PATH = "assets/fonts/LXGWWenKai-Medium.woff2"
 const POPOVER_STYLE = `
   :host {
     all: initial;
-    --theme-panel-bg: linear-gradient(180deg, rgba(251, 254, 255, 0.98), rgba(240, 250, 251, 0.96));
-    --theme-panel-border: rgba(148, 226, 232, 0.42);
-    --theme-panel-shadow: 0 34px 80px rgba(15, 23, 42, 0.24);
-    --theme-elevated-bg: rgba(255, 255, 255, 0.76);
-    --theme-elevated-border: rgba(148, 163, 184, 0.2);
-    --theme-overlay-backdrop: rgba(15, 23, 42, 0.34);
-    --theme-hover-bg: rgba(255, 255, 255, 0.96);
-    --theme-chip-text: #0f172a;
-    --theme-muted-text: #4b5563;
-    --theme-accent-bg: rgba(15, 23, 42, 0.86);
-    --theme-accent-text: #ffffff;
-    --theme-accent-hover: rgba(15, 23, 42, 0.94);
+    --theme-display-font: "LXGW WenKai", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", serif;
+    --theme-panel-bg: linear-gradient(180deg, rgba(251, 247, 243, 0.99), rgba(246, 240, 234, 0.98));
+    --theme-panel-border: rgba(184, 61, 46, 0.14);
+    --theme-panel-shadow: 0 34px 80px rgba(58, 49, 45, 0.24);
+    --theme-elevated-bg: rgba(255, 253, 249, 0.84);
+    --theme-elevated-border: rgba(228, 215, 203, 0.92);
+    --theme-overlay-backdrop: rgba(25, 21, 20, 0.34);
+    --theme-hover-bg: rgba(248, 239, 232, 0.96);
+    --theme-chip-text: #191514;
+    --theme-muted-text: #5a4a43;
+    --theme-accent-bg: #b83d2e;
+    --theme-accent-text: #fffaf6;
+    --theme-accent-hover: #a23326;
+    --theme-brand-soft: #f1d2cc;
   }
 
   @media (prefers-color-scheme: dark) {
     :host {
-      --theme-panel-bg: linear-gradient(180deg, rgba(17, 24, 39, 0.96), rgba(15, 23, 42, 0.94));
-      --theme-panel-border: rgba(71, 85, 105, 0.42);
-      --theme-panel-shadow: 0 34px 80px rgba(2, 6, 23, 0.54);
-      --theme-elevated-bg: rgba(30, 41, 59, 0.78);
-      --theme-elevated-border: rgba(71, 85, 105, 0.36);
-      --theme-overlay-backdrop: rgba(2, 6, 23, 0.54);
-      --theme-hover-bg: rgba(51, 65, 85, 0.92);
-      --theme-chip-text: #e5e7eb;
-      --theme-muted-text: #cbd5e1;
-      --theme-accent-bg: rgba(59, 130, 246, 0.22);
-      --theme-accent-text: #bfdbfe;
-      --theme-accent-hover: rgba(59, 130, 246, 0.3);
+      --theme-panel-bg: linear-gradient(180deg, rgba(38, 32, 29, 0.98), rgba(25, 21, 20, 0.96));
+      --theme-panel-border: rgba(208, 106, 94, 0.2);
+      --theme-panel-shadow: 0 34px 80px rgba(0, 0, 0, 0.54);
+      --theme-elevated-bg: rgba(44, 36, 33, 0.88);
+      --theme-elevated-border: rgba(64, 53, 48, 0.94);
+      --theme-overlay-backdrop: rgba(25, 21, 20, 0.58);
+      --theme-hover-bg: rgba(56, 47, 43, 0.92);
+      --theme-chip-text: #f3ece4;
+      --theme-muted-text: #c1afa3;
+      --theme-accent-bg: #d06a5e;
+      --theme-accent-text: #fff7f3;
+      --theme-accent-hover: #de7e72;
+      --theme-brand-soft: rgba(208, 106, 94, 0.22);
     }
   }
 
@@ -40,7 +45,7 @@ const POPOVER_STYLE = `
     position: fixed;
     inset: 0;
     background:
-      radial-gradient(circle at top, rgba(111, 215, 225, 0.16), transparent 30%),
+      radial-gradient(circle at top, color-mix(in srgb, var(--theme-brand-soft) 68%, transparent), transparent 30%),
       var(--theme-overlay-backdrop);
     backdrop-filter: blur(10px);
     animation: fade-in 180ms ease;
@@ -48,7 +53,7 @@ const POPOVER_STYLE = `
 
   .theme-overlay {
     background:
-      radial-gradient(circle at top, rgba(111, 215, 225, 0.16), transparent 30%),
+      radial-gradient(circle at top, color-mix(in srgb, var(--theme-brand-soft) 68%, transparent), transparent 30%),
       var(--theme-overlay-backdrop);
   }
 
@@ -71,12 +76,16 @@ const POPOVER_STYLE = `
     background: var(--theme-panel-bg);
     box-shadow:
       var(--theme-panel-shadow),
-      inset 0 1px 0 rgba(255, 255, 255, 0.82);
+      inset 0 1px 0 rgba(255, 253, 249, 0.82);
     color: var(--theme-chip-text);
-    font-family: Geist, "Avenir Next", "Segoe UI", sans-serif;
+    font-family: "SF Pro Text", "PingFang SC", "Noto Sans SC", "Segoe UI", sans-serif;
     font-size: 13px;
     line-height: 1.5;
     animation: pop-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .folio-site-popover {
+    position: relative;
   }
 
   .theme-panel {
@@ -84,7 +93,7 @@ const POPOVER_STYLE = `
     background: var(--theme-panel-bg);
     box-shadow:
       var(--theme-panel-shadow),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      inset 0 1px 0 rgba(255, 253, 249, 0.08);
     color: var(--theme-chip-text);
   }
 
@@ -99,15 +108,15 @@ const POPOVER_STYLE = `
   }
 
   .section + .section {
-    border-top: 1px solid rgba(148, 163, 184, 0.16);
+    border-top: 1px solid color-mix(in srgb, var(--theme-panel-border) 72%, transparent);
   }
 
   .hero {
     display: grid;
     gap: 14px;
     background:
-      radial-gradient(circle at top left, rgba(111, 215, 225, 0.24), transparent 42%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(241, 249, 250, 0.72));
+      radial-gradient(circle at top left, color-mix(in srgb, var(--theme-brand-soft) 88%, transparent), transparent 42%),
+      linear-gradient(180deg, rgba(255, 253, 249, 0.88), rgba(246, 240, 234, 0.82));
   }
 
   .hero-row {
@@ -132,11 +141,11 @@ const POPOVER_STYLE = `
     align-items: center;
     justify-content: center;
     background:
-      radial-gradient(circle at top, rgba(255, 255, 255, 0.92), rgba(224, 244, 245, 0.88));
-    border: 1px solid rgba(148, 226, 232, 0.45);
+      radial-gradient(circle at top, rgba(255, 253, 249, 0.94), rgba(244, 233, 224, 0.88));
+    border: 1px solid color-mix(in srgb, var(--theme-panel-border) 92%, transparent);
     box-shadow:
-      0 14px 28px rgba(15, 23, 42, 0.08),
-      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      0 14px 28px rgba(58, 49, 45, 0.08),
+      inset 0 1px 0 rgba(255, 253, 249, 0.8);
   }
 
   .brand-badge img {
@@ -149,19 +158,20 @@ const POPOVER_STYLE = `
 
   .eyebrow {
     font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
+    font-weight: 600;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: #4b7f87;
+    color: var(--theme-muted-text);
     margin-bottom: 4px;
   }
 
   .headline {
     font-size: 22px;
-    font-weight: 680;
+    font-family: var(--theme-display-font);
+    font-weight: 500;
     letter-spacing: -0.03em;
-    line-height: 1.1;
-    color: #0f172a;
+    line-height: 1.14;
+    color: var(--theme-chip-text);
   }
 
   .subcopy {
@@ -175,7 +185,7 @@ const POPOVER_STYLE = `
     width: 32px;
     height: 32px;
     flex: none;
-    border: 1px solid rgba(148, 163, 184, 0.24);
+    border: 1px solid color-mix(in srgb, var(--theme-elevated-border) 88%, transparent);
     border-radius: 999px;
     background: var(--theme-elevated-bg);
     color: var(--theme-chip-text);
@@ -202,7 +212,11 @@ const POPOVER_STYLE = `
     border-radius: 16px;
     background: var(--theme-elevated-bg);
     border: 1px solid var(--theme-elevated-border);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+    box-shadow: inset 0 1px 0 rgba(255, 253, 249, 0.72);
+  }
+
+  .folio-site-tweet-card {
+    position: relative;
   }
 
   .tweet-meta {
@@ -236,10 +250,10 @@ const POPOVER_STYLE = `
     gap: 12px;
     margin-bottom: 12px;
     font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
+    font-weight: 600;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: #64748b;
+    color: var(--theme-muted-text);
   }
 
   .tags {
@@ -273,16 +287,16 @@ const POPOVER_STYLE = `
 
   .tag-option:hover {
     transform: translateY(-1px);
-    border-color: rgba(99, 195, 205, 0.45);
+    border-color: color-mix(in srgb, var(--theme-accent-bg) 24%, var(--theme-elevated-border));
   }
 
   .tag-option[data-selected="true"] {
-    border-color: rgba(70, 191, 202, 0.56);
+    border-color: color-mix(in srgb, var(--theme-accent-bg) 32%, var(--theme-elevated-border));
     background:
-      linear-gradient(180deg, rgba(236, 250, 251, 0.96), rgba(223, 246, 247, 0.92));
+      linear-gradient(180deg, color-mix(in srgb, var(--theme-brand-soft) 32%, var(--theme-elevated-bg)), color-mix(in srgb, var(--theme-brand-soft) 72%, var(--theme-elevated-bg)));
     box-shadow:
-      0 12px 26px rgba(74, 190, 201, 0.12),
-      inset 0 1px 0 rgba(255, 255, 255, 0.82);
+      0 12px 26px rgba(184, 61, 46, 0.1),
+      inset 0 1px 0 rgba(255, 253, 249, 0.82);
   }
 
   .tag-option:active {
@@ -291,6 +305,7 @@ const POPOVER_STYLE = `
 
   .tag-name {
     min-width: 0;
+    font-family: var(--theme-display-font);
     font-weight: 600;
     color: var(--theme-chip-text);
   }
@@ -307,13 +322,13 @@ const POPOVER_STYLE = `
     border-radius: 14px;
     background: var(--theme-elevated-bg);
     border: 1px dashed var(--theme-elevated-border);
-    color: #475569;
+    color: var(--theme-muted-text);
   }
 
   .error {
-    background: rgba(254, 242, 242, 0.9);
-    border-color: rgba(248, 113, 113, 0.24);
-    color: #b91c1c;
+    background: color-mix(in srgb, var(--theme-brand-soft) 44%, var(--theme-elevated-bg));
+    border-color: color-mix(in srgb, var(--theme-accent-bg) 28%, transparent);
+    color: var(--theme-accent-bg);
   }
 
   .button {
@@ -323,7 +338,7 @@ const POPOVER_STYLE = `
     background: var(--theme-elevated-bg);
     color: var(--theme-chip-text);
     font: inherit;
-    font-weight: 600;
+    font-weight: 500;
     min-height: 36px;
     padding: 8px 14px;
     cursor: pointer;
@@ -332,7 +347,7 @@ const POPOVER_STYLE = `
 
   .button:hover {
     background: var(--theme-hover-bg);
-    border-color: rgba(83, 193, 203, 0.32);
+    border-color: color-mix(in srgb, var(--theme-accent-bg) 24%, var(--theme-elevated-border));
     transform: translateY(-1px);
   }
 
@@ -371,7 +386,7 @@ const POPOVER_STYLE = `
     box-sizing: border-box;
     border: 1px solid var(--theme-elevated-border);
     border-radius: 14px;
-    background: color-mix(in srgb, var(--theme-elevated-bg) 88%, white);
+    background: color-mix(in srgb, var(--theme-elevated-bg) 92%, #fffdf9);
     min-height: 40px;
     padding: 10px 14px;
     font: inherit;
@@ -381,8 +396,8 @@ const POPOVER_STYLE = `
   }
 
   .create-input:focus {
-    border-color: rgba(69, 191, 202, 0.5);
-    box-shadow: 0 0 0 4px rgba(98, 210, 219, 0.12);
+    border-color: color-mix(in srgb, var(--theme-accent-bg) 34%, var(--theme-elevated-border));
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--theme-accent-bg) 12%, transparent);
   }
 
   .create-actions {
@@ -574,10 +589,10 @@ export class SiteTagPopover {
     host.style.inset = "0"
     const shadowRootRef = host.attachShadow({ mode: "open" })
     shadowRootRef.innerHTML = `
-      <style>${POPOVER_STYLE}</style>
+      <style>${getPopoverStyle()}</style>
       <div class="backdrop theme-overlay" data-testid="site-tag-modal-backdrop"></div>
       <div class="viewport" data-testid="site-tag-popover-viewport">
-        <div class="popover theme-panel" data-testid="site-tag-popover" role="dialog" aria-modal="true"></div>
+        <div class="popover folio-site-popover theme-panel" data-testid="site-tag-popover" role="dialog" aria-modal="true"></div>
       </div>
     `
 
@@ -610,7 +625,7 @@ export class SiteTagPopover {
     const tweet = this.state.tweet
     const tweetPreview = tweet
       ? `
-        <div class="tweet-card theme-elevated" data-testid="site-tag-tweet-card">
+        <div class="tweet-card folio-site-tweet-card theme-elevated" data-testid="site-tag-tweet-card">
           <div class="tweet-meta">
             <span class="tweet-author">${this.escapeHtml(tweet.authorName)}</span>
             <span>@${this.escapeHtml(tweet.authorHandle)}</span>
@@ -868,6 +883,31 @@ function resolveExtensionAssetUrl(assetPath: string) {
   }
 
   return assetPath
+}
+
+function getPopoverStyle() {
+  const regularFontUrl = resolveExtensionAssetUrl(WENKAI_REGULAR_PATH)
+  const mediumFontUrl = resolveExtensionAssetUrl(WENKAI_MEDIUM_PATH)
+
+  return `
+  @font-face {
+    font-family: "LXGW WenKai";
+    src: url("${regularFontUrl}") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: "LXGW WenKai";
+    src: url("${mediumFontUrl}") format("woff2");
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+  }
+
+${POPOVER_STYLE}
+`
 }
 
 function getPopoverCopy(locale: Locale) {

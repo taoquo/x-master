@@ -98,24 +98,24 @@ function PopupScreen() {
       <SurfaceCard
         title={copy.workspaceSnapshot}
         description={copy.workspaceDescription}
-        className="popup-overview-card options-theme-panel rounded-[24px]"
+        className="popup-overview-card folio-surface-card options-theme-panel rounded-[24px]"
         bodyClassName="gap-5"
         >
-        <div data-testid="popup-overview-card" className="popup-overview-card-body options-theme-panel space-y-5">
+        <div data-testid="popup-overview-card" className="popup-overview-card-body folio-cover-card options-theme-panel space-y-5">
           <div data-testid="popup-overview-panel" className="space-y-5">
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-3">
                 <BrandLogo
                   size={72}
                   testId="popup-brand-logo"
-                  className="rounded-[20px] shadow-[0_16px_34px_-20px_rgba(15,23,42,0.42)]"
+                  className="popup-brand-mark rounded-[20px]"
                 />
                 <div className="min-w-0">
                   <div className="workspace-overline">{copy.inventory}</div>
-                  <h1 className="mt-2 font-sans text-[2.08rem] leading-[0.92] tracking-[-0.06em] text-ink">
+                  <h1 className="popup-brand-title mt-2 text-ink">
                     X Bookmark Manager
                   </h1>
-                  <p className="mt-2.5 max-w-[22ch] text-sm leading-6 text-slate-600">
+                  <p className="popup-brand-copy mt-2.5 max-w-[22ch]">
                     {copy.appDescription}
                   </p>
                 </div>
@@ -124,22 +124,22 @@ function PopupScreen() {
             </div>
 
             <div data-testid="popup-stats-grid" className="grid grid-cols-2 gap-3">
-              <div className="panel-elevated popup-stat-card options-theme-elevated rounded-[18px] p-4">
+              <div className="panel-elevated popup-stat-card folio-metric-card options-theme-elevated rounded-[18px] p-4">
                 <div className="popup-stat-label text-[11px] uppercase tracking-[0.14em] text-slate-500">{copy.totalBookmarks}</div>
-                <div className="popup-stat-value mt-3 font-mono text-[2.4rem] leading-none tracking-[-0.04em] text-slate-900">
+                <div className="popup-stat-value mt-3 text-[2.4rem] leading-none tracking-[-0.04em] text-slate-900">
                   {data.stats.totalBookmarks}
                 </div>
               </div>
-              <div className="panel-elevated popup-stat-card options-theme-elevated rounded-[18px] p-4">
+              <div className="panel-elevated popup-stat-card folio-metric-card options-theme-elevated rounded-[18px] p-4">
                 <div className="popup-stat-label text-[11px] uppercase tracking-[0.14em] text-slate-500">{copy.unclassified}</div>
-                <div className="popup-stat-value mt-3 font-mono text-[2.4rem] leading-none tracking-[-0.04em] text-slate-900">
+                <div className="popup-stat-value mt-3 text-[2.4rem] leading-none tracking-[-0.04em] text-slate-900">
                   {data.stats.unclassifiedCount}
                 </div>
               </div>
             </div>
 
             <div data-testid="popup-actions-panel" className="flex gap-2">
-              <button type="button" onClick={openManager} className="glass-button popup-action-button options-theme-elevated flex-1 justify-center">
+              <button type="button" onClick={openManager} className="glass-button popup-action-button folio-secondary-action options-theme-elevated flex-1 justify-center">
                 <AppIcon name="external" size={16} />
                 <span>{copy.openManager}</span>
               </button>

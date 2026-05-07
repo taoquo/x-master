@@ -65,7 +65,7 @@ async function writeStaticFiles() {
         ],
         web_accessible_resources: [
           {
-            resources: ["assets/icons/*", "assets/branding/*"],
+            resources: ["assets/icons/*", "assets/branding/*", "assets/fonts/*"],
             matches: ["https://x.com/*"]
           }
         ]

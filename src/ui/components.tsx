@@ -15,13 +15,13 @@ export function SectionHeader({
   actions?: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+    <div className="folio-section-header flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0 flex-1">
-        <h1 className="max-w-[10ch] font-sans text-[clamp(3rem,8vw,5rem)] leading-[0.92] tracking-[-0.06em] text-ink">
+        <h1 className="folio-display-title max-w-[10ch] text-ink">
           {title}
         </h1>
         {description ? (
-          <p className="mt-4 max-w-[28ch] text-lg leading-[1.35] tracking-[-0.02em] text-slate-600 md:text-xl">
+          <p className="folio-section-description mt-4 max-w-[28ch] md:text-xl">
             {description}
           </p>
         ) : null}
@@ -48,13 +48,13 @@ export function SurfaceCard({
 }) {
   const shellClassName =
     chrome === "bare"
-      ? "workspace-surface flex flex-col"
-      : "workspace-surface panel-surface flex flex-col rounded-[22px] p-5 md:p-6"
+      ? "workspace-surface folio-surface-card flex flex-col"
+      : "workspace-surface folio-surface-card panel-surface flex flex-col rounded-[22px] p-5 md:p-6"
 
   return (
     <section className={cn(shellClassName, className)}>
       {title ? (
-        <div className="mb-4 space-y-2">
+        <div className="folio-surface-card-header mb-4 space-y-2">
           <h2 className="workspace-heading-lg">{title}</h2>
           {description ? <p className="workspace-copy">{description}</p> : null}
         </div>
@@ -76,14 +76,14 @@ export function MetricCard({
   accentClassName?: string
 }) {
   return (
-    <div className="panel-elevated relative overflow-hidden rounded-[20px] p-6">
+    <div className="panel-elevated folio-metric-card relative overflow-hidden rounded-[20px] p-6">
       <div className="relative">
-        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{label}</p>
+        <p className="folio-metric-label text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{label}</p>
         <div className="mt-5 grid gap-3 md:grid-cols-[auto_minmax(0,1fr)] md:items-end">
-          <div className="font-mono text-[3.3rem] leading-none tracking-[-0.06em] text-slate-900">{value}</div>
-          <p className="max-w-[18ch] text-[0.92rem] leading-6 text-slate-600">{hint}</p>
+          <div className="folio-metric-value text-[3.3rem] leading-none tracking-[-0.06em] text-slate-900">{value}</div>
+          <p className="folio-metric-hint max-w-[18ch] text-[0.92rem] leading-6 text-slate-600">{hint}</p>
         </div>
-        <div className={cn("mt-6 h-px rounded-full bg-[var(--accent-bg)]", accentClassName)} />
+        <div className={cn("folio-metric-rule mt-6 h-px rounded-full bg-[var(--accent-bg)]", accentClassName)} />
       </div>
     </div>
   )
@@ -119,5 +119,5 @@ function formatStatusLabel(status?: string) {
 }
 
 export function StatusBadge({ status, label }: { status?: string; label?: string }) {
-  return <span className={cn("workspace-badge", getStatusClasses(status))}>{label ?? formatStatusLabel(status)}</span>
+  return <span className={cn("workspace-badge folio-status-badge", getStatusClasses(status))}>{label ?? formatStatusLabel(status)}</span>
 }

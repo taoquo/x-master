@@ -199,7 +199,7 @@ function DetailDrawerHeader({
   onClose: () => void
 }) {
   return (
-    <section data-testid="detail-hero-section" className="options-detail-hero">
+    <section data-testid="detail-hero-section" className="options-detail-hero folio-detail-hero">
       <div className="options-detail-hero-main min-w-0">
         <div className="options-inspector-avatar">{authorInitials}</div>
         <div className="options-detail-hero-copy min-w-0">
@@ -213,7 +213,7 @@ function DetailDrawerHeader({
           type="button"
           data-testid="detail-open-x-link"
           aria-label={copy.openOnX}
-          className="options-detail-drawer-open-link options-open-x-button options-theme-elevated"
+          className="options-detail-drawer-open-link options-open-x-button folio-secondary-action options-theme-elevated"
           onClick={() => window.open(bookmark.tweetUrl, "_blank", "noopener,noreferrer")}>
           <AppIcon name="external" size={14} />
           <span>{copy.openOnX}</span>
@@ -700,7 +700,7 @@ export function BookmarkInspector({
     .join("") || bookmark.authorHandle.slice(0, 2).toUpperCase()
 
   return (
-    <SurfaceCard chrome="bare" className="options-inspector-shell options-detail-drawer xl:h-[100dvh]">
+    <SurfaceCard chrome="bare" className="options-inspector-shell options-detail-drawer folio-detail-rail xl:h-[100dvh]">
       <DetailDrawerHeader
         bookmark={bookmark}
         copy={copy}

@@ -83,10 +83,10 @@ export function SyncPanel({
     <SurfaceCard
       title={copy.sync}
       description={copy.syncDescription}
-      className="options-theme-panel rounded-[24px] bg-slate-950/80 text-white"
+      className="folio-surface-card options-theme-panel rounded-[24px] bg-slate-950/80 text-white"
       bodyClassName="space-y-5"
     >
-      <div data-testid="popup-sync-card" className="popup-sync-card-body options-theme-panel space-y-5">
+      <div data-testid="popup-sync-card" className="popup-sync-card-body folio-editorial-panel options-theme-panel space-y-5">
         <div data-testid="popup-sync-panel" className="space-y-5">
         <div className="flex items-center justify-between gap-3">
           <StatusBadge status={summary.status} label={statusLabel} />
@@ -121,7 +121,7 @@ export function SyncPanel({
           type="button"
           onClick={() => void onSync()}
           disabled={isSyncing}
-          className="primary-button popup-sync-button options-theme-elevated w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
+          className="primary-button popup-sync-button folio-primary-action options-theme-elevated w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
           <AppIcon name="sync" size={16} className={isSyncing ? "animate-spin" : undefined} />
           <span>{isSyncing ? copy.syncing : copy.syncNow}</span>
         </button>

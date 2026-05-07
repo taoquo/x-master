@@ -881,7 +881,7 @@ function WorkspaceSidebar({
   return (
     <aside
       data-testid="lists-sidebar"
-      className="options-demo-sidebar options-sidebar-shell options-theme-panel flex min-h-[420px] min-w-0 flex-col overflow-hidden">
+      className="options-demo-sidebar options-sidebar-shell folio-index-panel options-theme-panel flex min-h-[420px] min-w-0 flex-col overflow-hidden">
       <section data-testid="sidebar-status-section" className="options-sidebar-hero">
         <div className="options-sidebar-hero-head">
           <div className="options-sidebar-hero-meta">
@@ -894,7 +894,7 @@ function WorkspaceSidebar({
           <BrandLogo
             size={38}
             testId="options-brand-logo"
-            className="rounded-[12px] shadow-[0_14px_28px_-22px_rgba(15,23,42,0.42)]"
+            className="options-sidebar-brand-mark rounded-[12px]"
           />
           <div className="min-w-0 flex-1">
             <h1 className="options-display-title options-sidebar-title truncate">
@@ -912,7 +912,7 @@ function WorkspaceSidebar({
             type="button"
             onClick={() => void workspace.handleSync()}
             disabled={workspace.isSyncing}
-            className="workspace-sync-primary">
+            className="workspace-sync-primary folio-secondary-action">
             <AppIcon name="sync" size={16} className={workspace.isSyncing ? "animate-spin" : undefined} />
             <span>{workspace.isSyncing ? copy.syncing : copy.syncNow}</span>
           </button>
@@ -1261,7 +1261,7 @@ function WorkspaceToolbar({
 
       <InlineMessage message={loadError} className="!rounded-[6px] !border-[var(--border-subtle)] !bg-[var(--tag-bg)] !px-3 !py-2 !text-[12px]" />
 
-      <div data-testid="workspace-toolbar" className="options-toolbar-shell options-theme-panel">
+      <div data-testid="workspace-toolbar" className="options-toolbar-shell folio-filter-bar options-theme-panel">
         <div className="options-toolbar-primary">
           <div className="options-toolbar-search relative min-w-0 flex-1">
             <AppIcon name="search" size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />

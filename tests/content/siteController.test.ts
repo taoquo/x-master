@@ -226,6 +226,7 @@ test("bookmarks controller injects one quick-tag button per article and opens th
   assert.ok(trigger)
   const triggerLogo = queryShadow<HTMLImageElement>(host, '[data-testid="site-tag-trigger-logo"]')
   assert.ok(triggerLogo)
+  assert.match(trigger.className, /folio-site-trigger/)
 
   trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, composed: true }))
   await settle()
@@ -242,6 +243,10 @@ test("bookmarks controller injects one quick-tag button per article and opens th
   assert.match(popover.textContent ?? "", /可用标签/)
   assert.match(popover.className, /theme-panel/)
   assert.match(popover.className, /popover/)
+  assert.match(popover.className, /folio-site-popover/)
+  assert.match((overlayHost as HTMLElement | null)?.shadowRoot?.querySelector("style")?.textContent ?? "", /assets\/fonts\/LXGWWenKai-Regular\.woff2/)
+  assert.match((overlayHost as HTMLElement | null)?.shadowRoot?.querySelector("style")?.textContent ?? "", /assets\/fonts\/LXGWWenKai-Medium\.woff2/)
+  assert.doesNotMatch((overlayHost as HTMLElement | null)?.shadowRoot?.querySelector("style")?.textContent ?? "", /\.ttf/)
   assert.match(backdrop.className, /theme-overlay/)
   assert.match(viewport?.className ?? "", /viewport/)
 
@@ -272,6 +277,7 @@ test("bookmarks controller injects one quick-tag button per article and opens th
   assert.ok(tweetCard)
   assert.match(tweetCard?.className ?? "", /theme-elevated/)
   assert.match(tweetCard?.className ?? "", /tweet-card/)
+  assert.match(tweetCard?.className ?? "", /folio-site-tweet-card/)
   assert.match(createSubmit?.className ?? "", /theme-button-primary/)
   createInput.value = "Research"
   createInput.dispatchEvent(new dom.window.Event("input", { bubbles: true, composed: true }))
