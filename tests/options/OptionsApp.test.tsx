@@ -32,19 +32,6 @@ function findByTestId(container: HTMLDivElement, testId: string) {
   return container.querySelector(`[data-testid="${testId}"]`)
 }
 
-function setSelectValue(
-  element: HTMLSelectElement,
-  value: string,
-  dom: {
-    HTMLSelectElement: typeof HTMLSelectElement
-    Event: typeof Event
-  }
-) {
-  const descriptor = Object.getOwnPropertyDescriptor(dom.HTMLSelectElement.prototype, "value")
-  descriptor?.set?.call(element, value)
-  element.dispatchEvent(new dom.Event("change", { bubbles: true }))
-}
-
 function setInputValue(
   element: HTMLInputElement,
   value: string,
@@ -114,7 +101,7 @@ test("OptionsApp renders the Chinese locale shell and keeps demo shell active", 
   assert.match(container.textContent ?? "", /书签/)
   assert.match(container.textContent ?? "", /标签/)
   assert.match(container.textContent ?? "", /偏好设置/)
-  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+  assert.equal(findByTestId(container, "workspace-detail-modal"), null)
   assert.ok(findByTestId(container, "options-brand-logo"))
 
   assert.equal(findByTestId(container, "toggle-preferences-panel"), null)
@@ -165,7 +152,7 @@ test("OptionsApp uses the shared badge and status surface language", async () =>
   assert.equal(dom.window.document.documentElement.dataset.theme, "dark")
   assert.match(statusBadge.className, /workspace-badge/)
   assert.match(statusBadge.className, /folio-status-badge/)
-  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+  assert.equal(findByTestId(container, "workspace-detail-modal"), null)
   assert.match(findByTestId(container, "lists-sidebar")?.textContent ?? "", /偏好设置/)
 })
 
@@ -319,7 +306,7 @@ test("OptionsApp renders the Figma shell with editorial rails", async () => {
   assert.ok(overview)
   assert.ok(sidebar)
   assert.ok(library)
-  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+  assert.equal(findByTestId(container, "workspace-detail-modal"), null)
   assert.match(overview?.className ?? "", /xl:grid-cols-\[256px_minmax\(0,1fr\)\]/)
   assert.match(sidebar?.textContent ?? "", /工作区/)
   assert.match(sidebar?.textContent ?? "", /偏好设置/)
@@ -331,7 +318,7 @@ test("OptionsApp renders the Figma shell with editorial rails", async () => {
   })
   await settle()
 
-  assert.ok(findByTestId(container, "workspace-detail-drawer"))
+  assert.ok(findByTestId(container, "workspace-detail-modal"))
   assert.ok(findByTestId(container, "inspector-section-stack"))
 })
 
@@ -356,7 +343,7 @@ test("OptionsApp renders the english demo shell by default and hides legacy opti
 
   assert.ok(findByTestId(container, "lists-sidebar"))
   assert.ok(findByTestId(container, "library-workspace"))
-  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+  assert.equal(findByTestId(container, "workspace-detail-modal"), null)
   assert.match(container.textContent ?? "", /Workspace/)
   assert.match(container.textContent ?? "", /Archive/)
   assert.match(container.textContent ?? "", /All bookmarks/)
@@ -859,7 +846,7 @@ test("OptionsApp renders the demo inspector and localized copy", async () => {
   const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
-  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+  assert.equal(findByTestId(container, "workspace-detail-modal"), null)
 
   const card = getBookmarkCards(container)[0] as HTMLElement
   await act(async () => {
@@ -867,12 +854,14 @@ test("OptionsApp renders the demo inspector and localized copy", async () => {
   })
   await settle()
 
-  assert.ok(findByTestId(container, "workspace-detail-drawer"))
+  assert.ok(findByTestId(container, "workspace-detail-modal"))
   assert.match(container.textContent ?? "", /Alice/)
   assert.match(container.textContent ?? "", /@alice/)
   assert.match(container.textContent ?? "", /Inspector content summary/)
   assert.ok(findByTestId(container, "detail-open-x-link"))
-  assert.match(findByTestId(container, "attach-tag-trigger")?.textContent ?? "", /添加标签/)
+  assert.ok(findByTestId(container, "detail-new-tag-input"))
+  assert.ok(findByTestId(container, "detail-create-tag"))
+  assert.equal(findByTestId(container, "attach-tag-trigger"), null)
 })
 
 test("OptionsApp theme toggle keeps system preference reachable", async () => {
@@ -1158,21 +1147,19 @@ test("OptionsApp applies shared theme hooks to chips pills and secondary actions
   await settle()
 
   const openOnXButton = findByTestId(container, "detail-open-x-link") as HTMLButtonElement | null
-  const addTagTrigger = findByTestId(container, "attach-tag-trigger") as HTMLButtonElement | null
+  const tagInput = findByTestId(container, "detail-new-tag-input") as HTMLInputElement | null
   assert.ok(openOnXButton)
-  assert.ok(addTagTrigger)
+  assert.ok(tagInput)
   assert.match(openOnXButton?.className ?? "", /options-theme-elevated/)
-  assert.match(addTagTrigger?.className ?? "", /options-theme-elevated/)
+  assert.equal(tagInput?.getAttribute("list"), "details-tag-options")
 
   await act(async () => {
-    addTagTrigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    setInputValue(tagInput!, followUpTag.name, dom.window)
   })
   await settle()
 
-  const attachTagSelect = container.querySelector('[data-testid="attach-tag-select"]') as HTMLSelectElement
-  assert.ok(attachTagSelect)
   await act(async () => {
-    setSelectValue(attachTagSelect, followUpTag.id, dom.window)
+    tagInput!.form?.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }))
   })
   await settle()
 
@@ -1338,19 +1325,17 @@ test("OptionsApp supports adding existing tags in the inspector without legacy b
   })
   await settle()
 
-  const addTagTrigger = findByTestId(container, "attach-tag-trigger") as HTMLButtonElement | null
-  assert.ok(addTagTrigger)
+  const tagInput = findByTestId(container, "detail-new-tag-input") as HTMLInputElement | null
+  assert.ok(tagInput)
   assert.equal(container.querySelector('[data-testid="attach-tag-select"]'), null)
 
   await act(async () => {
-    addTagTrigger!.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    setInputValue(tagInput!, importantTag.name, dom.window)
   })
   await settle()
 
-  const attachTagSelect = container.querySelector('[data-testid="attach-tag-select"]') as HTMLSelectElement
-  assert.ok(attachTagSelect)
   await act(async () => {
-    setSelectValue(attachTagSelect, importantTag.id, dom.window)
+    tagInput!.form?.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }))
   })
   await settle()
 
@@ -1412,7 +1397,7 @@ test("OptionsApp filters results by selected sidebar tag", async () => {
   assert.ok(findByTestId(container, "workspace-shell"))
   assert.ok(findByTestId(container, "library-workspace"))
   assert.ok(findByTestId(container, "lists-sidebar"))
-  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+  assert.equal(findByTestId(container, "workspace-detail-modal"), null)
   assert.ok(findByTestId(container, "workspace-toolbar"))
   assert.ok(findByTestId(container, "sidebar-lists-scroll"))
   assert.ok(findByTestId(container, "sidebar-list-tree"))
@@ -1466,10 +1451,10 @@ test("OptionsApp uses rail layout and shared field/button primitives", async () 
   assert.match(syncButton?.className ?? "", /workspace-sync-primary/)
   assert.match(syncButton?.className ?? "", /folio-secondary-action/)
   assert.match(searchInput.className, /options-toolbar-field/)
-  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+  assert.equal(findByTestId(container, "workspace-detail-modal"), null)
 })
 
-test("OptionsApp opens the detail drawer on card click and clears selection when it closes", async () => {
+test("OptionsApp opens the detail card on card click and clears selection when it closes", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await upsertBookmarks([
@@ -1501,17 +1486,16 @@ test("OptionsApp opens the detail drawer on card click and clears selection when
   })
   await settle()
 
-  const drawer = findByTestId(container, "workspace-detail-drawer")
+  const modal = findByTestId(container, "workspace-detail-modal")
   const inspector = container.querySelector(".options-inspector-shell") as HTMLElement | null
-  const addTagTrigger = findByTestId(container, "attach-tag-trigger") as HTMLButtonElement | null
   const openOnXButton = findButton(container, "Open on X")
   const openOnXIcon = findByTestId(container, "detail-open-x-link") as HTMLButtonElement | null
   const closeButton = findByTestId(container, "detail-drawer-close") as HTMLButtonElement | null
 
-  assert.ok(drawer)
+  assert.ok(modal)
   assert.ok(inspector)
-  assert.ok(addTagTrigger)
-  assert.match(addTagTrigger?.textContent ?? "", /Add a tag/)
+  assert.ok(findByTestId(container, "detail-new-tag-input"))
+  assert.equal(findByTestId(container, "attach-tag-trigger"), null)
   assert.ok(openOnXButton)
   assert.ok(openOnXIcon)
   assert.ok(closeButton)
@@ -1526,11 +1510,11 @@ test("OptionsApp opens the detail drawer on card click and clears selection when
   })
   await settle()
 
-  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+  assert.equal(findByTestId(container, "workspace-detail-modal"), null)
   assert.doesNotMatch(firstCard.className, /options-result-card-selected/)
 })
 
-test("OptionsApp prioritizes detail drawer hero summary tags and media sections", async () => {
+test("OptionsApp prioritizes detail card hero summary tags and media sections", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await upsertBookmarks([
@@ -1539,7 +1523,7 @@ test("OptionsApp prioritizes detail drawer hero summary tags and media sections"
       tweetUrl: "https://x.com/alice/status/tweet-detail-priority",
       authorName: "Alice",
       authorHandle: "alice",
-      text: "Detail drawer priority content should read like a focused object view, with a stronger hero, a stable summary card, a dedicated media block, and tags separated into current and add layers.",
+      text: "Detail card priority content should read like a focused object view, with a stronger hero, a stable summary card, a dedicated media block, and tags separated into current and add layers.",
       media: [{ type: "photo", url: "https://example.com/detail-priority.jpg" }],
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
@@ -1568,34 +1552,40 @@ test("OptionsApp prioritizes detail drawer hero summary tags and media sections"
   })
   await settle()
 
-  const drawer = findByTestId(container, "workspace-detail-drawer")
+  const modal = findByTestId(container, "workspace-detail-modal")
   const hero = findByTestId(container, "detail-hero-section")
   const heroActions = findByTestId(container, "detail-primary-actions")
-  const meta = findByTestId(container, "inspector-metadata-section")
+  const timeline = findByTestId(container, "inspector-timeline-section")
   const summary = findByTestId(container, "inspector-summary-section")
+  const summaryCard = findByTestId(container, "detail-summary-card")
   const media = findByTestId(container, "inspector-media-section")
   const tags = findByTestId(container, "inspector-tags-section")
   const currentTags = findByTestId(container, "current-tags")
   const currentTagGroup = container.querySelector(".options-detail-tag-group-current") as HTMLElement | null
   const addTagGroup = container.querySelector(".options-detail-tag-group-add") as HTMLElement | null
-  const tagActions = container.querySelector(".options-detail-tag-actions") as HTMLElement | null
-  const attachTrigger = findByTestId(container, "attach-tag-trigger")
+  const tagEntry = container.querySelector(".options-detail-tag-entry") as HTMLElement | null
 
-  assert.ok(drawer)
+  assert.ok(modal)
   assert.ok(hero)
   assert.ok(heroActions)
-  assert.ok(meta)
+  assert.ok(timeline)
   assert.ok(summary)
+  assert.ok(summaryCard)
   assert.ok(media)
   assert.ok(tags)
   assert.ok(currentTags)
   assert.ok(currentTagGroup)
   assert.ok(addTagGroup)
-  assert.ok(tagActions)
-  assert.ok(attachTrigger)
+  assert.ok(tagEntry)
   assert.match(hero?.className ?? "", /options-detail-hero/)
   assert.match(heroActions?.className ?? "", /options-detail-hero-actions/)
-  assert.match(summary?.className ?? "", /options-detail-summary-card/)
+  assert.doesNotMatch(summary?.className ?? "", /options-detail-summary-card/)
+  assert.match(summaryCard?.className ?? "", /options-detail-summary-card/)
+  assert.equal(
+    Boolean((summary as Node).compareDocumentPosition(summaryCard as Node) & dom.window.Node.DOCUMENT_POSITION_CONTAINED_BY),
+    true
+  )
+  assert.doesNotMatch(summaryCard?.textContent ?? "", /Summary/)
   assert.match(media?.className ?? "", /options-detail-media-section/)
   assert.match(media?.className ?? "", /options-detail-media-flow/)
   assert.match(summary?.className ?? "", /options-detail-summary-flow/)
@@ -1603,11 +1593,342 @@ test("OptionsApp prioritizes detail drawer hero summary tags and media sections"
   assert.match(currentTagGroup?.className ?? "", /options-detail-tag-group-current/)
   assert.match(addTagGroup?.className ?? "", /options-detail-tag-group-add/)
   assert.match(currentTags?.className ?? "", /options-detail-current-tags/)
-  assert.match(tagActions?.className ?? "", /options-detail-tag-actions/)
   assert.match(currentTags?.textContent ?? "", /Important/)
-  assert.match(attachTrigger?.className ?? "", /options-detail-add-tag/)
+  assert.match(tagEntry?.className ?? "", /options-detail-tag-entry/)
+  assert.ok(findByTestId(container, "detail-new-tag-input"))
+  assert.equal(findByTestId(container, "attach-tag-trigger"), null)
   assert.ok(Array.from(currentTags?.querySelectorAll(".options-tag-pill") ?? []).length >= 1)
   assert.equal(currentTags?.textContent?.includes("Later"), false)
+})
+
+test("OptionsApp opens bookmark details as a centered focus card with timeline and footer actions", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-focus-card",
+      tweetUrl: "https://x.com/alice/status/tweet-focus-card",
+      authorName: "Alice Chen",
+      authorHandle: "alice",
+      text: "Focused detail content should use the existing bookmark summary text without inventing a replacement.",
+      createdAtOnX: "2026-05-04T15:32:00.000Z",
+      savedAt: "2026-05-05T14:19:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "light",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const card = container.querySelector('[data-bookmark-card="tweet-focus-card"]') as HTMLElement | null
+  assert.ok(card)
+
+  await act(async () => {
+    card.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const modal = findByTestId(container, "workspace-detail-modal")
+  const backdrop = findByTestId(container, "workspace-detail-backdrop")
+  const focusCard = findByTestId(container, "workspace-detail-card")
+  const timeline = findByTestId(container, "inspector-timeline-section")
+  const footer = findByTestId(container, "detail-footer-actions")
+
+  assert.ok(modal)
+  assert.ok(backdrop)
+  assert.ok(focusCard)
+  assert.ok(timeline)
+  assert.ok(footer)
+  assert.match(focusCard?.className ?? "", /options-detail-focus-card/)
+  assert.ok(findByTestId(container, "detail-author-line"))
+  assert.doesNotMatch(findByTestId(container, "detail-hero-section")?.textContent ?? "", /书签内容/)
+  assert.match(timeline?.textContent ?? "", /时间线/)
+  assert.match(timeline?.textContent ?? "", /发布于/)
+  assert.match(timeline?.textContent ?? "", /保存于/)
+  assert.equal(
+    Boolean((timeline as Node).compareDocumentPosition(findByTestId(container, "inspector-summary-section") as Node) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING),
+    true
+  )
+  assert.match(findByTestId(container, "inspector-summary-section")?.textContent ?? "", /Focused detail content/)
+  assert.ok(findButton(container, "复制链接"))
+  assert.ok(findButton(container, "完成"))
+  assert.match(card.className, /options-result-card-selected/)
+  assert.equal(dom.window.document.body.classList.contains("options-detail-scroll-locked"), true)
+})
+
+test("OptionsApp creates and attaches a new tag from the focused detail card", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-create-detail-tag",
+      tweetUrl: "https://x.com/alice/status/tweet-create-detail-tag",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Create tag inside detail card",
+      createdAtOnX: "2026-05-04T15:32:00.000Z",
+      savedAt: "2026-05-05T14:19:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "light",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const card = getBookmarkCards(container)[0] as HTMLElement
+  await act(async () => {
+    card.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const tagInput = findByTestId(container, "detail-new-tag-input") as HTMLInputElement | null
+  const addButton = findByTestId(container, "detail-create-tag") as HTMLButtonElement | null
+
+  assert.ok(tagInput)
+  assert.ok(addButton)
+  assert.ok(findByTestId(container, "current-tags"))
+  assert.equal(findByTestId(container, "attach-tag-trigger"), null)
+
+  await act(async () => {
+    setInputValue(tagInput, "法国", dom.window)
+  })
+  await settle()
+
+  await act(async () => {
+    tagInput.form?.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }))
+  })
+  await settle()
+  await settle()
+
+  assert.match(findByTestId(container, "current-tags")?.textContent ?? "", /法国/)
+  assert.equal(tagInput.value, "")
+})
+
+test("OptionsApp reuses the detail tag entry to attach an existing tag by name", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-reuse-detail-tag",
+      tweetUrl: "https://x.com/alice/status/tweet-reuse-detail-tag",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Reuse tag entry inside detail card",
+      createdAtOnX: "2026-05-04T15:32:00.000Z",
+      savedAt: "2026-05-05T14:19:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await createTag({ name: "法国" })
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "light",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const card = getBookmarkCards(container)[0] as HTMLElement
+  await act(async () => {
+    card.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const tagInput = findByTestId(container, "detail-new-tag-input") as HTMLInputElement | null
+  const attachTrigger = findByTestId(container, "attach-tag-trigger") as HTMLButtonElement | null
+
+  assert.ok(tagInput)
+  assert.equal(attachTrigger, null)
+  assert.equal((findByTestId(container, "detail-create-tag") as HTMLButtonElement | null)?.textContent?.includes("添加标签"), true)
+
+  await act(async () => {
+    setInputValue(tagInput, "法国", dom.window)
+  })
+  await settle()
+
+  await act(async () => {
+    tagInput.form?.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }))
+  })
+  await settle()
+  await settle()
+
+  assert.match(findByTestId(container, "current-tags")?.textContent ?? "", /法国/)
+  assert.equal(findByTestId(container, "attach-tag-trigger"), null)
+})
+
+test("OptionsApp closes the centered detail card from backdrop and done action", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-focus-close",
+      tweetUrl: "https://x.com/alice/status/tweet-focus-close",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Closing focused modal",
+      createdAtOnX: "2026-05-04T15:32:00.000Z",
+      savedAt: "2026-05-05T14:19:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "light",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const card = getBookmarkCards(container)[0] as HTMLElement
+  await act(async () => {
+    card.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.ok(findByTestId(container, "workspace-detail-modal"))
+
+  await act(async () => {
+    ;(findByTestId(container, "workspace-detail-backdrop") as HTMLButtonElement).dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true })
+    )
+  })
+  await settle()
+
+  assert.equal(findByTestId(container, "workspace-detail-modal"), null)
+  assert.doesNotMatch(card.className, /options-result-card-selected/)
+  assert.equal(dom.window.document.body.classList.contains("options-detail-scroll-locked"), false)
+
+  await act(async () => {
+    card.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const doneButton = findButton(container, "完成") as HTMLButtonElement | undefined
+  assert.ok(doneButton)
+
+  await act(async () => {
+    doneButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.equal(findByTestId(container, "workspace-detail-modal"), null)
+  assert.equal(dom.window.document.body.classList.contains("options-detail-scroll-locked"), false)
+})
+
+test("OptionsApp copies the bookmark link from the focused detail card", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-copy-link",
+      tweetUrl: "https://x.com/alice/status/tweet-copy-link",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Copy link bookmark",
+      createdAtOnX: "2026-05-04T15:32:00.000Z",
+      savedAt: "2026-05-05T14:19:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  let copiedText = ""
+  Object.defineProperty(dom.window.navigator, "clipboard", {
+    configurable: true,
+    value: {
+      writeText: async (value: string) => {
+        copiedText = value
+      }
+    }
+  })
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: dom.window.navigator
+  })
+
+  const card = getBookmarkCards(container)[0] as HTMLElement
+  await act(async () => {
+    card.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const copyButton = findButton(container, "Copy link") as HTMLButtonElement | undefined
+  assert.ok(copyButton)
+
+  await act(async () => {
+    copyButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.equal(copiedText, "https://x.com/alice/status/tweet-copy-link")
+  assert.equal(findByTestId(container, "detail-toast"), null)
+})
+
+test("OptionsApp keeps copy link available and shows a toast when no source link exists", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-missing-link",
+      tweetUrl: "",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Missing link bookmark",
+      createdAtOnX: "2026-05-04T15:32:00.000Z",
+      savedAt: "2026-05-05T14:19:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "light",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const card = getBookmarkCards(container)[0] as HTMLElement
+  await act(async () => {
+    card.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const copyButton = findButton(container, "复制链接") as HTMLButtonElement | undefined
+  assert.ok(copyButton)
+
+  await act(async () => {
+    copyButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const toast = findByTestId(container, "detail-toast")
+  assert.ok(toast)
+  assert.match(toast?.textContent ?? "", /暂无可复制链接/)
 })
 
 test("OptionsApp supports keyboard selection from bookmark cards", async () => {
@@ -1639,7 +1960,7 @@ test("OptionsApp supports keyboard selection from bookmark cards", async () => {
   })
   await settle()
 
-  assert.ok(findByTestId(container, "workspace-detail-drawer"))
+  assert.ok(findByTestId(container, "workspace-detail-modal"))
   assert.match(card.className, /options-result-card-selected/)
   assert.equal(card.getAttribute("aria-pressed"), "true")
 })
@@ -1701,7 +2022,7 @@ test("OptionsApp renders a dedicated media section in the inspector when a bookm
   assert.equal(findByTestId(container, "media-lightbox"), null)
 })
 
-test("OptionsApp previews video media as a poster in the drawer and plays it in the modal", async () => {
+test("OptionsApp previews video media as a poster in the modal and plays it in the modal", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await upsertBookmarks([
@@ -1831,12 +2152,12 @@ test("OptionsApp falls back to rawPayload poster data for legacy video bookmarks
   await settle()
 
   const cardPoster = container.querySelector('[data-card-media-index="0"] img') as HTMLImageElement | null
-  const drawerPoster = container.querySelector('[data-testid="inspector-media-trigger"] img') as HTMLImageElement | null
+  const modalPoster = container.querySelector('[data-testid="inspector-media-trigger"] img') as HTMLImageElement | null
 
   assert.ok(cardPoster)
-  assert.ok(drawerPoster)
+  assert.ok(modalPoster)
   assert.equal(cardPoster?.getAttribute("src"), "https://example.com/video-poster-from-raw.jpg")
-  assert.equal(drawerPoster?.getAttribute("src"), "https://example.com/video-poster-from-raw.jpg")
+  assert.equal(modalPoster?.getAttribute("src"), "https://example.com/video-poster-from-raw.jpg")
 })
 
 test("OptionsApp reuses legacy rawPayload poster data inside the media modal", async () => {
@@ -1890,16 +2211,16 @@ test("OptionsApp reuses legacy rawPayload poster data inside the media modal", a
   assert.equal(lightboxVideo?.getAttribute("poster"), "https://example.com/video-poster-from-raw-modal.jpg")
 })
 
-test("OptionsApp closes the detail drawer on Escape", async () => {
+test("OptionsApp closes the detail card on Escape", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await upsertBookmarks([
     {
-      tweetId: "tweet-drawer-escape",
-      tweetUrl: "https://x.com/alice/status/tweet-drawer-escape",
+      tweetId: "tweet-modal-escape",
+      tweetUrl: "https://x.com/alice/status/tweet-modal-escape",
       authorName: "Alice",
       authorHandle: "alice",
-      text: "Escape closes the drawer",
+      text: "Escape closes the modal",
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
       rawPayload: {}
@@ -1915,14 +2236,14 @@ test("OptionsApp closes the detail drawer on Escape", async () => {
   })
   await settle()
 
-  assert.ok(findByTestId(container, "workspace-detail-drawer"))
+  assert.ok(findByTestId(container, "workspace-detail-modal"))
 
   await act(async () => {
     dom.window.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
   })
   await settle()
 
-  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+  assert.equal(findByTestId(container, "workspace-detail-modal"), null)
   assert.doesNotMatch(card.className, /options-result-card-selected/)
 })
 
@@ -2401,15 +2722,15 @@ test("OptionsApp keeps sidebar lists and library results in separate scroll regi
   const librarySummary = findByTestId(container, "library-results-summary")
   const toolbar = findByTestId(container, "workspace-toolbar")
   const resultsScroll = findByTestId(container, "library-results-scroll")
-  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+  assert.equal(findByTestId(container, "workspace-detail-modal"), null)
   const firstCard = getBookmarkCards(container)[0]
   await act(async () => {
     firstCard.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
 
-  const inspector = findByTestId(container, "workspace-detail-drawer")
-  const inspectorMeta = findByTestId(container, "inspector-metadata-section")
+  const inspector = findByTestId(container, "workspace-detail-modal")
+  const inspectorTimeline = findByTestId(container, "inspector-timeline-section")
   const inspectorSummary = findByTestId(container, "inspector-summary-section")
   const inspectorTags = findByTestId(container, "inspector-tags-section")
 
@@ -2424,7 +2745,7 @@ test("OptionsApp keeps sidebar lists and library results in separate scroll regi
   assert.ok(librarySummary)
   assert.ok(toolbar)
   assert.ok(resultsScroll)
-  assert.ok(inspectorMeta)
+  assert.ok(inspectorTimeline)
   assert.ok(inspectorSummary)
   assert.ok(inspectorTags)
   assert.equal(sidebar.contains(sidebarStatus), true)
@@ -2511,7 +2832,7 @@ test("OptionsApp truncates the sidebar title instead of overflowing", async () =
   assert.match(title.className, /truncate/)
 })
 
-test("OptionsApp keeps only the left split handle in drawer mode", async () => {
+test("OptionsApp keeps only the left split handle in modal mode", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await saveSettings({
@@ -2632,7 +2953,7 @@ test("OptionsApp keeps the real three-pane shell visible while the first workspa
   assert.ok(findByTestId(container, "lists-sidebar"))
   assert.ok(findByTestId(container, "workspace-sidebar-sync"))
   assert.ok(findByTestId(container, "workspace-toolbar"))
-  assert.equal(findByTestId(container, "workspace-detail-drawer"), null)
+  assert.equal(findByTestId(container, "workspace-detail-modal"), null)
 
    await settle()
 })

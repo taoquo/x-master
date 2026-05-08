@@ -15,6 +15,9 @@ type DetailCopy = {
   noBookmarkSelectedDescription: string
   timeLabel: string
   savedTime: string
+  timelineTitle: string
+  publishedAt: string
+  savedAt: string
   summaryTitle: string
   mediaTitle: string
   closePreview: string
@@ -23,10 +26,12 @@ type DetailCopy = {
   tagsTitle: string
   noTagsYet: string
   addTag: string
-}
-
-function cn(...parts: Array<string | false | null | undefined>) {
-  return parts.filter(Boolean).join(" ")
+  selectTag: string
+  createTagLabel: string
+  createTagPrompt: string
+  copyLink: string
+  done: string
+  noLinkToCopy: string
 }
 
 function createFieldId(scope: string, name: string) {
@@ -74,38 +79,27 @@ function getMediaPosterUrl(bookmark: BookmarkRecord, mediaIndex = 0) {
   return rawMedia?.media_url_https ?? rawMedia?.media_url ?? undefined
 }
 
-function SelectField({
-  id,
-  value,
-  onChange,
-  options,
-  className,
-  dataTestId,
-  ariaLabel
-}: {
-  id: string
-  value: string
-  onChange: (value: string) => void
-  options: Array<{ value: string; label: string }>
-  className?: string
-  dataTestId?: string
-  ariaLabel?: string
-}) {
-  return (
-    <select
-      id={id}
-      data-testid={dataTestId}
-      aria-label={ariaLabel}
-      value={value}
-      onChange={(event) => onChange(event.currentTarget.value)}
-      className={cn("field-shell w-full appearance-none pr-10", className)}>
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  )
+function getSourceLink(bookmark: BookmarkRecord) {
+  const fieldNames = ["url", "link", "tweetUrl", "sourceUrl", "externalUrl"]
+  const sources = [
+    bookmark as unknown as Record<string, unknown>,
+    bookmark.rawPayload as Record<string, unknown> | null | undefined
+  ]
+
+  for (const source of sources) {
+    if (!source || typeof source !== "object") {
+      continue
+    }
+
+    for (const fieldName of fieldNames) {
+      const value = source[fieldName]
+      if (typeof value === "string" && value.trim()) {
+        return value.trim()
+      }
+    }
+  }
+
+  return null
 }
 
 function BookmarkMediaSection({
@@ -187,15 +181,17 @@ function EmptyInspectorState({ copy }: { copy: DetailCopy }) {
   )
 }
 
-function DetailDrawerHeader({
+function DetailFocusHeader({
   bookmark,
   copy,
   authorInitials,
+  sourceLink,
   onClose
 }: {
   bookmark: BookmarkRecord
   copy: DetailCopy
   authorInitials: string
+  sourceLink: string | null
   onClose: () => void
 }) {
   return (
@@ -203,9 +199,10 @@ function DetailDrawerHeader({
       <div className="options-detail-hero-main min-w-0">
         <div className="options-inspector-avatar">{authorInitials}</div>
         <div className="options-detail-hero-copy min-w-0">
-          <div className="options-detail-hero-eyebrow">{copy.bookmarkFocus}</div>
-          <p className="options-detail-hero-name truncate">{bookmark.authorName}</p>
-          <p className="options-detail-hero-handle truncate">@{bookmark.authorHandle}</p>
+          <div data-testid="detail-author-line" className="options-detail-author-line">
+            <p className="options-detail-hero-name truncate">{bookmark.authorName}</p>
+            <p className="options-detail-hero-handle truncate">@{bookmark.authorHandle}</p>
+          </div>
         </div>
       </div>
       <div data-testid="detail-primary-actions" className="options-detail-hero-actions">
@@ -214,7 +211,14 @@ function DetailDrawerHeader({
           data-testid="detail-open-x-link"
           aria-label={copy.openOnX}
           className="options-detail-drawer-open-link options-open-x-button folio-secondary-action options-theme-elevated"
-          onClick={() => window.open(bookmark.tweetUrl, "_blank", "noopener,noreferrer")}>
+          disabled={!sourceLink}
+          onClick={() => {
+            if (!sourceLink) {
+              return
+            }
+
+            window.open(sourceLink, "_blank", "noopener,noreferrer")
+          }}>
           <AppIcon name="external" size={14} />
           <span>{copy.openOnX}</span>
         </button>
@@ -231,7 +235,7 @@ function DetailDrawerHeader({
   )
 }
 
-function DetailMetadataSection({
+function DetailTimelineSection({
   copy,
   detailTimestamp,
   savedTimestamp
@@ -241,15 +245,27 @@ function DetailMetadataSection({
   savedTimestamp: string
 }) {
   return (
-    <section data-testid="inspector-metadata-section" className="options-detail-drawer-meta">
-      <div className="options-detail-drawer-meta-row options-detail-meta-grid">
-        <div className="options-detail-meta-item">
-          <span className="options-detail-meta-label">{copy.timeLabel}</span>
-          <span className="options-detail-meta-value">{detailTimestamp}</span>
+    <section data-testid="inspector-timeline-section" className="options-inspector-section options-detail-timeline-section">
+      <div className="options-detail-section-overline">{copy.timelineTitle}</div>
+      <div className="options-detail-timeline">
+        <div className="options-detail-time-node">
+          <span className="options-detail-time-icon" aria-hidden="true">
+            <AppIcon name="globe" size={15} />
+          </span>
+          <div className="options-detail-time-copy">
+            <span className="options-detail-meta-label">{copy.publishedAt}</span>
+            <span className="options-detail-meta-value">{detailTimestamp}</span>
+          </div>
         </div>
-        <div className="options-detail-meta-item">
-          <span className="options-detail-meta-label">{copy.savedTime}</span>
-          <span className="options-detail-meta-value">{savedTimestamp}</span>
+        <span className="options-detail-time-connector" aria-hidden="true" />
+        <div className="options-detail-time-node">
+          <span className="options-detail-time-icon" aria-hidden="true">
+            <AppIcon name="bookmark" size={15} />
+          </span>
+          <div className="options-detail-time-copy">
+            <span className="options-detail-meta-label">{copy.savedAt}</span>
+            <span className="options-detail-meta-value">{savedTimestamp}</span>
+          </div>
         </div>
       </div>
     </section>
@@ -264,106 +280,154 @@ function DetailSummarySection({
   text: string
 }) {
   return (
-    <section data-testid="inspector-summary-section" className="options-inspector-section options-detail-summary-card options-detail-summary-flow">
+    <section data-testid="inspector-summary-section" className="options-inspector-section options-detail-summary-section options-detail-summary-flow">
       <div className="options-detail-section-overline">{copy.summaryTitle}</div>
-      <p className="options-body-copy options-inspector-summary options-detail-summary-copy">{text}</p>
+      <div data-testid="detail-summary-card" className="options-detail-summary-card">
+        <span className="options-detail-summary-quote" aria-hidden="true">“</span>
+        <p className="options-body-copy options-inspector-summary options-detail-summary-copy">{text}</p>
+      </div>
     </section>
+  )
+}
+
+function DetailFooterActions({
+  copy,
+  onCopyLink,
+  onDone
+}: {
+  copy: DetailCopy
+  onCopyLink: () => void
+  onDone: () => void
+}) {
+  return (
+    <footer data-testid="detail-footer-actions" className="options-detail-footer">
+      <button
+        type="button"
+        data-testid="detail-copy-link"
+        className="options-secondary-button options-detail-copy-link"
+        onClick={onCopyLink}>
+        <AppIcon name="copy" size={16} />
+        <span>{copy.copyLink}</span>
+      </button>
+      <button
+        type="button"
+        data-testid="detail-done"
+        className="primary-button options-detail-done-button"
+        onClick={onDone}>
+        <span>{copy.done}</span>
+      </button>
+    </footer>
+  )
+}
+
+function DetailTagEntry({
+  copy,
+  availableTagOptions,
+  draftTagName,
+  isSubmittingTag,
+  tagOptionsListId,
+  onDraftTagNameChange,
+  onSubmitTag
+}: {
+  copy: DetailCopy
+  availableTagOptions: TagRecord[]
+  draftTagName: string
+  isSubmittingTag: boolean
+  tagOptionsListId: string
+  onDraftTagNameChange: (name: string) => void
+  onSubmitTag: (name?: string) => Promise<void>
+}) {
+  return (
+    <form
+      className="options-detail-tag-entry"
+      onSubmit={(event) => {
+        event.preventDefault()
+        const tagInput = event.currentTarget.elements.namedItem("detail-tag-name") as HTMLInputElement | null
+        void onSubmitTag(tagInput?.value)
+      }}>
+      <input
+        data-testid="detail-new-tag-input"
+        name="detail-tag-name"
+        list={availableTagOptions.length ? tagOptionsListId : undefined}
+        className="options-detail-new-tag-input"
+        value={draftTagName}
+        placeholder={copy.createTagPrompt}
+        aria-label={copy.createTagLabel}
+        onChange={(event) => onDraftTagNameChange(event.currentTarget.value)}
+      />
+      {availableTagOptions.length ? (
+        <datalist data-testid="detail-tag-options" id={tagOptionsListId}>
+          {availableTagOptions.map((tag) => (
+            <option key={tag.id} value={tag.name} />
+          ))}
+        </datalist>
+      ) : null}
+      <button
+        type="submit"
+        data-testid="detail-create-tag"
+        className="chip-button options-tag-pill options-tag-pill-add options-detail-add-tag options-theme-elevated"
+        disabled={isSubmittingTag || !draftTagName.trim()}>
+        <span aria-hidden="true">+</span>
+        <span>{copy.addTag}</span>
+      </button>
+    </form>
   )
 }
 
 function DetailTagsSection({
   locale,
   copy,
-  tags,
   currentTags,
   availableTagOptions,
-  selectedTagId,
-  isAttachTagOpen,
-  attachSelectId,
-  onSelectedTagIdChange,
-  onAttachTag,
-  onDetachTag,
-  onAttachTagOpenChange
+  draftTagName,
+  isSubmittingTag,
+  tagOptionsListId,
+  onDraftTagNameChange,
+  onSubmitTag,
+  onDetachTag
 }: {
   locale: Locale
   copy: DetailCopy
-  tags: TagRecord[]
   currentTags: TagRecord[]
   availableTagOptions: TagRecord[]
-  selectedTagId: string
-  isAttachTagOpen: boolean
-  attachSelectId: string
-  onSelectedTagIdChange: (tagId: string) => void
-  onAttachTag: (tagId: string) => Promise<void>
+  draftTagName: string
+  isSubmittingTag: boolean
+  tagOptionsListId: string
+  onDraftTagNameChange: (name: string) => void
+  onSubmitTag: (name?: string) => Promise<void>
   onDetachTag: (tagId: string) => Promise<void>
-  onAttachTagOpenChange: (open: boolean) => void
 }) {
   return (
     <section data-testid="inspector-tags-section" className="options-inspector-section options-inspector-divider options-detail-tags-section">
       <div className="options-detail-section-overline">{getSectionOverline(locale, copy.tagsTitle, "Tags")}</div>
-      <div className="options-detail-tag-group options-detail-tag-group-current">
-        <div data-testid="current-tags" className="options-detail-current-tags mt-2 flex flex-wrap gap-2">
-          {!currentTags.length ? <span className="options-meta-copy">{copy.noTagsYet}</span> : null}
-          {currentTags.map((tag) => (
-            <button
-              key={tag.id}
-              type="button"
-              onClick={() => void onDetachTag(tag.id)}
-              className="chip-button options-tag-pill options-theme-elevated">
-              <span>{tag.name}</span>
-              <AppIcon name="close" size={12} />
-            </button>
-          ))}
-        </div>
-      </div>
-      {availableTagOptions.length || !tags.length ? (
-        <div className="options-detail-tag-group options-detail-tag-group-add">
-          <div className="options-detail-tag-actions">
-            {availableTagOptions.length && isAttachTagOpen ? (
-              <div data-testid="attach-tag-inline-shell" className="options-tag-inline-editor">
-                <SelectField
-                  id={attachSelectId}
-                  dataTestId="attach-tag-select"
-                  value={selectedTagId}
-                  onChange={(nextTagId) => {
-                    onSelectedTagIdChange(nextTagId)
-
-                    if (!nextTagId) {
-                      return
-                    }
-
-                    void onAttachTag(nextTagId)
-                      .then(() => {
-                        onSelectedTagIdChange("")
-                        onAttachTagOpenChange(false)
-                      })
-                      .catch(() => {
-                        onSelectedTagIdChange("")
-                        onAttachTagOpenChange(false)
-                      })
-                  }}
-                  options={[
-                    { value: "", label: copy.addTag },
-                    ...availableTagOptions.map((tag) => ({ value: tag.id, label: tag.name }))
-                  ]}
-                  className="options-tag-inline-select"
-                />
-              </div>
-            ) : (
+      <div className="options-detail-tags-row">
+        <div className="options-detail-tag-group options-detail-tag-group-current">
+          <div data-testid="current-tags" className="options-detail-current-tags flex flex-wrap gap-2">
+            {!currentTags.length ? <span className="options-meta-copy">{copy.noTagsYet}</span> : null}
+            {currentTags.map((tag) => (
               <button
+                key={tag.id}
                 type="button"
-                data-testid="attach-tag-trigger"
-                aria-label={copy.addTag}
-                className="chip-button options-tag-pill options-tag-pill-add options-detail-add-tag options-theme-elevated"
-                disabled={!availableTagOptions.length}
-                onClick={() => onAttachTagOpenChange(true)}>
-                <span aria-hidden="true">+</span>
-                <span>{copy.addTag}</span>
+                onClick={() => void onDetachTag(tag.id)}
+                className="chip-button options-tag-pill options-theme-elevated">
+                <span>{tag.name}</span>
+                <AppIcon name="close" size={12} />
               </button>
-            )}
+            ))}
           </div>
         </div>
-      ) : null}
+        <div className="options-detail-tag-group options-detail-tag-group-add">
+          <DetailTagEntry
+            copy={copy}
+            availableTagOptions={availableTagOptions}
+            draftTagName={draftTagName}
+            isSubmittingTag={isSubmittingTag}
+            tagOptionsListId={tagOptionsListId}
+            onDraftTagNameChange={onDraftTagNameChange}
+            onSubmitTag={onSubmitTag}
+          />
+        </div>
+      </div>
     </section>
   )
 }
@@ -489,6 +553,7 @@ export function BookmarkInspector({
   copy,
   onAttachTag,
   onDetachTag,
+  onCreateTag,
   onClose
 }: {
   bookmark: BookmarkRecord | null
@@ -498,11 +563,13 @@ export function BookmarkInspector({
   copy: DetailCopy
   onAttachTag: (tagId: string) => Promise<void>
   onDetachTag: (tagId: string) => Promise<void>
+  onCreateTag: (name: string) => Promise<TagRecord | undefined | void>
   onClose: () => void
 }) {
-  const [selectedTagId, setSelectedTagId] = useState("")
-  const [isAttachTagOpen, setIsAttachTagOpen] = useState(false)
+  const [draftTagName, setDraftTagName] = useState("")
+  const [isSubmittingTag, setIsSubmittingTag] = useState(false)
   const [previewMediaIndex, setPreviewMediaIndex] = useState<number | null>(null)
+  const [toastMessage, setToastMessage] = useState("")
   const inspectorScrollRef = useRef<HTMLDivElement | null>(null)
   const lightboxRef = useRef<HTMLDivElement | null>(null)
   const lightboxCloseButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -511,9 +578,10 @@ export function BookmarkInspector({
   const hasMultipleMedia = mediaItems.length > 1
 
   useEffect(() => {
-    setSelectedTagId("")
-    setIsAttachTagOpen(false)
+    setDraftTagName("")
+    setIsSubmittingTag(false)
     setPreviewMediaIndex(null)
+    setToastMessage("")
     if (inspectorScrollRef.current) {
       if (typeof inspectorScrollRef.current.scrollTo === "function") {
         inspectorScrollRef.current.scrollTo({ top: 0, behavior: "auto" })
@@ -522,6 +590,15 @@ export function BookmarkInspector({
       }
     }
   }, [bookmark?.tweetId])
+
+  useEffect(() => {
+    if (!toastMessage) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => setToastMessage(""), 2200)
+    return () => window.clearTimeout(timeoutId)
+  }, [toastMessage])
 
   useEffect(() => {
     if (previewMediaIndex === null || typeof window === "undefined") {
@@ -680,6 +757,54 @@ export function BookmarkInspector({
     })
   }
 
+  async function handleCopyLink() {
+    if (!bookmark) {
+      return
+    }
+
+    const sourceLink = getSourceLink(bookmark)
+
+    if (!sourceLink || !navigator.clipboard?.writeText) {
+      setToastMessage(copy.noLinkToCopy)
+      return
+    }
+
+    await navigator.clipboard.writeText(sourceLink)
+  }
+
+  async function handleSubmitTag(nextName?: string) {
+    if (!bookmark || isSubmittingTag) {
+      return
+    }
+
+    const trimmedName = (nextName ?? draftTagName).trim()
+    if (!trimmedName) {
+      return
+    }
+
+    setIsSubmittingTag(true)
+
+    try {
+      const reusableTag = availableTagOptions.find((tag) => tag.name.localeCompare(trimmedName, undefined, { sensitivity: "accent" }) === 0)
+      let tagId = reusableTag?.id ?? ""
+
+      if (!tagId) {
+        const createdTag = await onCreateTag(trimmedName)
+        tagId = typeof createdTag === "object" && createdTag && "id" in createdTag
+          ? String((createdTag as TagRecord).id)
+          : ""
+      }
+
+      if (tagId) {
+        await onAttachTag(tagId)
+      }
+
+      setDraftTagName("")
+    } finally {
+      setIsSubmittingTag(false)
+    }
+  }
+
   if (!bookmark) {
     return <EmptyInspectorState copy={copy} />
   }
@@ -689,9 +814,10 @@ export function BookmarkInspector({
   )
   const availableTagOptions = tags.filter((tag) => !currentTags.some((currentTag) => currentTag.id === tag.id))
 
-  const attachSelectId = createFieldId("details", "attach-tag")
+  const tagOptionsListId = createFieldId("details", "tag-options")
   const detailTimestamp = formatTimestamp(bookmark.createdAtOnX || bookmark.savedAt, locale)
   const savedTimestamp = formatTimestamp(bookmark.savedAt, locale)
+  const sourceLink = getSourceLink(bookmark)
   const authorInitials = bookmark.authorName
     .split(/\s+/)
     .filter(Boolean)
@@ -700,44 +826,55 @@ export function BookmarkInspector({
     .join("") || bookmark.authorHandle.slice(0, 2).toUpperCase()
 
   return (
-    <SurfaceCard chrome="bare" className="options-inspector-shell options-detail-drawer folio-detail-rail xl:h-[100dvh]">
-      <DetailDrawerHeader
+    <SurfaceCard chrome="bare" className="options-inspector-shell options-detail-dialog folio-detail-rail">
+      <DetailFocusHeader
         bookmark={bookmark}
         copy={copy}
         authorInitials={authorInitials}
+        sourceLink={sourceLink}
         onClose={onClose}
       />
       <div
         ref={inspectorScrollRef}
         data-testid="inspector-section-stack"
-        className="scroll-shell flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-6">
-        <DetailMetadataSection
+        className="scroll-shell options-detail-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-6">
+        <DetailTimelineSection
           copy={copy}
           detailTimestamp={detailTimestamp}
           savedTimestamp={savedTimestamp}
         />
+        <DetailSummarySection copy={copy} text={bookmark.text} />
         <BookmarkMediaSection
           bookmark={bookmark}
           locale={locale}
           copy={copy}
           onPreview={handleOpenPreview}
         />
-        <DetailSummarySection copy={copy} text={bookmark.text} />
         <DetailTagsSection
           locale={locale}
           copy={copy}
-          tags={tags}
           currentTags={currentTags}
           availableTagOptions={availableTagOptions}
-          selectedTagId={selectedTagId}
-          isAttachTagOpen={isAttachTagOpen}
-          attachSelectId={attachSelectId}
-          onSelectedTagIdChange={setSelectedTagId}
-          onAttachTag={onAttachTag}
+          draftTagName={draftTagName}
+          isSubmittingTag={isSubmittingTag}
+          tagOptionsListId={tagOptionsListId}
+          onDraftTagNameChange={setDraftTagName}
+          onSubmitTag={handleSubmitTag}
           onDetachTag={onDetachTag}
-          onAttachTagOpenChange={setIsAttachTagOpen}
         />
       </div>
+      <DetailFooterActions
+        copy={copy}
+        onCopyLink={() => {
+          void handleCopyLink()
+        }}
+        onDone={onClose}
+      />
+      {toastMessage ? (
+        <div data-testid="detail-toast" className="options-detail-toast" role="status">
+          {toastMessage}
+        </div>
+      ) : null}
       {previewMediaUrl ? (
         <DetailMediaLightbox
           copy={copy}

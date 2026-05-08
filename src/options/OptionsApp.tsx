@@ -184,6 +184,9 @@ function getOptionsCopy(locale: Locale) {
       metadataTitle: "元数据",
       detailLabel: "详情",
       timeLabel: "时间",
+      timelineTitle: "时间线",
+      publishedAt: "发布于",
+      savedAt: "保存于",
       summaryTitle: "内容摘要",
       mediaTitle: "媒体资源",
       openOnX: "在 X 中打开",
@@ -197,6 +200,9 @@ function getOptionsCopy(locale: Locale) {
       attachExistingTag: "附加已有标签",
       selectTag: "选择标签",
       addTag: "添加标签",
+      copyLink: "复制链接",
+      done: "完成",
+      noLinkToCopy: "暂无可复制链接",
       assignmentTitle: "归档",
       bookmarkFocus: "书签内容",
       primaryList: "主列表",
@@ -303,6 +309,9 @@ function getOptionsCopy(locale: Locale) {
     metadataTitle: "Metadata",
     detailLabel: "Details",
     timeLabel: "Time",
+    timelineTitle: "Timeline",
+    publishedAt: "Published",
+    savedAt: "Saved",
     summaryTitle: "Summary",
     mediaTitle: "Media",
     openOnX: "Open on X",
@@ -316,6 +325,9 @@ function getOptionsCopy(locale: Locale) {
     attachExistingTag: "Attach existing tag",
     selectTag: "Select a tag",
     addTag: "Add a tag",
+    copyLink: "Copy link",
+    done: "Done",
+    noLinkToCopy: "No link available",
     assignmentTitle: "Assignment",
     bookmarkFocus: "Bookmark focus",
     primaryList: "Primary list",
@@ -1727,7 +1739,6 @@ function OptionsScreen() {
     visibleBookmarks.find((bookmark) => bookmark.tweetId === selectedBookmarkId) ??
     workspace.bookmarks.find((bookmark) => bookmark.tweetId === selectedBookmarkId) ??
     null
-  const detailDrawerWidth = Math.min(520, Math.max(440, rightSidebarWidth))
 
   const tagNamesByBookmarkId = useMemo(() => {
     const map = new Map<string, string[]>()
@@ -1766,6 +1777,22 @@ function OptionsScreen() {
     onlyLongform ? { key: "longform", label: copy.longform } : null
   ].filter(Boolean) as Array<{ key: string; label: string }>
   const coldStartLoading = workspace.isLoading && !workspace.bookmarks.length
+
+  useEffect(() => {
+    if (!selectedBookmark || typeof document === "undefined") {
+      return
+    }
+
+    const { body } = document
+    const previousOverflow = body.style.overflow
+    body.style.overflow = "hidden"
+    body.classList.add("options-detail-scroll-locked")
+
+    return () => {
+      body.style.overflow = previousOverflow
+      body.classList.remove("options-detail-scroll-locked")
+    }
+  }, [selectedBookmark])
 
   function clearRefinement(key: string) {
     if (key === "query") {
@@ -1927,10 +1954,17 @@ function OptionsScreen() {
 
               {coldStartLoading ? null : selectedBookmark ? (
                 <section
-                  data-testid="workspace-detail-drawer"
-                  className="options-detail-drawer-shell"
-                  style={{ width: `${detailDrawerWidth}px` }}>
-                  <div data-testid="workspace-inspector" className="h-full">
+                  data-testid="workspace-detail-modal"
+                  role="presentation"
+                  className="options-detail-modal">
+                  <button
+                    type="button"
+                    data-testid="workspace-detail-backdrop"
+                    aria-label={copy.detailsTitle}
+                    className="options-detail-backdrop"
+                    onClick={() => setSelectedBookmarkId(undefined)}
+                  />
+                  <div data-testid="workspace-detail-card" className="options-detail-focus-card">
                     <BookmarkInspector
                       bookmark={selectedBookmark}
                       tags={workspace.tags}
@@ -1951,6 +1985,7 @@ function OptionsScreen() {
 
                         await workspace.handleDetachTag(selectedBookmark.tweetId, tagId)
                       }}
+                      onCreateTag={workspace.handleCreateTag}
                       onClose={() => setSelectedBookmarkId(undefined)}
                     />
                   </div>
