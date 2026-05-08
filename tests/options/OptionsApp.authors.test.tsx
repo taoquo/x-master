@@ -58,6 +58,7 @@ test("OptionsApp filters results by selected sidebar author", async () => {
       tweetUrl: "https://x.com/bob/status/tweet-author-3",
       authorName: "Bob",
       authorHandle: "bob",
+      authorAvatarUrl: "https://example.com/bob-avatar.jpg",
       text: "Bob bookmark",
       createdAtOnX: "2026-03-15T00:10:00.000Z",
       savedAt: "2026-03-15T03:00:00.000Z",
@@ -94,6 +95,8 @@ test("OptionsApp filters results by selected sidebar author", async () => {
     assert.ok(bobButton)
     assert.match(bobButton?.textContent ?? "", /Bob/)
     assert.match(bobButton?.textContent ?? "", /@bob/)
+    assert.equal(bobButton?.querySelector(".options-author-avatar-fallback"), null)
+    assert.equal((bobButton?.querySelector(".options-author-avatar img") as HTMLImageElement | null)?.src, "https://example.com/bob-avatar.jpg")
 
     await act(async () => {
       bobButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))

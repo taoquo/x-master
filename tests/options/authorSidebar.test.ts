@@ -3,12 +3,13 @@ import assert from "node:assert/strict"
 import { buildAuthorSidebarItems, getVisibleAuthorSidebarItems } from "../../src/options/authorSidebar.ts"
 import type { BookmarkRecord } from "../../src/lib/types.ts"
 
-function createBookmark(authorHandle: string, authorName: string, suffix: string): BookmarkRecord {
+function createBookmark(authorHandle: string, authorName: string, suffix: string, authorAvatarUrl?: string): BookmarkRecord {
   return {
     tweetId: `tweet-${authorHandle}-${suffix}`,
     tweetUrl: `https://x.com/${authorHandle}/status/${suffix}`,
     authorName,
     authorHandle,
+    authorAvatarUrl,
     text: `${authorName} ${suffix}`,
     createdAtOnX: "2026-03-15T00:00:00.000Z",
     savedAt: "2026-03-15T01:00:00.000Z",
@@ -27,6 +28,16 @@ test("buildAuthorSidebarItems groups bookmarks by handle and sorts by count", ()
     ["alice", 2],
     ["bob", 1]
   ])
+})
+
+test("buildAuthorSidebarItems keeps the first available avatar for an author", () => {
+  const items = buildAuthorSidebarItems([
+    createBookmark("alice", "Alice", "1"),
+    createBookmark("alice", "Alice", "2", "https://example.com/alice.jpg"),
+    createBookmark("alice", "Alice", "3", "https://example.com/newer-alice.jpg")
+  ])
+
+  assert.equal(items[0].authorAvatarUrl, "https://example.com/alice.jpg")
 })
 
 test("getVisibleAuthorSidebarItems applies default limit, expansion, and search filtering", () => {

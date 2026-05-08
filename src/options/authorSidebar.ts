@@ -3,6 +3,7 @@ import type { BookmarkRecord } from "../lib/types.ts"
 export interface AuthorSidebarItem {
   authorHandle: string
   authorName: string
+  authorAvatarUrl?: string
   count: number
 }
 
@@ -31,12 +32,16 @@ export function buildAuthorSidebarItems(bookmarks: BookmarkRecord[]) {
       if (!existing.authorName && bookmark.authorName.trim()) {
         existing.authorName = bookmark.authorName.trim()
       }
+      if (!existing.authorAvatarUrl && bookmark.authorAvatarUrl) {
+        existing.authorAvatarUrl = bookmark.authorAvatarUrl
+      }
       continue
     }
 
     authorsByHandle.set(authorHandle, {
       authorHandle,
       authorName: bookmark.authorName.trim(),
+      authorAvatarUrl: bookmark.authorAvatarUrl,
       count: 1
     })
   }

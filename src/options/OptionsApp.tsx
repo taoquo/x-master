@@ -1157,9 +1157,15 @@ function WorkspaceSidebar({
                             onAuthorToggle(author.authorHandle)
                           }
                         }}
-                        className={cn("options-nav-row w-full text-left", isSelected && "options-nav-row-active")}>
+                        className={cn("options-nav-row options-author-nav-row w-full text-left", isSelected && "options-nav-row-active")}>
                         <span className="options-nav-row-main min-w-0">
-                          <span className="options-nav-row-icon text-[12px] font-semibold">@</span>
+                          <span className="options-author-avatar options-nav-row-icon" aria-hidden="true">
+                            {author.authorAvatarUrl ? (
+                              <img src={author.authorAvatarUrl} alt="" />
+                            ) : (
+                              <span className="options-author-avatar-fallback">@</span>
+                            )}
+                          </span>
                           <span className="min-w-0">
                             <span className="block truncate">{author.authorName || formatAuthorLabel(author)}</span>
                             <span className="options-meta-copy block truncate">{formatAuthorLabel(author)}</span>
