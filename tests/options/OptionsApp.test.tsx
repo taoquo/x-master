@@ -260,7 +260,10 @@ test("OptionsApp surfaces export failures in the shared command error area", asy
     })
     await settle()
 
-    assert.match(findByTestId(container, "sidebar-status-section")?.textContent ?? "", /download blocked/)
+    const inlineMessage = findByTestId(container, "sidebar-status-section")?.querySelector(".folio-inline-message") as HTMLElement | null
+    assert.ok(inlineMessage)
+    assert.match(inlineMessage.textContent ?? "", /download blocked/)
+    assert.doesNotMatch(inlineMessage.className, /red|sky/)
   } finally {
     globalThis.URL.createObjectURL = originalCreateObjectUrl
   }

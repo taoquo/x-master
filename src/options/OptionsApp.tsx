@@ -442,10 +442,8 @@ function InlineMessage({
   return (
     <div
       className={cn(
-        "rounded-[1.2rem] border px-4 py-3 text-sm leading-6 backdrop-blur-xl",
-        tone === "error"
-          ? "border-red-200/70 bg-red-50/70 text-red-700"
-          : "border-sky-200/70 bg-sky-50/70 text-sky-700",
+        "folio-inline-message",
+        tone === "error" ? "is-error" : "is-info",
         className
       )}>
       {message}
@@ -929,7 +927,7 @@ function WorkspaceSidebar({
             <span>{workspace.isSyncing ? copy.syncing : copy.syncNow}</span>
           </button>
 
-          <InlineMessage message={workspace.commandError} className="!rounded-[6px] !border-[var(--border-subtle)] !bg-[var(--tag-bg)] !px-3 !py-2 !text-[12px]" />
+          <InlineMessage message={workspace.commandError} />
         </div>
       </section>
 
@@ -1271,7 +1269,7 @@ function WorkspaceToolbar({
         </div>
       </div>
 
-      <InlineMessage message={loadError} className="!rounded-[6px] !border-[var(--border-subtle)] !bg-[var(--tag-bg)] !px-3 !py-2 !text-[12px]" />
+      <InlineMessage message={loadError} />
 
       <div data-testid="workspace-toolbar" className="options-toolbar-shell folio-filter-bar options-theme-panel">
         <div className="options-toolbar-primary">

@@ -28,3 +28,17 @@ test("extension ships only bundled LXGW WenKai woff2 assets for runtime UI", asy
   await assert.rejects(() => access(legacyRegularTtfPath, fsConstants.F_OK))
   await assert.rejects(() => access(legacyMediumTtfPath, fsConstants.F_OK))
 })
+
+test("extension stylesheet keeps workspace chrome inside the Folio warm palette", async () => {
+  const css = await readFile(path.join(process.cwd(), "src", "styles", "extension.css"), "utf8")
+
+  assert.doesNotMatch(css, /rgba\(37,\s*99,\s*235/)
+  assert.doesNotMatch(css, /rgba\(59,\s*130,\s*246/)
+  assert.doesNotMatch(css, /#3b82f6/i)
+  assert.doesNotMatch(css, /#22c55e/i)
+  assert.doesNotMatch(css, /#93c5fd/i)
+  assert.doesNotMatch(css, /#dbeafe/i)
+  assert.doesNotMatch(css, /#f8fafc/i)
+  assert.doesNotMatch(css, /\.text-slate-/)
+  assert.doesNotMatch(css, /\.bg-slate-/)
+})

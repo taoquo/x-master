@@ -125,14 +125,14 @@ function PopupScreen() {
 
             <div data-testid="popup-stats-grid" className="grid grid-cols-2 gap-3">
               <div className="panel-elevated popup-stat-card folio-metric-card options-theme-elevated rounded-[18px] p-4">
-                <div className="popup-stat-label text-[11px] uppercase tracking-[0.14em] text-slate-500">{copy.totalBookmarks}</div>
-                <div className="popup-stat-value mt-3 text-[2.4rem] leading-none tracking-[-0.04em] text-slate-900">
+                <div className="popup-stat-label text-[11px] uppercase tracking-[0.14em] text-[var(--text-tertiary)]">{copy.totalBookmarks}</div>
+                <div className="popup-stat-value mt-3 text-[2.4rem] leading-none tracking-[-0.04em] text-[var(--text-primary)]">
                   {data.stats.totalBookmarks}
                 </div>
               </div>
               <div className="panel-elevated popup-stat-card folio-metric-card options-theme-elevated rounded-[18px] p-4">
-                <div className="popup-stat-label text-[11px] uppercase tracking-[0.14em] text-slate-500">{copy.unclassified}</div>
-                <div className="popup-stat-value mt-3 text-[2.4rem] leading-none tracking-[-0.04em] text-slate-900">
+                <div className="popup-stat-label text-[11px] uppercase tracking-[0.14em] text-[var(--text-tertiary)]">{copy.unclassified}</div>
+                <div className="popup-stat-value mt-3 text-[2.4rem] leading-none tracking-[-0.04em] text-[var(--text-primary)]">
                   {data.stats.unclassifiedCount}
                 </div>
               </div>

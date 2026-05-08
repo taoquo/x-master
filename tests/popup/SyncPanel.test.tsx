@@ -42,6 +42,8 @@ test("SyncPanel renders sync summary and triggers manual sync", async () => {
   assert.match(container.querySelector('[data-testid="popup-sync-card"]')?.className ?? "", /folio-editorial-panel/)
   assert.equal(container.querySelectorAll('[data-testid="popup-sync-stats"] .options-theme-elevated').length, 4)
   assert.equal(container.querySelectorAll('[data-testid="popup-sync-stats"] .popup-sync-stat-card').length, 4)
+  assert.match(container.querySelector('[data-testid="popup-sync-error"]')?.className ?? "", /folio-inline-message/)
+  assert.doesNotMatch(container.querySelector('[data-testid="popup-sync-error"]')?.className ?? "", /red|sky/)
   assert.match(button.className, /popup-sync-button/)
   assert.match(button.className, /folio-primary-action/)
   assert.match(container.textContent ?? "", /success/)

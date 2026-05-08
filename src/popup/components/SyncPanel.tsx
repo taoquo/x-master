@@ -83,7 +83,7 @@ export function SyncPanel({
     <SurfaceCard
       title={copy.sync}
       description={copy.syncDescription}
-      className="folio-surface-card options-theme-panel rounded-[24px] bg-slate-950/80 text-white"
+      className="folio-surface-card options-theme-panel rounded-[24px] text-white"
       bodyClassName="space-y-5"
     >
       <div data-testid="popup-sync-card" className="popup-sync-card-body folio-editorial-panel options-theme-panel space-y-5">
@@ -115,7 +115,11 @@ export function SyncPanel({
           </div>
         </div>
 
-        {summary.errorSummary ? <p className="text-sm leading-6 text-red-200">{copy.error}: {summary.errorSummary}</p> : null}
+        {summary.errorSummary ? (
+          <p data-testid="popup-sync-error" className="folio-inline-message is-error">
+            {copy.error}: {summary.errorSummary}
+          </p>
+        ) : null}
 
         <button
           type="button"

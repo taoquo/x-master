@@ -78,10 +78,10 @@ export function MetricCard({
   return (
     <div className="panel-elevated folio-metric-card relative overflow-hidden rounded-[20px] p-6">
       <div className="relative">
-        <p className="folio-metric-label text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{label}</p>
+        <p className="folio-metric-label text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-tertiary)]">{label}</p>
         <div className="mt-5 grid gap-3 md:grid-cols-[auto_minmax(0,1fr)] md:items-end">
-          <div className="folio-metric-value text-[3.3rem] leading-none tracking-[-0.06em] text-slate-900">{value}</div>
-          <p className="folio-metric-hint max-w-[18ch] text-[0.92rem] leading-6 text-slate-600">{hint}</p>
+          <div className="folio-metric-value text-[3.3rem] leading-none tracking-[-0.06em] text-[var(--text-primary)]">{value}</div>
+          <p className="folio-metric-hint max-w-[18ch] text-[0.92rem] leading-6 text-[var(--text-secondary)]">{hint}</p>
         </div>
         <div className={cn("folio-metric-rule mt-6 h-px rounded-full bg-[var(--accent-bg)]", accentClassName)} />
       </div>
