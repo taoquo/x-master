@@ -343,39 +343,97 @@ function DetailTagEntry({
   onDraftTagNameChange: (name: string) => void
   onSubmitTag: (name?: string) => Promise<void>
 }) {
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const isChoosingSuggestionRef = useRef(false)
+  const normalizedDraftName = draftTagName.trim().toLocaleLowerCase()
+  const visibleTagOptions = availableTagOptions
+    .filter((tag) => !normalizedDraftName || tag.name.toLocaleLowerCase().includes(normalizedDraftName))
+    .slice(0, 6)
+  const shouldShowSuggestions = isSuggestionsOpen && visibleTagOptions.length > 0
+
+  function submitDraftTag(nextName?: string) {
+    const trimmedName = (nextName ?? inputRef.current?.value ?? draftTagName).trim()
+    setIsSuggestionsOpen(false)
+    if (!trimmedName || isSubmittingTag) {
+      return
+    }
+
+    void onSubmitTag(trimmedName)
+  }
+
   return (
     <form
       className="options-detail-tag-entry"
       onSubmit={(event) => {
         event.preventDefault()
-        const tagInput = event.currentTarget.elements.namedItem("detail-tag-name") as HTMLInputElement | null
-        void onSubmitTag(tagInput?.value)
+        submitDraftTag()
       }}>
       <input
+        ref={inputRef}
         data-testid="detail-new-tag-input"
         name="detail-tag-name"
-        list={availableTagOptions.length ? tagOptionsListId : undefined}
         className="options-detail-new-tag-input"
         value={draftTagName}
         placeholder={copy.createTagPrompt}
         aria-label={copy.createTagLabel}
-        onChange={(event) => onDraftTagNameChange(event.currentTarget.value)}
+        aria-controls={shouldShowSuggestions ? tagOptionsListId : undefined}
+        aria-expanded={shouldShowSuggestions}
+        autoComplete="off"
+        role="combobox"
+        onBlur={() => {
+          window.setTimeout(() => {
+            if (isChoosingSuggestionRef.current) {
+              isChoosingSuggestionRef.current = false
+              return
+            }
+
+            submitDraftTag()
+          }, 0)
+        }}
+        onChange={(event) => {
+          onDraftTagNameChange(event.currentTarget.value)
+          setIsSuggestionsOpen(true)
+        }}
+        onFocus={() => setIsSuggestionsOpen(true)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            onDraftTagNameChange("")
+            setIsSuggestionsOpen(false)
+            event.currentTarget.blur()
+            return
+          }
+
+          if (event.key === "Enter") {
+            event.preventDefault()
+            submitDraftTag()
+          }
+        }}
       />
-      {availableTagOptions.length ? (
-        <datalist data-testid="detail-tag-options" id={tagOptionsListId}>
-          {availableTagOptions.map((tag) => (
-            <option key={tag.id} value={tag.name} />
+      {shouldShowSuggestions ? (
+        <div
+          data-testid="detail-tag-suggestions"
+          id={tagOptionsListId}
+          className="options-detail-tag-suggestions options-detail-tag-dropdown options-theme-elevated"
+          role="listbox">
+          {visibleTagOptions.map((tag) => (
+            <button
+              key={tag.id}
+              type="button"
+              data-testid="detail-tag-suggestion"
+              className="options-detail-tag-suggestion"
+              role="option"
+              onMouseDown={(event) => {
+                event.preventDefault()
+                isChoosingSuggestionRef.current = true
+                setIsSuggestionsOpen(false)
+                submitDraftTag(tag.name)
+              }}>
+              {tag.name}
+            </button>
           ))}
-        </datalist>
+        </div>
       ) : null}
-      <button
-        type="submit"
-        data-testid="detail-create-tag"
-        className="chip-button options-tag-pill options-tag-pill-add options-detail-add-tag options-theme-elevated"
-        disabled={isSubmittingTag || !draftTagName.trim()}>
-        <span aria-hidden="true">+</span>
-        <span>{copy.addTag}</span>
-      </button>
     </form>
   )
 }
@@ -420,18 +478,16 @@ function DetailTagsSection({
                 <AppIcon name="close" size={12} />
               </button>
             ))}
+            <DetailTagEntry
+              copy={copy}
+              availableTagOptions={availableTagOptions}
+              draftTagName={draftTagName}
+              isSubmittingTag={isSubmittingTag}
+              tagOptionsListId={tagOptionsListId}
+              onDraftTagNameChange={onDraftTagNameChange}
+              onSubmitTag={onSubmitTag}
+            />
           </div>
-        </div>
-        <div className="options-detail-tag-group options-detail-tag-group-add">
-          <DetailTagEntry
-            copy={copy}
-            availableTagOptions={availableTagOptions}
-            draftTagName={draftTagName}
-            isSubmittingTag={isSubmittingTag}
-            tagOptionsListId={tagOptionsListId}
-            onDraftTagNameChange={onDraftTagNameChange}
-            onSubmitTag={onSubmitTag}
-          />
         </div>
       </div>
     </section>
@@ -844,38 +900,44 @@ export function BookmarkInspector({
         ref={inspectorScrollRef}
         data-testid="inspector-section-stack"
         className="scroll-shell options-detail-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-6">
-        <DetailTimelineSection
-          copy={copy}
-          detailTimestamp={detailTimestamp}
-          savedTimestamp={savedTimestamp}
-        />
-        <DetailSummarySection copy={copy} text={bookmark.text} />
-        <BookmarkMediaSection
-          bookmark={bookmark}
-          locale={locale}
-          copy={copy}
-          onPreview={handleOpenPreview}
-        />
-        <DetailTagsSection
-          locale={locale}
-          copy={copy}
-          currentTags={currentTags}
-          availableTagOptions={availableTagOptions}
-          draftTagName={draftTagName}
-          isSubmittingTag={isSubmittingTag}
-          tagOptionsListId={tagOptionsListId}
-          onDraftTagNameChange={setDraftTagName}
-          onSubmitTag={handleSubmitTag}
-          onDetachTag={onDetachTag}
-        />
+        <div data-testid="detail-layout" className="options-detail-layout">
+          <main data-testid="detail-reading-main" className="options-detail-reading-main">
+            <DetailSummarySection copy={copy} text={bookmark.text} />
+            <BookmarkMediaSection
+              bookmark={bookmark}
+              locale={locale}
+              copy={copy}
+              onPreview={handleOpenPreview}
+            />
+          </main>
+          <aside data-testid="detail-context-rail" className="options-detail-context-rail">
+            <DetailTimelineSection
+              copy={copy}
+              detailTimestamp={detailTimestamp}
+              savedTimestamp={savedTimestamp}
+            />
+            <DetailTagsSection
+              locale={locale}
+              copy={copy}
+              currentTags={currentTags}
+              availableTagOptions={availableTagOptions}
+              draftTagName={draftTagName}
+              isSubmittingTag={isSubmittingTag}
+              tagOptionsListId={tagOptionsListId}
+              onDraftTagNameChange={setDraftTagName}
+              onSubmitTag={handleSubmitTag}
+              onDetachTag={onDetachTag}
+            />
+            <DetailFooterActions
+              copy={copy}
+              onCopyLink={() => {
+                void handleCopyLink()
+              }}
+              onDone={onClose}
+            />
+          </aside>
+        </div>
       </div>
-      <DetailFooterActions
-        copy={copy}
-        onCopyLink={() => {
-          void handleCopyLink()
-        }}
-        onDone={onClose}
-      />
       {toastMessage ? (
         <div data-testid="detail-toast" className="options-detail-toast" role="status">
           {toastMessage}

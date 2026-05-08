@@ -42,3 +42,12 @@ test("extension stylesheet keeps workspace chrome inside the Folio warm palette"
   assert.doesNotMatch(css, /\.text-slate-/)
   assert.doesNotMatch(css, /\.bg-slate-/)
 })
+
+test("extension stylesheet keeps detail tag input compact inline", async () => {
+  const css = await readFile(path.join(process.cwd(), "src", "styles", "extension.css"), "utf8")
+
+  assert.match(css, /\.options-detail-new-tag-input\s*\{[^}]*width:\s*clamp\(82px,\s*10vw,\s*116px\)/s)
+  assert.match(css, /\.options-detail-new-tag-input\s*\{[^}]*height:\s*28px/s)
+  assert.match(css, /\.options-detail-new-tag-input\s*\{[^}]*min-height:\s*28px/s)
+  assert.match(css, /@media \(max-width:\s*900px\)[\s\S]*\.options-detail-new-tag-input\s*\{[^}]*width:\s*clamp\(96px,\s*32vw,\s*136px\)/)
+})

@@ -863,7 +863,7 @@ test("OptionsApp renders the demo inspector and localized copy", async () => {
   assert.match(container.textContent ?? "", /Inspector content summary/)
   assert.ok(findByTestId(container, "detail-open-x-link"))
   assert.ok(findByTestId(container, "detail-new-tag-input"))
-  assert.ok(findByTestId(container, "detail-create-tag"))
+  assert.equal(findByTestId(container, "detail-create-tag"), null)
   assert.equal(findByTestId(container, "attach-tag-trigger"), null)
 })
 
@@ -1154,7 +1154,8 @@ test("OptionsApp applies shared theme hooks to chips pills and secondary actions
   assert.ok(openOnXButton)
   assert.ok(tagInput)
   assert.match(openOnXButton?.className ?? "", /options-theme-elevated/)
-  assert.equal(tagInput?.getAttribute("list"), "details-tag-options")
+  assert.equal(tagInput?.getAttribute("list"), null)
+  assert.equal(tagInput?.getAttribute("role"), "combobox")
 
   await act(async () => {
     setInputValue(tagInput!, followUpTag.name, dom.window)
@@ -1558,6 +1559,9 @@ test("OptionsApp prioritizes detail card hero summary tags and media sections", 
   const modal = findByTestId(container, "workspace-detail-modal")
   const hero = findByTestId(container, "detail-hero-section")
   const heroActions = findByTestId(container, "detail-primary-actions")
+  const layout = findByTestId(container, "detail-layout")
+  const readingMain = findByTestId(container, "detail-reading-main")
+  const contextRail = findByTestId(container, "detail-context-rail")
   const timeline = findByTestId(container, "inspector-timeline-section")
   const summary = findByTestId(container, "inspector-summary-section")
   const summaryCard = findByTestId(container, "detail-summary-card")
@@ -1565,12 +1569,14 @@ test("OptionsApp prioritizes detail card hero summary tags and media sections", 
   const tags = findByTestId(container, "inspector-tags-section")
   const currentTags = findByTestId(container, "current-tags")
   const currentTagGroup = container.querySelector(".options-detail-tag-group-current") as HTMLElement | null
-  const addTagGroup = container.querySelector(".options-detail-tag-group-add") as HTMLElement | null
   const tagEntry = container.querySelector(".options-detail-tag-entry") as HTMLElement | null
 
   assert.ok(modal)
   assert.ok(hero)
   assert.ok(heroActions)
+  assert.ok(layout)
+  assert.ok(readingMain)
+  assert.ok(contextRail)
   assert.ok(timeline)
   assert.ok(summary)
   assert.ok(summaryCard)
@@ -1578,14 +1584,32 @@ test("OptionsApp prioritizes detail card hero summary tags and media sections", 
   assert.ok(tags)
   assert.ok(currentTags)
   assert.ok(currentTagGroup)
-  assert.ok(addTagGroup)
   assert.ok(tagEntry)
   assert.match(hero?.className ?? "", /options-detail-hero/)
   assert.match(heroActions?.className ?? "", /options-detail-hero-actions/)
+  assert.match(layout?.className ?? "", /options-detail-layout/)
+  assert.match(readingMain?.className ?? "", /options-detail-reading-main/)
+  assert.match(contextRail?.className ?? "", /options-detail-context-rail/)
   assert.doesNotMatch(summary?.className ?? "", /options-detail-summary-card/)
   assert.match(summaryCard?.className ?? "", /options-detail-summary-card/)
   assert.equal(
     Boolean((summary as Node).compareDocumentPosition(summaryCard as Node) & dom.window.Node.DOCUMENT_POSITION_CONTAINED_BY),
+    true
+  )
+  assert.equal(
+    Boolean((readingMain as Node).compareDocumentPosition(summary as Node) & dom.window.Node.DOCUMENT_POSITION_CONTAINED_BY),
+    true
+  )
+  assert.equal(
+    Boolean((readingMain as Node).compareDocumentPosition(media as Node) & dom.window.Node.DOCUMENT_POSITION_CONTAINED_BY),
+    true
+  )
+  assert.equal(
+    Boolean((contextRail as Node).compareDocumentPosition(timeline as Node) & dom.window.Node.DOCUMENT_POSITION_CONTAINED_BY),
+    true
+  )
+  assert.equal(
+    Boolean((contextRail as Node).compareDocumentPosition(tags as Node) & dom.window.Node.DOCUMENT_POSITION_CONTAINED_BY),
     true
   )
   assert.doesNotMatch(summaryCard?.textContent ?? "", /Summary/)
@@ -1594,7 +1618,6 @@ test("OptionsApp prioritizes detail card hero summary tags and media sections", 
   assert.match(summary?.className ?? "", /options-detail-summary-flow/)
   assert.match(tags?.className ?? "", /options-detail-tags-section/)
   assert.match(currentTagGroup?.className ?? "", /options-detail-tag-group-current/)
-  assert.match(addTagGroup?.className ?? "", /options-detail-tag-group-add/)
   assert.match(currentTags?.className ?? "", /options-detail-current-tags/)
   assert.match(currentTags?.textContent ?? "", /Important/)
   assert.match(tagEntry?.className ?? "", /options-detail-tag-entry/)
@@ -1692,13 +1715,17 @@ test("OptionsApp opens bookmark details as a centered focus card with timeline a
   const modal = findByTestId(container, "workspace-detail-modal")
   const backdrop = findByTestId(container, "workspace-detail-backdrop")
   const focusCard = findByTestId(container, "workspace-detail-card")
+  const readingMain = findByTestId(container, "detail-reading-main")
   const timeline = findByTestId(container, "inspector-timeline-section")
+  const summary = findByTestId(container, "inspector-summary-section")
   const footer = findByTestId(container, "detail-footer-actions")
 
   assert.ok(modal)
   assert.ok(backdrop)
   assert.ok(focusCard)
+  assert.ok(readingMain)
   assert.ok(timeline)
+  assert.ok(summary)
   assert.ok(footer)
   assert.match(focusCard?.className ?? "", /options-detail-focus-card/)
   assert.ok(findByTestId(container, "detail-author-line"))
@@ -1707,10 +1734,14 @@ test("OptionsApp opens bookmark details as a centered focus card with timeline a
   assert.match(timeline?.textContent ?? "", /发布于/)
   assert.match(timeline?.textContent ?? "", /保存于/)
   assert.equal(
-    Boolean((timeline as Node).compareDocumentPosition(findByTestId(container, "inspector-summary-section") as Node) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING),
+    Boolean((summary as Node).compareDocumentPosition(timeline as Node) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING),
     true
   )
-  assert.match(findByTestId(container, "inspector-summary-section")?.textContent ?? "", /Focused detail content/)
+  assert.equal(
+    Boolean((readingMain as Node).compareDocumentPosition(summary as Node) & dom.window.Node.DOCUMENT_POSITION_CONTAINED_BY),
+    true
+  )
+  assert.match(summary?.textContent ?? "", /Focused detail content/)
   assert.ok(findButton(container, "复制链接"))
   assert.ok(findButton(container, "完成"))
   assert.match(card.className, /options-result-card-selected/)
@@ -1750,11 +1781,9 @@ test("OptionsApp creates and attaches a new tag from the focused detail card", a
   await settle()
 
   const tagInput = findByTestId(container, "detail-new-tag-input") as HTMLInputElement | null
-  const addButton = findByTestId(container, "detail-create-tag") as HTMLButtonElement | null
-
   assert.ok(tagInput)
-  assert.ok(addButton)
   assert.ok(findByTestId(container, "current-tags"))
+  assert.equal(findByTestId(container, "detail-create-tag"), null)
   assert.equal(findByTestId(container, "attach-tag-trigger"), null)
 
   await act(async () => {
@@ -1810,7 +1839,7 @@ test("OptionsApp reuses the detail tag entry to attach an existing tag by name",
 
   assert.ok(tagInput)
   assert.equal(attachTrigger, null)
-  assert.equal((findByTestId(container, "detail-create-tag") as HTMLButtonElement | null)?.textContent?.includes("添加标签"), true)
+  assert.equal(findByTestId(container, "detail-create-tag"), null)
 
   await act(async () => {
     setInputValue(tagInput, "法国", dom.window)
@@ -1825,6 +1854,132 @@ test("OptionsApp reuses the detail tag entry to attach an existing tag by name",
 
   assert.match(findByTestId(container, "current-tags")?.textContent ?? "", /法国/)
   assert.equal(findByTestId(container, "attach-tag-trigger"), null)
+})
+
+test("OptionsApp commits the detail tag input on blur and keeps the input inline with current tags", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-inline-blur-tag",
+      tweetUrl: "https://x.com/alice/status/tweet-inline-blur-tag",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Blur should commit the inline tag input.",
+      createdAtOnX: "2026-05-04T15:32:00.000Z",
+      savedAt: "2026-05-05T14:19:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "light",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const card = getBookmarkCards(container)[0] as HTMLElement
+  await act(async () => {
+    card.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const currentTags = findByTestId(container, "current-tags")
+  const tagInput = findByTestId(container, "detail-new-tag-input") as HTMLInputElement | null
+
+  assert.ok(currentTags)
+  assert.ok(tagInput)
+  assert.equal(findByTestId(container, "detail-create-tag"), null)
+  assert.equal(
+    Boolean((currentTags as Node).compareDocumentPosition(tagInput as Node) & dom.window.Node.DOCUMENT_POSITION_CONTAINED_BY),
+    true
+  )
+
+  await act(async () => {
+    setInputValue(tagInput, "分数线", dom.window)
+  })
+  await settle()
+
+  await act(async () => {
+    tagInput.dispatchEvent(new dom.window.FocusEvent("focusout", { bubbles: true }))
+  })
+  await settle()
+  await settle()
+
+  assert.match(findByTestId(container, "current-tags")?.textContent ?? "", /分数线/)
+  assert.equal(tagInput.value, "")
+})
+
+test("OptionsApp renders detail tag suggestions as a dropdown inside the detail rail", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-detail-tag-suggestions",
+      tweetUrl: "https://x.com/alice/status/tweet-detail-tag-suggestions",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Tag suggestions should stay inside the detail rail.",
+      createdAtOnX: "2026-05-04T15:32:00.000Z",
+      savedAt: "2026-05-05T14:19:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await createTag({ name: "发" })
+  await createTag({ name: "暗示法" })
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "light",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const card = getBookmarkCards(container)[0] as HTMLElement
+  await act(async () => {
+    card.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const contextRail = findByTestId(container, "detail-context-rail")
+  const tagInput = findByTestId(container, "detail-new-tag-input") as HTMLInputElement | null
+
+  assert.ok(contextRail)
+  assert.ok(tagInput)
+  assert.equal(findByTestId(container, "detail-tag-options"), null)
+
+  await act(async () => {
+    tagInput.dispatchEvent(new dom.window.FocusEvent("focusin", { bubbles: true }))
+  })
+  await settle()
+
+  const suggestions = findByTestId(container, "detail-tag-suggestions")
+  const firstOption = container.querySelector('[data-testid="detail-tag-suggestion"]') as HTMLButtonElement | null
+
+  assert.ok(suggestions)
+  assert.ok(firstOption)
+  assert.match(suggestions.className, /options-detail-tag-suggestions/)
+  assert.match(suggestions.className, /options-detail-tag-dropdown/)
+  assert.equal(
+    Boolean((contextRail as Node).compareDocumentPosition(suggestions as Node) & dom.window.Node.DOCUMENT_POSITION_CONTAINED_BY),
+    true
+  )
+
+  await act(async () => {
+    firstOption.dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true }))
+  })
+  await settle()
+  await settle()
+
+  assert.match(findByTestId(container, "current-tags")?.textContent ?? "", /发/)
+  assert.equal(tagInput.value, "")
 })
 
 test("OptionsApp closes the centered detail card from backdrop and done action", async () => {
