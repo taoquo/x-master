@@ -4,6 +4,7 @@ export interface BookmarkRecord {
   tweetUrl: string
   authorName: string
   authorHandle: string
+  authorAvatarUrl?: string
   text: string
   createdAtOnX: string
   savedAt: string
@@ -20,6 +21,7 @@ export interface SiteTweetDraft {
   tweetUrl: string
   authorName: string
   authorHandle: string
+  authorAvatarUrl?: string
   text: string
   createdAtOnX: string
 }

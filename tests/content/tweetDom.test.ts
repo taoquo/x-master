@@ -17,7 +17,9 @@ test("extractSiteTweetDraft reads a standard x.com article", () => {
               <time datetime="2026-04-01T12:00:00.000Z"></time>
             </a>
           </div>
-          <div data-testid="tweetText">A ship-ready tweet body</div>
+          <div data-testid="Tweet-User-Avatar"><img alt="" src="https://pbs.twimg.com/profile_images/alice.jpg" /></div>
+          <div data-testid="tweetText">A ship-ready
+            tweet  body</div>
         </article>
       </body>
     </html>
@@ -31,7 +33,8 @@ test("extractSiteTweetDraft reads a standard x.com article", () => {
     tweetUrl: "https://x.com/alice/status/1234567890",
     authorName: "Alice Johnson",
     authorHandle: "alice",
-    text: "A ship-ready tweet body",
+    authorAvatarUrl: "https://pbs.twimg.com/profile_images/alice.jpg",
+    text: "A ship-ready\n            tweet  body",
     createdAtOnX: "2026-04-01T12:00:00.000Z"
   })
 })

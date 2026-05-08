@@ -49,6 +49,7 @@ export function parseBookmarkEntries(response: any) {
       const noteTweetText = result?.note_tweet?.note_tweet_results?.result?.text
       const userLegacy = result?.core?.user_results?.result?.legacy ?? {}
       const screenName = userLegacy?.screen_name
+      const authorAvatarUrl = userLegacy?.profile_image_url_https ?? userLegacy?.profile_image_url
       const restId = result?.rest_id
 
       if (!restId) {
@@ -63,6 +64,7 @@ export function parseBookmarkEntries(response: any) {
             : `https://x.com/i/status/${restId}`,
           authorName: userLegacy?.name ?? "",
           authorHandle: screenName ?? "",
+          authorAvatarUrl,
           text: noteTweetText ?? legacy?.full_text ?? "",
           createdAtOnX: legacy?.created_at ?? "",
           savedAt: seenAt,

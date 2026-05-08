@@ -610,6 +610,22 @@ function PreviewMedia({
   )
 }
 
+function AuthorAvatar({
+  avatarUrl,
+  initials,
+  alt
+}: {
+  avatarUrl?: string
+  initials: string
+  alt: string
+}) {
+  if (avatarUrl) {
+    return <img src={avatarUrl} alt={alt} />
+  }
+
+  return <>{initials}</>
+}
+
 function getMediaPosterUrl(bookmark: BookmarkRecord, mediaIndex = 0) {
   const mediaItem = bookmark.media?.[mediaIndex]
 
@@ -685,7 +701,13 @@ function BookmarkCard({
         <div className="options-card-layout">
           <div className="options-card-column">
             <div className="options-card-main">
-              <div className="options-card-avatar">{authorInitials}</div>
+              <div className="options-card-avatar">
+                <AuthorAvatar
+                  avatarUrl={bookmark.authorAvatarUrl}
+                  initials={authorInitials}
+                  alt={bookmark.authorName || bookmark.authorHandle}
+                />
+              </div>
               <div className="options-card-content">
                 <div className="options-card-header">
                   <div className="options-card-author min-w-0">
@@ -698,7 +720,7 @@ function BookmarkCard({
                 </div>
 
                 <div className="options-card-copy-wrap">
-                  <p className={cn("options-card-copy", viewMode === "list" && listCopyDensityClass, !!bookmark.media?.length && "is-media")}>
+                  <p className={cn("options-card-copy options-preserve-whitespace", viewMode === "list" && listCopyDensityClass, !!bookmark.media?.length && "is-media")}>
                     {truncateText(bookmark.text, bookmark.media?.length ? 180 : 260)}
                   </p>
                 </div>

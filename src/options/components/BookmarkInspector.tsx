@@ -197,7 +197,13 @@ function DetailFocusHeader({
   return (
     <section data-testid="detail-hero-section" className="options-detail-hero folio-detail-hero">
       <div className="options-detail-hero-main min-w-0">
-        <div className="options-inspector-avatar">{authorInitials}</div>
+        <div className="options-inspector-avatar">
+          {bookmark.authorAvatarUrl ? (
+            <img src={bookmark.authorAvatarUrl} alt={bookmark.authorName || bookmark.authorHandle} />
+          ) : (
+            authorInitials
+          )}
+        </div>
         <div className="options-detail-hero-copy min-w-0">
           <div data-testid="detail-author-line" className="options-detail-author-line">
             <p className="options-detail-hero-name truncate">{bookmark.authorName}</p>
@@ -284,7 +290,7 @@ function DetailSummarySection({
       <div className="options-detail-section-overline">{copy.summaryTitle}</div>
       <div data-testid="detail-summary-card" className="options-detail-summary-card">
         <span className="options-detail-summary-quote" aria-hidden="true">“</span>
-        <p className="options-body-copy options-inspector-summary options-detail-summary-copy">{text}</p>
+        <p className="options-body-copy options-inspector-summary options-detail-summary-copy options-preserve-whitespace">{text}</p>
       </div>
     </section>
   )

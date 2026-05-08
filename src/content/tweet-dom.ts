@@ -4,6 +4,10 @@ function normalizeText(value: string | null | undefined) {
   return value?.replace(/\s+/g, " ").trim() ?? ""
 }
 
+function preserveText(value: string | null | undefined) {
+  return value?.trim() ?? ""
+}
+
 function toAbsoluteUrl(href: string) {
   return new URL(href, "https://x.com").toString()
 }
@@ -37,7 +41,12 @@ function extractAuthorName(article: Element) {
 
 function extractTweetText(article: Element) {
   const textNode = article.querySelector('[data-testid="tweetText"]')
-  return normalizeText(textNode?.textContent)
+  return preserveText(textNode?.textContent)
+}
+
+function extractAuthorAvatarUrl(article: Element) {
+  const image = article.querySelector('[data-testid="Tweet-User-Avatar"] img, img[src*="profile_images"]') as HTMLImageElement | null
+  return image?.src ?? image?.getAttribute("src") ?? undefined
 }
 
 export function extractSiteTweetDraft(article: Element | null): SiteTweetDraft | null {
@@ -57,6 +66,7 @@ export function extractSiteTweetDraft(article: Element | null): SiteTweetDraft |
   const tweetId = extractTweetIdFromUrl(tweetUrl)
   const authorHandle = extractAuthorHandleFromUrl(statusAnchor.getAttribute("href") ?? "")
   const authorName = extractAuthorName(article)
+  const authorAvatarUrl = extractAuthorAvatarUrl(article)
   const text = extractTweetText(article)
 
   if (!tweetId || !authorHandle || !authorName || !text || !createdAtOnX) {
@@ -68,6 +78,7 @@ export function extractSiteTweetDraft(article: Element | null): SiteTweetDraft |
     tweetUrl,
     authorName,
     authorHandle,
+    authorAvatarUrl,
     text,
     createdAtOnX
   }

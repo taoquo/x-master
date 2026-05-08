@@ -20,6 +20,7 @@ test("upsertBookmarks stores bookmarks and getAllBookmarks returns them", async 
       tweetUrl: "https://x.com/alice/status/123",
       authorName: "Alice",
       authorHandle: "alice",
+      authorAvatarUrl: "https://example.com/alice.jpg",
       text: "hello",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
@@ -32,6 +33,7 @@ test("upsertBookmarks stores bookmarks and getAllBookmarks returns them", async 
   assert.equal(bookmarks.length, 1)
   assert.equal(bookmarks[0].tweetId, "123")
   assert.equal(bookmarks[0].authorHandle, "alice")
+  assert.equal(bookmarks[0].authorAvatarUrl, "https://example.com/alice.jpg")
 })
 
 test("upsertBookmarks updates an existing bookmark with the same tweetId", async () => {
@@ -108,6 +110,42 @@ test("upsertBookmarks preserves the original savedAt for existing bookmarks", as
   assert.equal(bookmarks[0].savedAt, "2026-03-15T01:00:00.000Z")
   assert.equal(bookmarks[0].lastSeenAt, "2026-03-15T02:00:00.000Z")
   assert.equal(bookmarks[0].text, "updated text")
+})
+
+test("upsertBookmarks preserves an existing avatar when a later sync has none", async () => {
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "123",
+      tweetUrl: "https://x.com/alice/status/123",
+      authorName: "Alice",
+      authorHandle: "alice",
+      authorAvatarUrl: "https://example.com/alice-avatar.jpg",
+      text: "hello",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T01:00:00.000Z",
+      rawPayload: { id: "123" }
+    }
+  ])
+
+  await upsertBookmarks([
+    {
+      tweetId: "123",
+      tweetUrl: "https://x.com/alice/status/123",
+      authorName: "Alice",
+      authorHandle: "alice",
+      authorAvatarUrl: undefined,
+      text: "updated text",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T02:00:00.000Z",
+      rawPayload: { id: "123", version: 2 }
+    }
+  ])
+
+  const bookmarks = await getAllBookmarks()
+
+  assert.equal(bookmarks[0].authorAvatarUrl, "https://example.com/alice-avatar.jpg")
 })
 
 test("upsertBookmarks stores bookmarkTimelineRank from synced bookmarks", async () => {
@@ -189,6 +227,7 @@ test("upsertBookmarkSnapshot creates a minimal bookmark without overwriting rich
       tweetUrl: "https://x.com/alice/status/123",
       authorName: "Alice Johnson",
       authorHandle: "alice",
+      authorAvatarUrl: "https://example.com/synced-alice.jpg",
       text: "Full synced text with richer details",
       createdAtOnX: "2026-04-01T00:00:00.000Z",
       savedAt: "2026-04-01T00:10:00.000Z",
@@ -204,6 +243,7 @@ test("upsertBookmarkSnapshot creates a minimal bookmark without overwriting rich
     tweetUrl: "https://x.com/alice/status/123",
     authorName: "Alice",
     authorHandle: "alice",
+    authorAvatarUrl: "https://example.com/dom-alice.jpg",
     text: "Short DOM text",
     createdAtOnX: "2026-04-01T00:00:00.000Z"
   })
@@ -213,10 +253,29 @@ test("upsertBookmarkSnapshot creates a minimal bookmark without overwriting rich
   assert.equal(snapshot.tweetId, "tweet-123")
   assert.equal(bookmarks.length, 1)
   assert.equal(bookmarks[0].text, "Full synced text with richer details")
+  assert.equal(bookmarks[0].authorAvatarUrl, "https://example.com/synced-alice.jpg")
   assert.equal(bookmarks[0].savedAt, "2026-04-01T00:10:00.000Z")
   assert.deepEqual(bookmarks[0].metrics, { likes: 8, retweets: 2, replies: 1 })
   assert.deepEqual(bookmarks[0].rawPayload, { source: "sync" })
   assert.match(String(bookmarks[0].lastSeenAt), /^\d{4}-\d{2}-\d{2}T/)
+})
+
+test("upsertBookmarkSnapshot stores avatar information for new site bookmarks", async () => {
+  await resetBookmarksDb()
+
+  await upsertBookmarkSnapshot({
+    tweetId: "tweet-avatar",
+    tweetUrl: "https://x.com/alice/status/avatar",
+    authorName: "Alice",
+    authorHandle: "alice",
+    authorAvatarUrl: "https://example.com/site-avatar.jpg",
+    text: "Site text",
+    createdAtOnX: "2026-04-01T00:00:00.000Z"
+  })
+
+  const bookmarks = await getAllBookmarks()
+
+  assert.equal(bookmarks[0].authorAvatarUrl, "https://example.com/site-avatar.jpg")
 })
 
 test("upsertBookmarkSnapshot can be assigned into inbox for site bookmark sync", async () => {

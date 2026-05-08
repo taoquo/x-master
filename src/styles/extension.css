@@ -2155,6 +2155,14 @@
     font-weight: 700;
   }
 
+  .options-card-avatar img,
+  .options-inspector-avatar img {
+    height: 100%;
+    width: 100%;
+    border-radius: inherit;
+    object-fit: cover;
+  }
+
   .options-result-card-list .options-card-avatar {
     height: 32px;
     width: 32px;
@@ -2199,6 +2207,10 @@
     font-size: 14px;
     line-height: 1.6;
     color: color-mix(in srgb, var(--text-primary) 84%, var(--text-secondary));
+    white-space: pre-wrap;
+  }
+
+  .options-preserve-whitespace {
     white-space: pre-wrap;
   }
 

@@ -29,7 +29,8 @@ const response = {
                             result: {
                               legacy: {
                                 name: "Alice",
-                                screen_name: "alice"
+                                screen_name: "alice",
+                                profile_image_url_https: "https://pbs.twimg.com/profile_images/alice_normal.jpg"
                               }
                             }
                           }
@@ -95,12 +96,61 @@ test("parseBookmarkEntries extracts normalized bookmark records", () => {
   assert.equal(result.bookmarks.length, 2)
   assert.equal(result.bookmarks[0].tweetId, "123")
   assert.equal(result.bookmarks[0].authorHandle, "alice")
+  assert.equal(result.bookmarks[0].authorAvatarUrl, "https://pbs.twimg.com/profile_images/alice_normal.jpg")
   assert.equal(result.bookmarks[0].text, "hello world")
   assert.equal(result.bookmarks[0].sourceKind, "x-bookmark")
   assert.equal(result.bookmarks[1].tweetId, "456")
   assert.equal(result.bookmarks[1].text, "full note tweet body")
   assert.equal(result.bookmarks[1].sourceKind, "x-note-tweet")
   assert.equal(result.nextCursor, "next-cursor")
+})
+
+test("parseBookmarkEntries preserves full text whitespace", () => {
+  const result = parseBookmarkEntries({
+    data: {
+      bookmark_timeline_v2: {
+        timeline: {
+          instructions: [
+            {
+              type: "TimelineAddEntries",
+              entries: [
+                {
+                  entryId: "tweet-whitespace",
+                  content: {
+                    itemContent: {
+                      tweet_results: {
+                        result: {
+                          rest_id: "whitespace",
+                          legacy: {
+                            full_text: "line one\n\n  line two with   spaces",
+                            created_at: "Wed Mar 17 00:00:00 +0000 2026"
+                          },
+                          core: {
+                            user_results: {
+                              result: {
+                                legacy: {
+                                  name: "Whitespace User",
+                                  screen_name: "space_user",
+                                  profile_image_url: "https://pbs.twimg.com/profile_images/space.jpg"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  })
+
+  assert.equal(result.bookmarks[0].text, "line one\n\n  line two with   spaces")
+  assert.equal(result.bookmarks[0].authorAvatarUrl, "https://pbs.twimg.com/profile_images/space.jpg")
 })
 
 test("parseBookmarkEntries skips tweet entries without a rest_id", () => {

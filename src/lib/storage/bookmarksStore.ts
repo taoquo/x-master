@@ -29,6 +29,7 @@ export async function upsertBookmarks(bookmarks: BookmarkRecord[]) {
       ...bookmark,
       savedAt,
       lastSeenAt,
+      authorAvatarUrl: bookmark.authorAvatarUrl ?? existing?.authorAvatarUrl,
       bookmarkTimelineRank: bookmark.bookmarkTimelineRank ?? existing?.bookmarkTimelineRank,
       id: bookmark.id ?? bookmark.tweetId,
       updatedAt: timestamp
@@ -72,6 +73,7 @@ export async function upsertBookmarkSnapshot(snapshot: SiteTweetDraft): Promise<
     tweetUrl: existing?.tweetUrl || snapshot.tweetUrl,
     authorName: existing?.authorName || snapshot.authorName,
     authorHandle: existing?.authorHandle || snapshot.authorHandle,
+    authorAvatarUrl: existing?.authorAvatarUrl || snapshot.authorAvatarUrl,
     text: existing?.text || snapshot.text,
     createdAtOnX: existing?.createdAtOnX || snapshot.createdAtOnX,
     savedAt: existing?.savedAt || now,

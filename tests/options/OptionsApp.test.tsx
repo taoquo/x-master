@@ -1604,6 +1604,57 @@ test("OptionsApp prioritizes detail card hero summary tags and media sections", 
   assert.equal(currentTags?.textContent?.includes("Later"), false)
 })
 
+test("OptionsApp preserves bookmark summary whitespace and renders stored avatars", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-rich-text",
+      tweetUrl: "https://x.com/alice/status/tweet-rich-text",
+      authorName: "Alice Chen",
+      authorHandle: "alice",
+      authorAvatarUrl: "https://example.com/alice-avatar.jpg",
+      text: "First line\n\n  indented line with   spaces",
+      createdAtOnX: "2026-05-04T15:32:00.000Z",
+      savedAt: "2026-05-05T14:19:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "light",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const card = container.querySelector('[data-bookmark-card="tweet-rich-text"]') as HTMLElement | null
+  const cardAvatar = card?.querySelector(".options-card-avatar img") as HTMLImageElement | null
+  const cardCopy = card?.querySelector(".options-card-copy") as HTMLElement | null
+
+  assert.ok(card)
+  assert.ok(cardAvatar)
+  assert.equal(cardAvatar.src, "https://example.com/alice-avatar.jpg")
+  assert.equal(cardCopy?.textContent, "First line\n\n  indented line with   spaces")
+  assert.match(cardCopy?.className ?? "", /options-preserve-whitespace/)
+
+  await act(async () => {
+    card!.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const detailAvatar = container.querySelector(".options-inspector-avatar img") as HTMLImageElement | null
+  const detailSummary = container.querySelector(".options-detail-summary-copy") as HTMLElement | null
+
+  assert.ok(detailAvatar)
+  assert.equal(detailAvatar.src, "https://example.com/alice-avatar.jpg")
+  assert.equal(detailSummary?.textContent, "First line\n\n  indented line with   spaces")
+  assert.match(detailSummary?.className ?? "", /options-preserve-whitespace/)
+})
+
 test("OptionsApp opens bookmark details as a centered focus card with timeline and footer actions", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
