@@ -257,18 +257,22 @@ const POPOVER_STYLE = `
   }
 
   .tags {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 8px;
   }
 
   .tag-option {
     position: relative;
-    display: grid;
-    gap: 4px;
-    min-width: 0;
-    padding: 11px 13px;
-    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 180px;
+    min-width: 64px;
+    min-height: 32px;
+    justify-content: center;
+    padding: 5px 11px;
+    border-radius: 10px;
     border: 1px solid var(--theme-elevated-border);
     background: var(--theme-elevated-bg);
     cursor: pointer;
@@ -308,11 +312,19 @@ const POPOVER_STYLE = `
     font-family: var(--theme-display-font);
     font-weight: 600;
     color: var(--theme-chip-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .tag-state {
-    font-size: 12px;
-    color: var(--theme-muted-text);
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .empty,

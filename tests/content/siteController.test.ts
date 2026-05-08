@@ -249,6 +249,14 @@ test("bookmarks controller injects one quick-tag button per article and opens th
   assert.doesNotMatch((overlayHost as HTMLElement | null)?.shadowRoot?.querySelector("style")?.textContent ?? "", /\.ttf/)
   assert.match(backdrop.className, /theme-overlay/)
   assert.match(viewport?.className ?? "", /viewport/)
+  const styleText = (overlayHost as HTMLElement | null)?.shadowRoot?.querySelector("style")?.textContent ?? ""
+  assert.match(styleText, /\.tags\s*{\s*display:\s*flex;/)
+  assert.match(styleText, /flex-wrap:\s*wrap;/)
+  assert.match(styleText, /\.tag-option[\s\S]*border-radius:\s*10px;/)
+  assert.match(styleText, /\.tag-option[\s\S]*min-width:\s*64px;/)
+  assert.match(styleText, /\.tag-option[\s\S]*min-height:\s*32px;/)
+  assert.match(styleText, /\.tag-state[\s\S]*clip-path:\s*inset\(50%\);/)
+  assert.doesNotMatch(styleText, /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(136px,\s*1fr\)\)/)
 
   const initialPopover = popover
   const initialBackdrop = backdrop
