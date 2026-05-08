@@ -48,6 +48,46 @@ const BUTTON_STYLE = `
     object-fit: cover;
   }
 
+  .logo-fallback {
+    position: relative;
+    width: 14px;
+    height: 14px;
+    display: none;
+    border-radius: 5px;
+    background:
+      linear-gradient(135deg, rgba(111, 220, 205, 0.96), rgba(255, 208, 112, 0.96));
+    box-shadow: inset 0 0 0 1px rgba(255, 253, 249, 0.72);
+  }
+
+  .logo-fallback::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    top: 3px;
+    bottom: 3px;
+    border: 1px solid rgba(255, 253, 249, 0.9);
+    border-bottom: 0;
+    border-radius: 2px 2px 1px 1px;
+  }
+
+  .logo-fallback::after {
+    content: "";
+    position: absolute;
+    left: 5px;
+    right: 5px;
+    bottom: 3px;
+    height: 4px;
+    border-left: 1px solid rgba(255, 253, 249, 0.9);
+    border-right: 1px solid rgba(255, 253, 249, 0.9);
+    transform: skewY(-28deg);
+    transform-origin: top center;
+  }
+
+  button[data-logo-loaded="false"] .logo-fallback {
+    display: block;
+  }
+
   button:hover {
     transform: translateY(-1px) scale(1.02);
     border-color: color-mix(in srgb, var(--folio-brand) 34%, var(--folio-border));
@@ -297,11 +337,13 @@ export function createSiteTaggingController({
     host.style.pointerEvents = "none"
     host.style.transition = "opacity 120ms ease"
     host.style.zIndex = "2147483646"
+    const logoUrl = resolveExtensionAssetUrl(TAG_BUTTON_LOGO_PATH)
     const shadowRoot = host.attachShadow({ mode: "open" })
     shadowRoot.innerHTML = `
       <style>${BUTTON_STYLE}</style>
-      <button type="button" class="folio-site-trigger" data-testid="site-tag-trigger" aria-label="Manage tags">
-        <img data-testid="site-tag-trigger-logo" alt="" src="${escapeAttribute(resolveExtensionAssetUrl(TAG_BUTTON_LOGO_PATH))}" />
+      <button type="button" class="folio-site-trigger" data-testid="site-tag-trigger" aria-label="Manage tags" data-logo-loaded="${logoUrl ? "true" : "false"}">
+        ${logoUrl ? `<img data-testid="site-tag-trigger-logo" alt="" src="${escapeAttribute(logoUrl)}" />` : ""}
+        <span class="logo-fallback" data-testid="site-tag-trigger-logo-fallback" aria-hidden="true"></span>
       </button>
     `
 
@@ -324,6 +366,11 @@ export function createSiteTaggingController({
     })
 
     const trigger = shadowRoot.querySelector("button") as HTMLButtonElement
+    const triggerLogo = shadowRoot.querySelector<HTMLImageElement>('[data-testid="site-tag-trigger-logo"]')
+    triggerLogo?.addEventListener("error", () => {
+      triggerLogo.hidden = true
+      trigger.dataset.logoLoaded = "false"
+    })
     trigger.addEventListener("click", (event) => {
       event.preventDefault()
       event.stopPropagation()
@@ -576,7 +623,7 @@ function resolveExtensionAssetUrl(assetPath: string) {
     try {
       return chrome.runtime.getURL(assetPath)
     } catch {
-      return assetPath
+      return null
     }
   }
 

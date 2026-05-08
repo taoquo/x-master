@@ -379,9 +379,10 @@ test("bookmarks controller falls back when extension asset url resolution is inv
 
     const host = dom.window.document.querySelector('[data-site-tag-overlay-host="true"]')
     const trigger = queryShadow<HTMLButtonElement>(host, '[data-testid="site-tag-trigger"]')
-    const triggerLogo = queryShadow<HTMLImageElement>(host, '[data-testid="site-tag-trigger-logo"]')
     assert.ok(trigger)
-    assert.equal(triggerLogo?.getAttribute("src"), "assets/branding/logo-72.png")
+    assert.equal(trigger.dataset.logoLoaded, "false")
+    assert.equal(queryShadow<HTMLImageElement>(host, '[data-testid="site-tag-trigger-logo"]'), null)
+    assert.ok(queryShadow<HTMLSpanElement>(host, '[data-testid="site-tag-trigger-logo-fallback"]'))
 
     trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, composed: true }))
     await settle()
@@ -399,6 +400,92 @@ test("bookmarks controller falls back when extension asset url resolution is inv
       ;(globalThis as typeof globalThis & { chrome?: unknown }).chrome = originalChrome
     }
   }
+})
+
+test("bookmarks controller hides the trigger logo image when the icon cannot load", async () => {
+  const dom = createBookmarksDom("/i/bookmarks")
+  const article = dom.window.document.querySelector("article") as HTMLElement
+  Object.defineProperty(article, "getBoundingClientRect", {
+    value: () => ({
+      x: 24,
+      y: 64,
+      top: 64,
+      left: 24,
+      right: 424,
+      bottom: 364,
+      width: 400,
+      height: 300,
+      toJSON() {
+        return {}
+      }
+    })
+  })
+  const topActions = dom.window.document.querySelector('[data-testid="tweet-top-actions"]') as HTMLElement
+  Object.defineProperty(topActions, "getBoundingClientRect", {
+    value: () => ({
+      x: 332,
+      y: 72,
+      top: 72,
+      left: 332,
+      right: 404,
+      bottom: 104,
+      width: 72,
+      height: 32,
+      toJSON() {
+        return {}
+      }
+    })
+  })
+  const client = {
+    syncSiteTweetBookmark: async ({ enabled }: { tweet: unknown; enabled: boolean }) => ({
+      bookmarkId: "1234567890",
+      enabled
+    }),
+    prepareSiteTweetTagging: async () => ({
+      bookmarkId: "1234567890",
+      locale: "zh-CN",
+      tags: [createTag("tag-1", "AI")],
+      selectedTagIds: []
+    }) satisfies SiteTweetTagState,
+    setSiteTweetTag: async () => ({
+      bookmarkId: "1234567890",
+      tags: [],
+      selectedTagIds: []
+    }),
+    createSiteTweetTag: async () => ({
+      bookmarkId: "1234567890",
+      createdTag: createTag("tag-2", "Research"),
+      tags: [createTag("tag-1", "AI"), createTag("tag-2", "Research")],
+      selectedTagIds: ["tag-2"]
+    })
+  }
+
+  const controller = createSiteTaggingController({
+    window: dom.window as unknown as Window,
+    document: dom.window.document,
+    pathname: dom.window.location.pathname,
+    client
+  })
+  controller.start()
+
+  article.dispatchEvent(new dom.window.MouseEvent("mouseenter", { bubbles: true, relatedTarget: dom.window.document.body }))
+  await settle()
+
+  const host = dom.window.document.querySelector('[data-site-tag-overlay-host="true"]')
+  const trigger = queryShadow<HTMLButtonElement>(host, '[data-testid="site-tag-trigger"]')
+  const triggerLogo = queryShadow<HTMLImageElement>(host, '[data-testid="site-tag-trigger-logo"]')
+  const fallback = queryShadow<HTMLSpanElement>(host, '[data-testid="site-tag-trigger-logo-fallback"]')
+  assert.ok(trigger)
+  assert.ok(triggerLogo)
+  assert.ok(fallback)
+
+  triggerLogo.dispatchEvent(new dom.window.Event("error"))
+
+  assert.equal(triggerLogo.hidden, true)
+  assert.equal(trigger?.dataset.logoLoaded, "false")
+  assert.equal(fallback.getAttribute("aria-hidden"), "true")
+
+  controller.destroy()
 })
 
 test("home controller waits for the native bookmark state to switch before opening the popover", async () => {
