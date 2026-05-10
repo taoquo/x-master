@@ -297,6 +297,131 @@ test("bookmarks controller injects one quick-tag button per article and opens th
   controller.destroy()
 })
 
+test("site popover ignores stale prepare responses after opening a different tweet", async () => {
+  const dom = new JSDOM(
+    `<!doctype html>
+    <html>
+      <body>
+        <main>
+          <article data-testid="tweet-a">
+            <div data-testid="User-Name">
+              <a href="/alice"><span>Alice</span></a>
+              <a href="/alice/status/1"><time datetime="2026-04-01T12:00:00.000Z"></time></a>
+            </div>
+            <div data-testid="tweetText">First tweet</div>
+          </article>
+          <article data-testid="tweet-b">
+            <div data-testid="User-Name">
+              <a href="/bob"><span>Bob</span></a>
+              <a href="/bob/status/2"><time datetime="2026-04-01T12:00:00.000Z"></time></a>
+            </div>
+            <div data-testid="tweetText">Second tweet</div>
+          </article>
+        </main>
+      </body>
+    </html>`,
+    { url: "https://x.com/i/bookmarks" }
+  )
+  const [firstArticle, secondArticle] = Array.from(dom.window.document.querySelectorAll("article")) as HTMLElement[]
+  Object.defineProperty(firstArticle, "getBoundingClientRect", {
+    value: () => ({
+      x: 20,
+      y: 40,
+      top: 40,
+      left: 20,
+      right: 420,
+      bottom: 240,
+      width: 400,
+      height: 200,
+      toJSON() {
+        return {}
+      }
+    })
+  })
+  Object.defineProperty(secondArticle, "getBoundingClientRect", {
+    value: () => ({
+      x: 32,
+      y: 300,
+      top: 300,
+      left: 32,
+      right: 532,
+      bottom: 560,
+      width: 500,
+      height: 260,
+      toJSON() {
+        return {}
+      }
+    })
+  })
+  const prepareResolvers = new Map<string, (state: SiteTweetTagState) => void>()
+  const client = {
+    syncSiteTweetBookmark: async ({ enabled }: { tweet: unknown; enabled: boolean }) => ({
+      bookmarkId: "1",
+      enabled
+    }),
+    prepareSiteTweetTagging: async (tweet: { tweetId: string }) =>
+      new Promise<SiteTweetTagState>((resolve) => {
+        prepareResolvers.set(tweet.tweetId, resolve)
+      }),
+    setSiteTweetTag: async () => ({
+      bookmarkId: "2",
+      tags: [],
+      selectedTagIds: []
+    }),
+    createSiteTweetTag: async () => ({
+      bookmarkId: "2",
+      createdTag: createTag("tag-3", "Research"),
+      tags: [createTag("tag-3", "Research")],
+      selectedTagIds: ["tag-3"]
+    })
+  }
+
+  const controller = createSiteTaggingController({
+    window: dom.window as unknown as Window,
+    document: dom.window.document,
+    pathname: dom.window.location.pathname,
+    client
+  })
+  controller.start()
+
+  firstArticle.dispatchEvent(new dom.window.MouseEvent("mouseenter", { bubbles: true, relatedTarget: dom.window.document.body }))
+  await settle()
+  const host = dom.window.document.querySelector('[data-site-tag-overlay-host="true"]')
+  const trigger = queryShadow<HTMLButtonElement>(host, '[data-testid="site-tag-trigger"]')
+  assert.ok(trigger)
+  trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  await settle()
+
+  secondArticle.dispatchEvent(new dom.window.MouseEvent("mouseenter", { bubbles: true, relatedTarget: firstArticle }))
+  await settle()
+  trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  await settle()
+
+  prepareResolvers.get("2")?.({
+    bookmarkId: "2",
+    locale: "en",
+    tags: [createTag("tag-2", "Current")],
+    selectedTagIds: []
+  })
+  await settle()
+  prepareResolvers.get("1")?.({
+    bookmarkId: "1",
+    locale: "en",
+    tags: [createTag("tag-1", "Stale")],
+    selectedTagIds: []
+  })
+  await settle()
+
+  const popoverHost = dom.window.document.querySelector('[data-site-tag-popover-host="true"]')
+  const popover = queryShadow<HTMLDivElement>(popoverHost, '[data-testid="site-tag-popover"]')
+  assert.ok(popover)
+  assert.match(popover.textContent ?? "", /Second tweet/)
+  assert.match(popover.textContent ?? "", /Current/)
+  assert.doesNotMatch(popover.textContent ?? "", /Stale/)
+
+  controller.destroy()
+})
+
 test("bookmarks controller falls back when extension asset url resolution is invalidated", async () => {
   const dom = createBookmarksDom("/i/bookmarks")
   const article = dom.window.document.querySelector("article") as HTMLElement
@@ -546,6 +671,129 @@ test("home controller waits for the native bookmark state to switch before openi
   assert.ok(popover)
   assert.ok(backdrop)
   assert.deepEqual(calls, ["sync:add", "prepare"])
+
+  controller.destroy()
+})
+
+test("home controller still opens the popover when x remounts the tweet after bookmarking", async () => {
+  const dom = createBookmarksDom("/home", "bookmark")
+  const calls: string[] = []
+  const client = {
+    syncSiteTweetBookmark: async ({ enabled }: { tweet: unknown; enabled: boolean }) => {
+      calls.push(`sync:${enabled ? "add" : "remove"}`)
+      return { bookmarkId: "1234567890", enabled }
+    },
+    prepareSiteTweetTagging: async () => {
+      calls.push("prepare")
+      return {
+        bookmarkId: "1234567890",
+        locale: "en",
+        tags: [createTag("tag-1", "AI")],
+        selectedTagIds: []
+      } satisfies SiteTweetTagState
+    },
+    setSiteTweetTag: async () => ({
+      bookmarkId: "1234567890",
+      tags: [],
+      selectedTagIds: []
+    }),
+    createSiteTweetTag: async () => ({
+      bookmarkId: "1234567890",
+      createdTag: createTag("tag-2", "Research"),
+      tags: [createTag("tag-2", "Research")],
+      selectedTagIds: ["tag-2"]
+    })
+  }
+
+  const controller = createSiteTaggingController({
+    window: dom.window as unknown as Window,
+    document: dom.window.document,
+    pathname: dom.window.location.pathname,
+    client,
+    bookmarkConfirmation: {
+      attempts: 4,
+      delayMs: 10
+    }
+  })
+  controller.start()
+
+  const nativeBookmarkButton = dom.window.document.querySelector('button[data-testid="bookmark"]') as HTMLButtonElement | null
+  assert.ok(nativeBookmarkButton)
+  nativeBookmarkButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 15))
+  dom.window.document.body.innerHTML = `
+    <main>
+      <article data-testid="tweet-1-remounted">
+        <div data-testid="tweet-header">
+          <div data-testid="User-Name">
+            <a href="/alice"><span>Alice</span></a>
+            <a href="/alice/status/1234567890"><time datetime="2026-04-01T12:00:00.000Z"></time></a>
+          </div>
+        </div>
+        <div data-testid="tweetText">Alpha tweet</div>
+        <div role="group">
+          <button data-testid="removeBookmark" aria-label="Bookmark"></button>
+        </div>
+      </article>
+    </main>
+  `
+
+  await new Promise((resolve) => setTimeout(resolve, 60))
+
+  assert.deepEqual(calls, ["sync:add", "prepare"])
+  assert.ok(dom.window.document.querySelector('[data-site-tag-popover-host="true"]'))
+
+  controller.destroy()
+})
+
+test("home controller uses the default confirmation window for slower native bookmark updates", async () => {
+  const dom = createBookmarksDom("/home", "bookmark")
+  const calls: string[] = []
+  const client = {
+    syncSiteTweetBookmark: async ({ enabled }: { tweet: unknown; enabled: boolean }) => {
+      calls.push(`sync:${enabled ? "add" : "remove"}`)
+      return { bookmarkId: "1234567890", enabled }
+    },
+    prepareSiteTweetTagging: async () => {
+      calls.push("prepare")
+      return {
+        bookmarkId: "1234567890",
+        locale: "en",
+        tags: [],
+        selectedTagIds: []
+      } satisfies SiteTweetTagState
+    },
+    setSiteTweetTag: async () => ({
+      bookmarkId: "1234567890",
+      tags: [],
+      selectedTagIds: []
+    }),
+    createSiteTweetTag: async () => ({
+      bookmarkId: "1234567890",
+      createdTag: createTag("tag-2", "Research"),
+      tags: [createTag("tag-2", "Research")],
+      selectedTagIds: ["tag-2"]
+    })
+  }
+
+  const controller = createSiteTaggingController({
+    window: dom.window as unknown as Window,
+    document: dom.window.document,
+    pathname: dom.window.location.pathname,
+    client
+  })
+  controller.start()
+
+  const nativeBookmarkButton = dom.window.document.querySelector('button[data-testid="bookmark"]') as HTMLButtonElement | null
+  assert.ok(nativeBookmarkButton)
+  nativeBookmarkButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 720))
+  nativeBookmarkButton.setAttribute("data-testid", "removeBookmark")
+
+  await new Promise((resolve) => setTimeout(resolve, 900))
+
+  assert.deepEqual(calls, ["sync:add", "prepare"])
+  assert.ok(dom.window.document.querySelector('[data-site-tag-popover-host="true"]'))
 
   controller.destroy()
 })
@@ -1116,6 +1364,76 @@ test("controller switches out of bookmarks mode when x spa updates the url witho
   await new Promise((resolve) => setTimeout(resolve, 60))
 
   assert.deepEqual(calls, ["prepare"])
+  assert.ok(dom.window.document.querySelector('[data-site-tag-popover-host="true"]'))
+
+  controller.destroy()
+})
+
+test("controller closes a home popover before entering bookmarks mode", async () => {
+  const dom = createBookmarksDom("/home", "bookmark")
+  const calls: string[] = []
+  const client = {
+    syncSiteTweetBookmark: async ({ enabled }: { tweet: unknown; enabled: boolean }) => {
+      calls.push(`sync:${enabled ? "add" : "remove"}`)
+      return { bookmarkId: "1234567890", enabled }
+    },
+    prepareSiteTweetTagging: async () => {
+      calls.push("prepare")
+      return {
+        bookmarkId: "1234567890",
+        locale: "en",
+        tags: [createTag("tag-1", "AI")],
+        selectedTagIds: []
+      } satisfies SiteTweetTagState
+    },
+    setSiteTweetTag: async () => ({
+      bookmarkId: "1234567890",
+      tags: [],
+      selectedTagIds: []
+    }),
+    createSiteTweetTag: async () => ({
+      bookmarkId: "1234567890",
+      createdTag: createTag("tag-2", "Research"),
+      tags: [createTag("tag-2", "Research")],
+      selectedTagIds: ["tag-2"]
+    })
+  }
+
+  const controller = createSiteTaggingController({
+    window: dom.window as unknown as Window,
+    document: dom.window.document,
+    pathname: dom.window.location.pathname,
+    client,
+    bookmarkConfirmation: {
+      attempts: 4,
+      delayMs: 10
+    }
+  })
+  controller.start()
+
+  const homeBookmarkButton = dom.window.document.querySelector('button[data-testid="bookmark"]') as HTMLButtonElement | null
+  assert.ok(homeBookmarkButton)
+  homeBookmarkButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 15))
+  homeBookmarkButton.setAttribute("data-testid", "removeBookmark")
+  await new Promise((resolve) => setTimeout(resolve, 60))
+
+  assert.ok(dom.window.document.querySelector('[data-site-tag-popover-host="true"]'))
+
+  dom.window.history.pushState({}, "", "/i/bookmarks")
+  await settle()
+
+  assert.equal(dom.window.document.querySelector('[data-site-tag-popover-host="true"]'), null)
+
+  const nextBookmarkButton = dom.window.document.querySelector('button[data-testid="removeBookmark"]') as HTMLButtonElement | null
+  assert.ok(nextBookmarkButton)
+  nextBookmarkButton.setAttribute("data-testid", "bookmark")
+  nextBookmarkButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 15))
+  nextBookmarkButton.setAttribute("data-testid", "removeBookmark")
+  await new Promise((resolve) => setTimeout(resolve, 60))
+
+  assert.deepEqual(calls, ["sync:add", "prepare", "sync:add", "prepare"])
   assert.ok(dom.window.document.querySelector('[data-site-tag-popover-host="true"]'))
 
   controller.destroy()

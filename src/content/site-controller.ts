@@ -120,7 +120,7 @@ export function createSiteTaggingController({
   document = globalThis.document,
   pathname = globalThis.location?.pathname ?? "",
   client = createSiteTaggingClient(),
-  bookmarkConfirmation = { attempts: 5, delayMs: 120 },
+  bookmarkConfirmation = { attempts: 16, delayMs: 120 },
   extractDraft = extractSiteTweetDraft
 }: SiteTaggingControllerOptions = {}) {
   const popover = new SiteTagPopover({
@@ -235,6 +235,7 @@ export function createSiteTaggingController({
 
   function teardownHomeMode() {
     removeBookmarkTriggerArtifacts()
+    popover.close()
   }
 
   function ensureRouteObserver() {
@@ -450,14 +451,22 @@ export function createSiteTaggingController({
     pendingBookmarkArticles.add(article)
     const shouldEnable = button.dataset.testid === "bookmark"
     const initialDraft = extractDraft(article)
+    const pathnameAtClick = currentPathname
 
-    void waitForBookmarkConfirmation(article, bookmarkConfirmation, shouldEnable).then(async (confirmed) => {
+    void waitForBookmarkConfirmation({
+      article,
+      document,
+      options: bookmarkConfirmation,
+      shouldEnable,
+      tweetId: initialDraft?.tweetId,
+      extractDraft
+    }).then(async (confirmedArticle) => {
       pendingBookmarkArticles.delete(article)
-      if (!confirmed) {
+      if (!confirmedArticle) {
         return
       }
 
-      const draft = extractDraft(article) ?? initialDraft
+      const draft = extractDraft(confirmedArticle) ?? initialDraft
       if (!draft) {
         return
       }
@@ -474,11 +483,15 @@ export function createSiteTaggingController({
         return
       }
 
+      if (pathnameAtClick !== currentPathname) {
+        return
+      }
+
       if (popoverIsOpen) {
         return
       }
 
-      const activeBookmarkButton = resolveHomeBookmarkButton(article) ?? button
+      const activeBookmarkButton = resolveHomeBookmarkButton(confirmedArticle) ?? resolveHomeBookmarkButton(article) ?? button
       activePopoverTweetId = draft.tweetId
       void popover.open({
         anchor: activeBookmarkButton,
@@ -538,16 +551,50 @@ function resolveHomeBookmarkButton(article: Element) {
   return article.querySelector('button[data-testid="removeBookmark"], button[data-testid="bookmark"]') as HTMLElement | null
 }
 
-async function waitForBookmarkConfirmation(article: Element, options: BookmarkConfirmationOptions, shouldEnable: boolean) {
+async function waitForBookmarkConfirmation({
+  article,
+  document,
+  options,
+  shouldEnable,
+  tweetId,
+  extractDraft
+}: {
+  article: Element
+  document: Document
+  options: BookmarkConfirmationOptions
+  shouldEnable: boolean
+  tweetId?: string
+  extractDraft: (article: Element | null) => SiteTweetDraft | null
+}) {
   for (let index = 0; index < options.attempts; index += 1) {
     await new Promise((resolve) => setTimeout(resolve, options.delayMs))
-    const isBookmarked = Boolean(article.querySelector('button[data-testid="removeBookmark"]'))
-    if (shouldEnable ? isBookmarked : !isBookmarked || !article.isConnected) {
-      return true
+    const currentArticle = resolveConfirmedArticle(article, document, tweetId, extractDraft)
+    const isBookmarked = Boolean(currentArticle?.querySelector('button[data-testid="removeBookmark"]'))
+    if (shouldEnable ? isBookmarked : !isBookmarked || !currentArticle?.isConnected) {
+      return currentArticle ?? article
     }
   }
 
-  return false
+  return null
+}
+
+function resolveConfirmedArticle(
+  article: Element,
+  document: Document,
+  tweetId: string | undefined,
+  extractDraft: (article: Element | null) => SiteTweetDraft | null
+) {
+  if (article.isConnected) {
+    return article
+  }
+
+  if (!tweetId) {
+    return null
+  }
+
+  return (
+    Array.from(document.querySelectorAll("article")).find((candidate) => extractDraft(candidate)?.tweetId === tweetId) ?? null
+  )
 }
 
 function findHeaderActionRail(article: Element) {

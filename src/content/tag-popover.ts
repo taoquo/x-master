@@ -472,6 +472,7 @@ export class SiteTagPopover {
   private shadowRootRef: ShadowRoot | null = null
   private triggerHost: HTMLElement | null = null
   private isOpen = false
+  private openRequestId = 0
   private state: PopoverState = {
     tweet: null,
     bookmarkId: null,
@@ -520,6 +521,8 @@ export class SiteTagPopover {
     tweet: SiteTweetDraft
   }) {
     this.ensureHost()
+    const requestId = this.openRequestId + 1
+    this.openRequestId = requestId
     this.triggerHost = triggerHost
     this.isOpen = true
     this.state = {
@@ -541,7 +544,7 @@ export class SiteTagPopover {
 
     try {
       const state = await this.client.prepareSiteTweetTagging(tweet)
-      if (!this.isOpen) {
+      if (!this.isCurrentRequest(requestId)) {
         return
       }
 
@@ -554,7 +557,7 @@ export class SiteTagPopover {
       }
       this.render()
     } catch (error) {
-      if (!this.isOpen) {
+      if (!this.isCurrentRequest(requestId)) {
         return
       }
 
@@ -574,6 +577,7 @@ export class SiteTagPopover {
     }
 
     this.isOpen = false
+    this.openRequestId += 1
     this.detachDocumentListeners()
     this.onOpenStateChange?.(this.triggerHost, false)
     this.triggerHost = null
@@ -611,6 +615,10 @@ export class SiteTagPopover {
     this.document.body.appendChild(host)
     this.host = host
     this.shadowRootRef = shadowRootRef
+  }
+
+  private isCurrentRequest(requestId: number) {
+    return this.isOpen && this.openRequestId === requestId
   }
 
   private attachDocumentListeners() {
