@@ -120,6 +120,23 @@ function getOptionsCopy(locale: Locale) {
       syncing: "同步中...",
       exportData: "导出数据",
       exporting: "导出中...",
+      dataSafetyTitle: "数据安全",
+      dataSafetyDescription: "导出 JSON 包含书签、列表、标签、规则和同步摘要；不包含原始 X payload。导入恢复会覆盖当前本地数据。",
+      exportBackup: "导出备份",
+      validateBackup: "校验备份",
+      validatingBackup: "校验中...",
+      restoreBackup: "导入恢复",
+      restoringBackup: "恢复中...",
+      resetLocalData: "重置本地数据",
+      resettingData: "重置中...",
+      restoreBackupConfirm: "导入恢复会覆盖当前本地数据，确认继续？",
+      resetLocalDataConfirm: "重置会清空本地书签、列表、标签和设置，确认继续？",
+      validBackup: "有效备份",
+      restoredBackup: "已恢复",
+      localDataReset: "本地数据已重置",
+      bookmarksCountLabel: "书签",
+      listsCountLabel: "列表",
+      tagsCountLabel: "标签",
       totalTags: "总标签数",
       unclassified: "未分类",
       unclassifiedHint: "仍在等待标签覆盖。",
@@ -245,6 +262,23 @@ function getOptionsCopy(locale: Locale) {
     syncing: "Syncing...",
     exportData: "Export data",
     exporting: "Exporting...",
+    dataSafetyTitle: "Data safety",
+    dataSafetyDescription: "The exported JSON includes bookmarks, lists, tags, rules, and sync summary. It does not include the original X payload. Import restore overwrites current local data.",
+    exportBackup: "Export backup",
+    validateBackup: "Validate backup",
+    validatingBackup: "Validating...",
+    restoreBackup: "Import restore",
+    restoringBackup: "Restoring...",
+    resetLocalData: "Reset local data",
+    resettingData: "Resetting...",
+    restoreBackupConfirm: "Import restore will overwrite current local data. Continue?",
+    resetLocalDataConfirm: "Reset will clear local bookmarks, lists, tags, and settings. Continue?",
+    validBackup: "Valid backup",
+    restoredBackup: "Restored",
+    localDataReset: "Local data reset",
+    bookmarksCountLabel: "bookmarks",
+    listsCountLabel: "lists",
+    tagsCountLabel: "tags",
     totalTags: "Total tags",
     unclassified: "Unclassified",
     unclassifiedHint: "Still waiting for tag coverage.",
@@ -513,6 +547,175 @@ function FeedLoadingState({ copy }: { copy: OptionsCopy }) {
         ))}
       </div>
     </div>
+  )
+}
+
+function formatBackupDate(value: string, locale: Locale) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date)
+}
+
+function DataSafetyPanel({
+  workspace,
+  locale,
+  copy
+}: {
+  workspace: ReturnType<typeof useWorkspaceData>
+  locale: Locale
+  copy: OptionsCopy
+}) {
+  const validateInputRef = useRef<HTMLInputElement | null>(null)
+  const restoreInputRef = useRef<HTMLInputElement | null>(null)
+  const validation = workspace.backupValidationResult
+  const restoreResult = workspace.restoreResult
+  const resetResult = workspace.resetResult
+
+  function resetInput(input: HTMLInputElement | null) {
+    if (input) {
+      input.value = ""
+    }
+  }
+
+  async function handleValidateFile(file: File | undefined, input: HTMLInputElement | null) {
+    if (!file) {
+      return
+    }
+
+    try {
+      await workspace.handleValidateBackupFile(file)
+    } catch {
+      // The shared command error area renders the failure.
+    } finally {
+      resetInput(input)
+    }
+  }
+
+  async function handleRestoreFile(file: File | undefined, input: HTMLInputElement | null) {
+    if (!file) {
+      return
+    }
+
+    const shouldRestore = typeof window.confirm === "function" ? window.confirm(copy.restoreBackupConfirm) : true
+    if (!shouldRestore) {
+      resetInput(input)
+      return
+    }
+
+    try {
+      await workspace.handleRestoreBackupFile(file)
+    } catch {
+      // The shared command error area renders the failure.
+    } finally {
+      resetInput(input)
+    }
+  }
+
+  async function handleResetLocalData() {
+    const shouldReset = typeof window.confirm === "function" ? window.confirm(copy.resetLocalDataConfirm) : true
+    if (!shouldReset) {
+      return
+    }
+
+    try {
+      await workspace.handleResetLocalData()
+    } catch {
+      // The shared command error area renders the failure.
+    }
+  }
+
+  const statusText = (() => {
+    if (restoreResult) {
+      return `${copy.restoredBackup} ${restoreResult.counts.bookmarks} ${copy.bookmarksCountLabel}`
+    }
+
+    if (resetResult) {
+      return copy.localDataReset
+    }
+
+    if (validation) {
+      return `${copy.validBackup} · ${validation.counts.bookmarks} ${copy.bookmarksCountLabel} · ${validation.counts.tags} ${copy.tagsCountLabel} · ${formatBackupDate(validation.exportedAt, locale)}`
+    }
+
+    return null
+  })()
+
+  return (
+    <section data-testid="workspace-data-safety-panel" className="options-data-safety-panel">
+      <div className="options-data-safety-head">
+        <span className="options-overline">{copy.dataSafetyTitle}</span>
+        <p className="options-data-safety-copy">{copy.dataSafetyDescription}</p>
+      </div>
+
+      <div className="options-data-safety-actions">
+        <button
+          type="button"
+          data-testid="data-safety-export-backup"
+          onClick={() => void workspace.handleExportWorkspace()}
+          disabled={workspace.isExporting}
+          className="options-footer-chip options-data-safety-button">
+          {workspace.isExporting ? copy.exporting : copy.exportBackup}
+        </button>
+        <button
+          type="button"
+          data-testid="data-safety-validate-backup"
+          onClick={() => validateInputRef.current?.click()}
+          disabled={workspace.isValidatingBackup}
+          className="options-footer-chip options-data-safety-button">
+          {workspace.isValidatingBackup ? copy.validatingBackup : copy.validateBackup}
+        </button>
+        <button
+          type="button"
+          data-testid="data-safety-restore-backup"
+          onClick={() => restoreInputRef.current?.click()}
+          disabled={workspace.isRestoringBackup}
+          className="options-footer-chip options-data-safety-button">
+          {workspace.isRestoringBackup ? copy.restoringBackup : copy.restoreBackup}
+        </button>
+        <button
+          type="button"
+          data-testid="data-safety-reset-local"
+          onClick={() => void handleResetLocalData()}
+          disabled={workspace.isResettingData}
+          className="options-footer-chip options-data-safety-button is-danger">
+          {workspace.isResettingData ? copy.resettingData : copy.resetLocalData}
+        </button>
+      </div>
+
+      <input
+        ref={validateInputRef}
+        data-testid="data-safety-validate-input"
+        type="file"
+        accept="application/json,.json"
+        className="sr-only"
+        onChange={(event) => void handleValidateFile(event.currentTarget.files?.[0], event.currentTarget)}
+      />
+      <input
+        ref={restoreInputRef}
+        data-testid="data-safety-restore-input"
+        type="file"
+        accept="application/json,.json"
+        className="sr-only"
+        onChange={(event) => void handleRestoreFile(event.currentTarget.files?.[0], event.currentTarget)}
+      />
+
+      {statusText ? (
+        <div data-testid="data-safety-validation-result">
+          <InlineMessage
+            message={statusText}
+            tone="info"
+            className="options-data-safety-result"
+          />
+        </div>
+      ) : null}
+    </section>
   )
 }
 
@@ -1202,6 +1405,7 @@ function WorkspaceSidebar({
       <section data-testid="sidebar-footer-section" className="options-sidebar-config">
         <div className="py-4">
           <span className="sr-only">{copy.preferencesLabel}</span>
+          <DataSafetyPanel workspace={workspace} locale={locale} copy={copy} />
           <div className="options-sidebar-footer-row">
             <div className="options-sidebar-footer-controls">
               <button
