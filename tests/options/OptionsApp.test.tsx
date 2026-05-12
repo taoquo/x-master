@@ -13,6 +13,7 @@ import { attachTagToBookmark, createTag } from "../../src/lib/storage/tagsStore.
 import { cleanupRenders, render, settle } from "../helpers/render.tsx"
 import { installChromeRuntimeHarness } from "../helpers/runtime.ts"
 import { LOAD_WORKSPACE_DATA_MESSAGE } from "../../src/lib/runtime/messages.ts"
+import { WORKSPACE_EXPORT_VERSION, type WorkspaceExportPayload } from "../../src/lib/export/exportBookmarks.ts"
 
 function findButton(container: HTMLDivElement, label: string) {
   return Array.from(container.querySelectorAll("button")).find((button) =>
@@ -44,6 +45,64 @@ function setInputValue(
   descriptor?.set?.call(element, value)
   element.dispatchEvent(new dom.Event("input", { bubbles: true }))
   element.dispatchEvent(new dom.Event("change", { bubbles: true }))
+}
+
+function createBackupPayload(overrides: Partial<WorkspaceExportPayload> = {}): WorkspaceExportPayload {
+  const summary = {
+    status: "success" as const,
+    fetchedCount: 1,
+    insertedCount: 1,
+    updatedCount: 0,
+    failedCount: 0,
+    lastSyncedAt: "2026-04-11T08:05:00.000Z"
+  }
+
+  return {
+    exportVersion: WORKSPACE_EXPORT_VERSION,
+    schemaVersion: 3,
+    exportedAt: "2026-04-11T09:00:00.000Z",
+    bookmarks: [
+      {
+        tweetId: "tweet-restored",
+        tweetUrl: "https://x.com/alice/status/tweet-restored",
+        authorName: "Alice",
+        authorHandle: "alice",
+        text: "Restored backup bookmark",
+        createdAtOnX: "2026-04-11T08:00:00.000Z",
+        savedAt: "2026-04-11T08:05:00.000Z"
+      }
+    ],
+    lists: [{ id: "list-inbox", name: "Inbox", createdAt: "2026-04-11T08:00:00.000Z" }],
+    bookmarkLists: [{ bookmarkId: "tweet-restored", listId: "list-inbox", updatedAt: "2026-04-11T08:05:00.000Z" }],
+    tags: [{ id: "tag-restored", name: "Restored", createdAt: "2026-04-11T08:00:00.000Z" }],
+    bookmarkTags: [
+      {
+        id: "tweet-restored:tag-restored",
+        bookmarkId: "tweet-restored",
+        tagId: "tag-restored",
+        createdAt: "2026-04-11T08:05:00.000Z"
+      }
+    ],
+    classificationRules: [],
+    settings: {
+      schemaVersion: 3,
+      locale: "en",
+      themePreference: "system",
+      classificationRules: [],
+      lastSyncSummary: summary
+    },
+    summary,
+    latestSyncRun: null,
+    ...overrides
+  }
+}
+
+function selectFile(input: HTMLInputElement, file: File, dom: { Event: typeof Event }) {
+  Object.defineProperty(input, "files", {
+    configurable: true,
+    value: [file]
+  })
+  input.dispatchEvent(new dom.Event("change", { bubbles: true }))
 }
 
 test.afterEach(async () => {
@@ -266,6 +325,270 @@ test("OptionsApp surfaces export failures in the shared command error area", asy
     assert.doesNotMatch(inlineMessage.className, /red|sky/)
   } finally {
     globalThis.URL.createObjectURL = originalCreateObjectUrl
+  }
+})
+
+test("OptionsApp renders the data safety panel with export guidance", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const panel = findByTestId(container, "workspace-data-safety-panel")
+
+  assert.ok(panel)
+  assert.match(panel.textContent ?? "", /数据安全/)
+  assert.match(panel.textContent ?? "", /JSON/)
+  assert.match(panel.textContent ?? "", /书签、列表、标签、规则和同步摘要/)
+  assert.match(panel.textContent ?? "", /不包含原始 X payload/)
+  assert.match(panel.textContent ?? "", /覆盖当前本地数据/)
+  assert.ok(findByTestId(container, "data-safety-export-backup"))
+  assert.ok(findByTestId(container, "data-safety-validate-backup"))
+  assert.ok(findByTestId(container, "data-safety-restore-backup"))
+  assert.ok(findByTestId(container, "data-safety-reset-local"))
+})
+
+test("OptionsApp validates a selected backup file and shows backup counts", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const validateButton = findByTestId(container, "data-safety-validate-backup") as HTMLButtonElement | null
+  const validateInput = findByTestId(container, "data-safety-validate-input") as HTMLInputElement | null
+  assert.ok(validateButton)
+  assert.ok(validateInput)
+
+  await act(async () => {
+    validateButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await act(async () => {
+    selectFile(
+      validateInput,
+      new dom.window.File([JSON.stringify(createBackupPayload())], "xbm-workspace.json", { type: "application/json" }),
+      dom.window
+    )
+  })
+  await settle()
+
+  const result = findByTestId(container, "data-safety-validation-result")
+  assert.ok(result)
+  assert.match(result.textContent ?? "", /Valid backup/)
+  assert.match(result.textContent ?? "", /1 bookmarks/)
+  assert.match(result.textContent ?? "", /1 tags/)
+  assert.match(result.textContent ?? "", /2026/)
+})
+
+test("OptionsApp surfaces backup validation failures without changing local data", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-original",
+      tweetUrl: "https://x.com/original/status/tweet-original",
+      authorName: "Original",
+      authorHandle: "original",
+      text: "Original data survives invalid validation",
+      createdAtOnX: "2026-04-10T08:00:00.000Z",
+      savedAt: "2026-04-10T08:05:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const validateInput = findByTestId(container, "data-safety-validate-input") as HTMLInputElement | null
+  assert.ok(validateInput)
+
+  await act(async () => {
+    selectFile(validateInput, new dom.window.File(["not json"], "bad.json", { type: "application/json" }), dom.window)
+  })
+  await settle()
+
+  const inlineMessage = findByTestId(container, "sidebar-status-section")?.querySelector(".folio-inline-message") as HTMLElement | null
+  assert.ok(inlineMessage)
+  assert.match(inlineMessage.textContent ?? "", /Backup file must be valid JSON/)
+  assert.match(container.textContent ?? "", /Original data survives invalid validation/)
+})
+
+test("OptionsApp restores a confirmed backup and refreshes the local workspace", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-old",
+      tweetUrl: "https://x.com/old/status/tweet-old",
+      authorName: "Old",
+      authorHandle: "old",
+      text: "Old local bookmark",
+      createdAtOnX: "2026-04-10T08:00:00.000Z",
+      savedAt: "2026-04-10T08:05:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  const originalConfirm = dom.window.confirm
+  dom.window.confirm = () => true
+
+  try {
+    await settle()
+    const restoreInput = findByTestId(container, "data-safety-restore-input") as HTMLInputElement | null
+    assert.ok(restoreInput)
+
+    await act(async () => {
+      selectFile(
+        restoreInput,
+        new dom.window.File([JSON.stringify(createBackupPayload())], "xbm-workspace.json", { type: "application/json" }),
+        dom.window
+      )
+    })
+    await settle()
+
+    assert.match(container.textContent ?? "", /Restored backup bookmark/)
+    assert.doesNotMatch(container.textContent ?? "", /Old local bookmark/)
+    assert.match(findByTestId(container, "workspace-data-safety-panel")?.textContent ?? "", /Restored 1 bookmarks/)
+  } finally {
+    dom.window.confirm = originalConfirm
+  }
+})
+
+test("OptionsApp does not restore a backup when confirmation is cancelled", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-old",
+      tweetUrl: "https://x.com/old/status/tweet-old",
+      authorName: "Old",
+      authorHandle: "old",
+      text: "Old local bookmark remains",
+      createdAtOnX: "2026-04-10T08:00:00.000Z",
+      savedAt: "2026-04-10T08:05:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  const originalConfirm = dom.window.confirm
+  dom.window.confirm = () => false
+
+  try {
+    await settle()
+    const restoreInput = findByTestId(container, "data-safety-restore-input") as HTMLInputElement | null
+    assert.ok(restoreInput)
+
+    await act(async () => {
+      selectFile(
+        restoreInput,
+        new dom.window.File([JSON.stringify(createBackupPayload())], "xbm-workspace.json", { type: "application/json" }),
+        dom.window
+      )
+    })
+    await settle()
+
+    assert.match(container.textContent ?? "", /Old local bookmark remains/)
+    assert.doesNotMatch(container.textContent ?? "", /Restored backup bookmark/)
+  } finally {
+    dom.window.confirm = originalConfirm
+  }
+})
+
+test("OptionsApp resets local data only after confirmation", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-reset",
+      tweetUrl: "https://x.com/reset/status/tweet-reset",
+      authorName: "Reset",
+      authorHandle: "reset",
+      text: "Resettable local bookmark",
+      createdAtOnX: "2026-04-10T08:00:00.000Z",
+      savedAt: "2026-04-10T08:05:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "zh-CN",
+    themePreference: "dark",
+    lastSyncSummary: {
+      status: "success",
+      fetchedCount: 1,
+      insertedCount: 1,
+      updatedCount: 0,
+      failedCount: 0,
+      lastSyncedAt: "2026-04-10T08:05:00.000Z"
+    },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  const originalConfirm = dom.window.confirm
+  dom.window.confirm = () => false
+
+  try {
+    await settle()
+    const resetButton = findByTestId(container, "data-safety-reset-local") as HTMLButtonElement | null
+    assert.ok(resetButton)
+
+    await act(async () => {
+      resetButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    })
+    await settle()
+
+    assert.match(container.textContent ?? "", /Resettable local bookmark/)
+
+    dom.window.confirm = () => true
+    await act(async () => {
+      resetButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    })
+    await settle()
+
+    assert.doesNotMatch(container.textContent ?? "", /Resettable local bookmark/)
+    assert.match(findByTestId(container, "workspace-data-safety-panel")?.textContent ?? "", /本地数据已重置/)
+    assert.equal((await getSettings()).locale, "en")
+  } finally {
+    dom.window.confirm = originalConfirm
   }
 })
 

@@ -1,6 +1,12 @@
 import { useState } from "react"
 import { createWorkspaceExportFilename, exportBookmarks } from "../../lib/export/exportBookmarks.ts"
-import { runSync } from "../../lib/runtime/popupClient.ts"
+import {
+  restoreWorkspaceBackup,
+  validateWorkspaceBackupText,
+  type WorkspaceBackupValidationResult,
+  type WorkspaceRestoreResult
+} from "../../lib/export/workspaceBackup.ts"
+import { resetStoredData, runSync } from "../../lib/runtime/popupClient.ts"
 import { createList, deleteList, moveBookmarkToList, moveBookmarksToList, renameList } from "../../lib/storage/listsStore.ts"
 import { getSettings, removeTagFromClassificationRules, saveClassificationRules } from "../../lib/storage/settings.ts"
 import { attachTagToBookmark, attachTagToBookmarks, createTag, deleteTag, detachTagFromBookmark } from "../../lib/storage/tagsStore.ts"
@@ -19,10 +25,16 @@ export function useWorkspaceCommands({
 }) {
   const [isSyncing, setIsSyncing] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [isValidatingBackup, setIsValidatingBackup] = useState(false)
+  const [isRestoringBackup, setIsRestoringBackup] = useState(false)
+  const [isResettingData, setIsResettingData] = useState(false)
   const [isSavingLists, setIsSavingLists] = useState(false)
   const [isSavingTags, setIsSavingTags] = useState(false)
   const [isSavingRules, setIsSavingRules] = useState(false)
   const [commandError, setCommandError] = useState<string | null>(null)
+  const [backupValidationResult, setBackupValidationResult] = useState<WorkspaceBackupValidationResult | null>(null)
+  const [restoreResult, setRestoreResult] = useState<WorkspaceRestoreResult | null>(null)
+  const [resetResult, setResetResult] = useState<{ success: true } | null>(null)
 
   async function handleSync() {
     setCommandError(null)
@@ -69,6 +81,80 @@ export function useWorkspaceCommands({
       setCommandError(toErrorMessage(error, "Failed to export data"))
     } finally {
       setIsExporting(false)
+    }
+  }
+
+  async function readBackupFile(file: File) {
+    if (!file) {
+      throw new Error("Backup file is required")
+    }
+
+    if (typeof file.text !== "function") {
+      throw new Error("File APIs unavailable")
+    }
+
+    return file.text()
+  }
+
+  async function handleValidateBackupFile(file: File) {
+    setCommandError(null)
+    setBackupValidationResult(null)
+    setRestoreResult(null)
+    setResetResult(null)
+    setIsValidatingBackup(true)
+
+    try {
+      const text = await readBackupFile(file)
+      const validation = validateWorkspaceBackupText(text)
+      setBackupValidationResult(validation)
+      return validation
+    } catch (error) {
+      setCommandError(toErrorMessage(error, "Failed to validate backup"))
+      throw error
+    } finally {
+      setIsValidatingBackup(false)
+    }
+  }
+
+  async function handleRestoreBackupFile(file: File) {
+    setCommandError(null)
+    setBackupValidationResult(null)
+    setRestoreResult(null)
+    setResetResult(null)
+    setIsRestoringBackup(true)
+
+    try {
+      const text = await readBackupFile(file)
+      const validation = validateWorkspaceBackupText(text)
+      const result = await restoreWorkspaceBackup(validation.payload)
+      setBackupValidationResult(validation)
+      setRestoreResult(result)
+      await refreshData()
+      return result
+    } catch (error) {
+      setCommandError(toErrorMessage(error, "Failed to restore backup"))
+      throw error
+    } finally {
+      setIsRestoringBackup(false)
+    }
+  }
+
+  async function handleResetLocalData() {
+    setCommandError(null)
+    setBackupValidationResult(null)
+    setRestoreResult(null)
+    setResetResult(null)
+    setIsResettingData(true)
+
+    try {
+      await resetStoredData()
+      setResetResult({ success: true })
+      await refreshData()
+    } catch (error) {
+      setCommandError(toErrorMessage(error, "Failed to reset local data"))
+      throw error
+    } finally {
+      setIsResettingData(false)
     }
   }
 
@@ -271,12 +357,21 @@ export function useWorkspaceCommands({
   return {
     isSyncing,
     isExporting,
+    isValidatingBackup,
+    isRestoringBackup,
+    isResettingData,
     isSavingLists,
     isSavingTags,
     isSavingRules,
     commandError,
+    backupValidationResult,
+    restoreResult,
+    resetResult,
     handleSync,
     handleExportWorkspace,
+    handleValidateBackupFile,
+    handleRestoreBackupFile,
+    handleResetLocalData,
     handleCreateList,
     handleRenameList,
     handleDeleteList,
