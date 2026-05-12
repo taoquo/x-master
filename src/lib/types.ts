@@ -1,3 +1,5 @@
+import type { SyncErrorKind } from "./x/syncErrors.ts"
+
 export interface BookmarkRecord {
   id?: string
   tweetId: string
@@ -71,6 +73,7 @@ export interface SyncRunRecord {
   insertedCount: number
   updatedCount: number
   failedCount: number
+  errorKind?: SyncErrorKind
   errorSummary?: string
 }
 
@@ -81,6 +84,7 @@ export interface SyncSummary {
   updatedCount: number
   failedCount: number
   lastSyncedAt?: string
+  errorKind?: SyncErrorKind
   errorSummary?: string
 }
 

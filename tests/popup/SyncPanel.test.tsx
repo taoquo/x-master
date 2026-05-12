@@ -57,3 +57,31 @@ test("SyncPanel renders sync summary and triggers manual sync", async () => {
 
   assert.equal(clicked, 1)
 })
+
+test("SyncPanel renders localized sync error guidance from errorKind", async () => {
+  const { container } = render(
+    React.createElement(
+      ExtensionUiProvider,
+      undefined,
+      React.createElement(SyncPanel, {
+        summary: {
+          status: "error",
+          fetchedCount: 0,
+          insertedCount: 0,
+          updatedCount: 0,
+          failedCount: 1,
+          errorKind: "auth_expired",
+          errorSummary: "X API error 401: unauthorized response body"
+        },
+        isSyncing: false,
+        onSync: async () => {}
+      })
+    )
+  )
+
+  await settle()
+
+  const error = container.querySelector('[data-testid="popup-sync-error"]')
+  assert.match(error?.textContent ?? "", /X login expired. Sign in to X again, then sync./)
+  assert.doesNotMatch(error?.textContent ?? "", /unauthorized response body/)
+})

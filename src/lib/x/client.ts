@@ -1,5 +1,6 @@
 import { extractCsrfToken } from "./auth.ts"
 import { parseBookmarkEntries } from "./parseBookmarks.ts"
+import { XApiError } from "./syncErrors.ts"
 
 export const BOOKMARKS_QUERY_ID = "-LGfdImKeQz0xS_jjUwzlA"
 export const BOOKMARKS_BEARER_TOKEN =
@@ -70,8 +71,7 @@ export async function requestBookmarksPage({
   })
 
   if (!response.ok) {
-    const responseText = (await response.text()).slice(0, 200)
-    throw new Error(`X API error ${response.status}: ${responseText}`)
+    throw new XApiError(response.status)
   }
 
   return response.json()

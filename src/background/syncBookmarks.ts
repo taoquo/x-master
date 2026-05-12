@@ -8,6 +8,7 @@ import { createEmptySyncSummary, type BookmarkRecord, type SyncSummary, type Syn
 import { extractCsrfToken, getXCookieHeader } from "../lib/x/auth.ts"
 import { fetchBookmarksPage } from "../lib/x/client.ts"
 import { fetchAllBookmarks } from "../lib/x/paginateBookmarks.ts"
+import { normalizeSyncError } from "../lib/x/syncErrors.ts"
 
 const DEFAULT_SYNC_LIMIT = 10000
 const DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES = 3
@@ -49,12 +50,22 @@ async function defaultUpdateSyncSummary(
   writeSettings: typeof saveSettings
 ) {
   const settings = await readSettings()
+  const lastSyncSummary: SyncSummary = {
+    ...settings.lastSyncSummary,
+    ...summary
+  }
+
+  if (summary.errorKind === undefined) {
+    delete lastSyncSummary.errorKind
+  }
+
+  if (summary.errorSummary === undefined) {
+    delete lastSyncSummary.errorSummary
+  }
+
   await writeSettings({
     ...settings,
-    lastSyncSummary: {
-      ...settings.lastSyncSummary,
-      ...summary
-    }
+    lastSyncSummary
   })
 }
 
@@ -70,10 +81,6 @@ async function persistSummary(
   }
 
   await defaultUpdateSyncSummary(summary, readSettings, writeSettings)
-}
-
-function toErrorSummary(error: unknown) {
-  return error instanceof Error ? error.message : String(error)
 }
 
 export async function runBookmarkSync({
@@ -97,6 +104,7 @@ export async function runBookmarkSync({
   await persistSummary(
     createSummary({
       status: "running",
+      errorKind: undefined,
       errorSummary: undefined
     }),
     updateSyncSummary,
@@ -188,6 +196,7 @@ export async function runBookmarkSync({
       updatedCount,
       failedCount,
       lastSyncedAt: finishedAt,
+      errorKind: undefined,
       errorSummary: undefined
     })
 
@@ -212,11 +221,12 @@ export async function runBookmarkSync({
     }
   } catch (error) {
     const finishedAt = new Date().toISOString()
-    const errorSummary = toErrorSummary(error)
+    const { kind: errorKind, summary: errorSummary } = normalizeSyncError(error)
     const summary = createSummary({
       status: "error",
       failedCount: 1,
       lastSyncedAt: finishedAt,
+      errorKind,
       errorSummary
     })
 
@@ -229,10 +239,11 @@ export async function runBookmarkSync({
       insertedCount: 0,
       updatedCount: 0,
       failedCount: 1,
+      errorKind,
       errorSummary
     })
 
     await persistSummary(summary, updateSyncSummary, readSettings, writeSettings)
-    throw error
+    throw new Error(errorSummary)
   }
 }

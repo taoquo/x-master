@@ -1,6 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { parseBookmarkEntries } from "../../src/lib/x/parseBookmarks.ts"
+import { normalizeSyncError } from "../../src/lib/x/syncErrors.ts"
 
 const response = {
   data: {
@@ -103,6 +104,40 @@ test("parseBookmarkEntries extracts normalized bookmark records", () => {
   assert.equal(result.bookmarks[1].text, "full note tweet body")
   assert.equal(result.bookmarks[1].sourceKind, "x-note-tweet")
   assert.equal(result.nextCursor, "next-cursor")
+})
+
+test("parseBookmarkEntries classifies missing bookmark timeline instructions as an X structure change", () => {
+  assert.throws(
+    () => parseBookmarkEntries({ data: { bookmark_timeline_v2: { timeline: {} } } }),
+    (error) => {
+      const normalized = normalizeSyncError(error)
+      assert.equal(normalized.kind, "x_schema_changed")
+      assert.match(normalized.summary, /X 页面或 API 结构已变化/)
+      return true
+    }
+  )
+})
+
+test("parseBookmarkEntries accepts a recognizable empty bookmark timeline", () => {
+  const result = parseBookmarkEntries({
+    data: {
+      bookmark_timeline_v2: {
+        timeline: {
+          instructions: [
+            {
+              type: "TimelineAddEntries",
+              entries: []
+            }
+          ]
+        }
+      }
+    }
+  })
+
+  assert.deepEqual(result, {
+    bookmarks: [],
+    nextCursor: null
+  })
 })
 
 test("parseBookmarkEntries preserves full text whitespace", () => {

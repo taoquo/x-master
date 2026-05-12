@@ -105,6 +105,39 @@ test("getSettings migrates legacy stored fields into the reduced settings shape"
   assert.equal(settings.incrementalStopBufferPages, 3)
 })
 
+test("getSettings preserves valid sync error kinds and drops invalid values", async () => {
+  const storage = installChromeStorageMock()
+  storage.setStoredValue({
+    lastSyncSummary: {
+      status: "error",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 1,
+      errorKind: "rate_limited",
+      errorSummary: "X 暂时限制了同步请求，请稍后再试。"
+    }
+  })
+
+  const settings = await getSettings()
+  assert.equal(settings.lastSyncSummary.errorKind, "rate_limited")
+
+  storage.setStoredValue({
+    lastSyncSummary: {
+      status: "error",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 1,
+      errorKind: "raw-http-error",
+      errorSummary: "raw error"
+    }
+  })
+
+  const normalizedSettings = await getSettings()
+  assert.equal(normalizedSettings.lastSyncSummary.errorKind, undefined)
+})
+
 test("saveSettings persists locale and theme preferences", async () => {
   installChromeStorageMock()
 

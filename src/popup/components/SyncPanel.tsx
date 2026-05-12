@@ -1,5 +1,6 @@
 import React from "react"
 import type { Locale, SyncSummary } from "../../lib/types.ts"
+import { getSyncErrorSummary } from "../../lib/x/syncErrors.ts"
 import { AppIcon } from "../../ui/icons.tsx"
 import { StatusBadge, SurfaceCard } from "../../ui/components.tsx"
 import { useExtensionUi } from "../../ui/provider.tsx"
@@ -78,6 +79,9 @@ export function SyncPanel({
   const { locale } = useExtensionUi()
   const copy = getPopupCopy(locale)
   const statusLabel = copy.status[summary.status]
+  const errorSummary = summary.errorKind
+    ? getSyncErrorSummary(summary.errorKind, locale)
+    : summary.errorSummary
 
   return (
     <SurfaceCard
@@ -115,9 +119,9 @@ export function SyncPanel({
           </div>
         </div>
 
-        {summary.errorSummary ? (
+        {errorSummary ? (
           <p data-testid="popup-sync-error" className="folio-inline-message is-error">
-            {copy.error}: {summary.errorSummary}
+            {copy.error}: {errorSummary}
           </p>
         ) : null}
 

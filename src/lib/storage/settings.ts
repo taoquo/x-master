@@ -6,6 +6,7 @@ import {
   type SyncSummary,
   type ThemePreference
 } from "../types.ts"
+import { isSyncErrorKind } from "../x/syncErrors.ts"
 
 const SETTINGS_STORAGE_KEY = "settings"
 const SETTINGS_SCHEMA_VERSION = 4
@@ -53,6 +54,22 @@ function normalizeRange(value: unknown, fallback: number, min: number, max: numb
   return Math.min(max, Math.max(min, normalized))
 }
 
+function normalizeSyncSummary(summary: Partial<SyncSummary> | undefined): SyncSummary {
+  const defaults = createEmptySyncSummary()
+  const errorKind = isSyncErrorKind(summary?.errorKind) ? summary.errorKind : undefined
+  const normalized: SyncSummary = {
+    ...defaults,
+    ...summary,
+    errorKind
+  }
+
+  if (errorKind === undefined) {
+    delete normalized.errorKind
+  }
+
+  return normalized
+}
+
 function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): ExtensionSettings {
   const defaults = createDefaultSettings()
 
@@ -60,10 +77,7 @@ function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): Ex
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     locale: normalizeLocale(settings?.locale),
     themePreference: normalizeThemePreference(settings?.themePreference),
-    lastSyncSummary: {
-      ...defaults.lastSyncSummary,
-      ...settings?.lastSyncSummary
-    },
+    lastSyncSummary: normalizeSyncSummary(settings?.lastSyncSummary),
     syncStrategyVersion: normalizePositiveInteger(settings?.syncStrategyVersion, SYNC_STRATEGY_VERSION),
     hasCompletedInitialFullSync: Boolean(settings?.hasCompletedInitialFullSync),
     incrementalStopBufferPages: normalizePositiveInteger(

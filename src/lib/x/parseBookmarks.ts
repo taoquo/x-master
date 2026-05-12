@@ -1,3 +1,5 @@
+import { XSchemaChangedError } from "./syncErrors.ts"
+
 function getTimelineInstructions(response: any) {
   return (
     response?.data?.bookmark_timeline_v2?.timeline?.instructions ??
@@ -37,6 +39,11 @@ function getMediaPayload(item: any) {
 export function parseBookmarkEntries(response: any) {
   const instructions = getTimelineInstructions(response)
   const addEntries = instructions.find((instruction: any) => instruction?.type === "TimelineAddEntries")
+
+  if (!addEntries) {
+    throw new XSchemaChangedError()
+  }
+
   const entries = addEntries?.entries ?? []
   const seenAt = new Date().toISOString()
 

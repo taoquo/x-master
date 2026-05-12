@@ -9,6 +9,7 @@ import {
   fetchBookmarksPage,
   requestBookmarksPage
 } from "../../src/lib/x/client.ts"
+import { normalizeSyncError } from "../../src/lib/x/syncErrors.ts"
 
 test("buildBookmarkTimelineUrl includes cursor and caps the page size", () => {
   const url = new URL(buildBookmarkTimelineUrl("cursor-1", 200))
@@ -120,7 +121,7 @@ test("requestBookmarksPage sends the expected X auth headers", async () => {
   })
 })
 
-test("requestBookmarksPage includes a response snippet in X API errors", async () => {
+test("requestBookmarksPage keeps X auth failures classifiable without exposing raw response text", async () => {
   await assert.rejects(
     () =>
       requestBookmarksPage({
@@ -134,6 +135,67 @@ test("requestBookmarksPage includes a response snippet in X API errors", async (
             })
         }
       }),
-    /X API error 401: unauthorized response body/
+    (error) => {
+      const normalized = normalizeSyncError(error)
+      assert.equal(normalized.kind, "auth_expired")
+      assert.doesNotMatch(normalized.summary, /unauthorized response body/)
+      return true
+    }
+  )
+})
+
+test("requestBookmarksPage classifies forbidden X responses as auth expired", async () => {
+  await assert.rejects(
+    () =>
+      requestBookmarksPage({
+        url: "https://x.com/i/api/graphql/test/Bookmarks?variables=%7B%7D",
+        requestContext: {
+          cookieHeader: "auth_token=abc; ct0=token123",
+          csrfToken: "token123",
+          fetchImpl: async () => new Response("forbidden response body", { status: 403 })
+        }
+      }),
+    (error) => {
+      assert.equal(normalizeSyncError(error).kind, "auth_expired")
+      return true
+    }
+  )
+})
+
+test("requestBookmarksPage classifies X rate limits", async () => {
+  await assert.rejects(
+    () =>
+      requestBookmarksPage({
+        url: "https://x.com/i/api/graphql/test/Bookmarks?variables=%7B%7D",
+        requestContext: {
+          cookieHeader: "auth_token=abc; ct0=token123",
+          csrfToken: "token123",
+          fetchImpl: async () => new Response("rate limited", { status: 429 })
+        }
+      }),
+    (error) => {
+      assert.equal(normalizeSyncError(error).kind, "rate_limited")
+      return true
+    }
+  )
+})
+
+test("requestBookmarksPage classifies fetch network failures", async () => {
+  await assert.rejects(
+    () =>
+      requestBookmarksPage({
+        url: "https://x.com/i/api/graphql/test/Bookmarks?variables=%7B%7D",
+        requestContext: {
+          cookieHeader: "auth_token=abc; ct0=token123",
+          csrfToken: "token123",
+          fetchImpl: async () => {
+            throw new TypeError("Failed to fetch")
+          }
+        }
+      }),
+    (error) => {
+      assert.equal(normalizeSyncError(error).kind, "network_error")
+      return true
+    }
   )
 })

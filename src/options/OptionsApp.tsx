@@ -5,6 +5,7 @@ import type {
   Locale,
   TagRecord
 } from "../lib/types.ts"
+import { getSyncErrorSummary, type SyncErrorKind } from "../lib/x/syncErrors.ts"
 import {
   filterBookmarks,
   filterBookmarksByAuthors,
@@ -61,6 +62,10 @@ function formatCompactCount(value: number | undefined, locale: Locale) {
     notation: "compact",
     maximumFractionDigits: value && value >= 1000 ? 1 : 0
   }).format(value ?? 0)
+}
+
+function formatSyncErrorSummary(summary: { errorKind?: SyncErrorKind; errorSummary?: string }, locale: Locale) {
+  return summary.errorKind ? getSyncErrorSummary(summary.errorKind, locale) : summary.errorSummary
 }
 
 function getListCopyDensityClass(text: string, hasMedia: boolean, hasTags: boolean) {
@@ -1083,7 +1088,7 @@ function WorkspaceSidebar({
             <span>{workspace.isSyncing ? copy.syncing : copy.syncNow}</span>
           </button>
 
-          <InlineMessage message={workspace.commandError} />
+          <InlineMessage message={formatSyncErrorSummary(workspace.summary, locale) ?? workspace.commandError} />
         </div>
       </section>
 

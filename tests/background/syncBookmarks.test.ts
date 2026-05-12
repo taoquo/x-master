@@ -226,15 +226,17 @@ test("runBookmarkSync does not mark initial full sync complete when the first sy
           savedSettings = nextSettings
         }
       }),
-    /boom/
+    /同步失败，请重试/
   )
 
   assert.equal(savedSettings.hasCompletedInitialFullSync, false)
+  assert.equal(savedSettings.lastSyncSummary.errorKind, "unknown")
+  assert.equal(savedSettings.lastSyncSummary.errorSummary, "同步失败，请重试。")
 })
 
-test("runBookmarkSync persists an error summary and rethrows when sync fails", async () => {
-  const recordedSummaries: Array<{ status: string; errorSummary?: string }> = []
-  const recordedSyncRuns: Array<{ id: string; status: string; errorSummary?: string; finishedAt?: string }> = []
+test("runBookmarkSync persists an auth-expired error kind and rethrows a friendly error", async () => {
+  const recordedSummaries: Array<{ status: string; errorKind?: string; errorSummary?: string }> = []
+  const recordedSyncRuns: Array<{ id: string; status: string; errorKind?: string; errorSummary?: string; finishedAt?: string }> = []
 
   await assert.rejects(
     () =>
@@ -247,21 +249,115 @@ test("runBookmarkSync persists an error summary and rethrows when sync fails", a
           recordedSyncRuns.push({
             id: syncRun.id,
             status: syncRun.status,
+            errorKind: syncRun.errorKind,
             errorSummary: syncRun.errorSummary,
             finishedAt: syncRun.finishedAt
           })
         },
         updateSyncSummary: async (summary) => {
-          recordedSummaries.push({ status: summary.status, errorSummary: summary.errorSummary })
+          recordedSummaries.push({
+            status: summary.status,
+            errorKind: summary.errorKind,
+            errorSummary: summary.errorSummary
+          })
         }
       }),
-    /X API error 401: unauthorized response body/
+    /X 登录已失效/
   )
 
   assert.deepEqual(recordedSummaries.map((summary) => summary.status), ["running", "error"])
-  assert.equal(recordedSummaries[1].errorSummary, "X API error 401: unauthorized response body")
+  assert.equal(recordedSummaries[1].errorKind, "auth_expired")
+  assert.equal(recordedSummaries[1].errorSummary, "X 登录已失效，请重新登录 X 后再同步。")
+  assert.doesNotMatch(recordedSummaries[1].errorSummary ?? "", /unauthorized response body/)
   assert.deepEqual(recordedSyncRuns.map((syncRun) => syncRun.status), ["running", "error"])
   assert.equal(recordedSyncRuns[0]?.id, recordedSyncRuns[1]?.id)
-  assert.equal(recordedSyncRuns[1]?.errorSummary, "X API error 401: unauthorized response body")
+  assert.equal(recordedSyncRuns[1]?.errorKind, "auth_expired")
+  assert.equal(recordedSyncRuns[1]?.errorSummary, "X 登录已失效，请重新登录 X 后再同步。")
   assert.match(String(recordedSyncRuns[1]?.finishedAt), /^\d{4}-\d{2}-\d{2}T/)
+})
+
+test("runBookmarkSync persists specific recoverable sync error kinds", async () => {
+  const cases = [
+    {
+      error: new Error("X API error 429"),
+      kind: "rate_limited",
+      summary: "X 暂时限制了同步请求，请稍后再试。"
+    },
+    {
+      error: new TypeError("Failed to fetch"),
+      kind: "network_error",
+      summary: "网络请求失败，请检查网络连接后重试。"
+    },
+    {
+      error: new Error("X bookmark timeline structure changed"),
+      kind: "x_schema_changed",
+      summary: "X 页面或 API 结构已变化，请更新扩展后再同步。"
+    }
+  ]
+
+  for (const currentCase of cases) {
+    const recordedSummaries: Array<{ status: string; errorKind?: string; errorSummary?: string }> = []
+
+    await assert.rejects(
+      () =>
+        runBookmarkSync({
+          getXCookieHeader: async () => "auth_token=abc; ct0=token123",
+          fetchBookmarksPage: async () => {
+            throw currentCase.error
+          },
+          createSyncRun: async () => {},
+          updateSyncSummary: async (summary) => {
+            recordedSummaries.push({
+              status: summary.status,
+              errorKind: summary.errorKind,
+              errorSummary: summary.errorSummary
+            })
+          }
+        }),
+      (error) => {
+        assert.match(error instanceof Error ? error.message : String(error), new RegExp(currentCase.summary))
+        return true
+      }
+    )
+
+    const errorSummary = recordedSummaries.at(-1)
+    assert.equal(errorSummary?.status, "error")
+    assert.equal(errorSummary?.errorKind, currentCase.kind)
+    assert.equal(errorSummary?.errorSummary, currentCase.summary)
+  }
+})
+
+test("runBookmarkSync clears stale sync errors when a later sync succeeds", async () => {
+  let savedSettings: ExtensionSettings = {
+    schemaVersion: 4,
+    locale: "zh-CN",
+    themePreference: "system",
+    lastSyncSummary: {
+      status: "error",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 1,
+      errorKind: "network_error",
+      errorSummary: "old error"
+    },
+    classificationRules: [],
+    syncStrategyVersion: 1,
+    hasCompletedInitialFullSync: true,
+    incrementalStopBufferPages: 3
+  }
+
+  await runBookmarkSync({
+    getXCookieHeader: async () => "auth_token=abc; ct0=token123",
+    fetchAllBookmarks: async () => ({ bookmarks: [], failedCount: 0 }),
+    createSyncRun: async () => {},
+    getSettings: async () => savedSettings,
+    saveSettings: async (nextSettings) => {
+      savedSettings = nextSettings
+    }
+  })
+
+  assert.equal(savedSettings.lastSyncSummary.status, "success")
+  assert.equal(savedSettings.lastSyncSummary.errorKind, undefined)
+  assert.equal(savedSettings.lastSyncSummary.errorSummary, undefined)
 })

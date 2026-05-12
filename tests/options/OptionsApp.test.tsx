@@ -3669,6 +3669,63 @@ test("OptionsApp shows command errors near the sync controls", async () => {
   assert.match(container.textContent ?? "", /Sync failed on purpose/)
 })
 
+test("OptionsApp shows classified sync error guidance instead of raw X API errors", async () => {
+  installChromeRuntimeHarness({
+    runSync: async () => {
+      await saveSettings({
+        schemaVersion: 4,
+        locale: "en",
+        themePreference: "system",
+        lastSyncSummary: {
+          status: "error",
+          fetchedCount: 0,
+          insertedCount: 0,
+          updatedCount: 0,
+          failedCount: 1,
+          errorKind: "auth_expired",
+          errorSummary: "X login expired. Sign in to X again, then sync."
+        },
+        classificationRules: []
+      })
+      throw new Error("X login expired. Sign in to X again, then sync.")
+    }
+  })
+  await resetBookmarksDb()
+
+  await saveSettings({
+    schemaVersion: 4,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: {
+      status: "idle",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 0
+    },
+    classificationRules: []
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  let syncButton = findButton(container, "Sync now")
+  if (!syncButton) {
+    await settle()
+    syncButton = findButton(container, "Sync now")
+  }
+  assert.ok(syncButton)
+
+  await act(async () => {
+    syncButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const sidebarSync = findByTestId(container, "workspace-sidebar-sync")
+  assert.match(sidebarSync?.textContent ?? "", /X login expired. Sign in to X again, then sync./)
+  assert.doesNotMatch(sidebarSync?.textContent ?? "", /unauthorized response body/)
+})
+
 test("OptionsApp loads workspace data without depending on the runtime workspace message", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()

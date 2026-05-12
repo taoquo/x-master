@@ -136,6 +136,65 @@ test("validateWorkspaceBackupText accepts a valid workspace backup and returns c
   })
 })
 
+test("validateWorkspaceBackupText preserves sync error kind fields and accepts legacy summaries without them", () => {
+  const errorSummary = {
+    status: "error" as const,
+    fetchedCount: 0,
+    insertedCount: 0,
+    updatedCount: 0,
+    failedCount: 1,
+    errorKind: "auth_expired" as const,
+    errorSummary: "X 登录已失效，请重新登录 X 后再同步。"
+  }
+  const result = validateWorkspaceBackupText(
+    JSON.stringify(
+      createBackupPayload({
+        summary: errorSummary,
+        settings: {
+          schemaVersion: 3,
+          locale: "zh-CN",
+          themePreference: "dark",
+          classificationRules: [],
+          lastSyncSummary: errorSummary
+        },
+        latestSyncRun: {
+          id: "sync-error",
+          status: "error",
+          fetchedCount: 0,
+          insertedCount: 0,
+          updatedCount: 0,
+          failedCount: 1,
+          errorKind: "auth_expired",
+          errorSummary: "X 登录已失效，请重新登录 X 后再同步。"
+        }
+      })
+    )
+  )
+
+  assert.equal(result.payload.summary.errorKind, "auth_expired")
+  assert.equal(result.payload.settings.lastSyncSummary?.errorKind, "auth_expired")
+  assert.equal(result.payload.latestSyncRun?.errorKind, "auth_expired")
+
+  const legacyResult = validateWorkspaceBackupText(JSON.stringify(createBackupPayload()))
+  assert.equal(legacyResult.payload.summary.errorKind, undefined)
+})
+
+test("validateWorkspaceBackupText rejects invalid sync error kinds", () => {
+  const payload = createBackupPayload({
+    summary: {
+      status: "error",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 1,
+      errorKind: "raw-http-error",
+      errorSummary: "raw error"
+    } as unknown as WorkspaceExportPayload["summary"]
+  })
+
+  assert.throws(() => validateWorkspaceBackupText(JSON.stringify(payload)), /summary\.errorKind is invalid/)
+})
+
 test("validateWorkspaceBackupText rejects non-json backup text", () => {
   assert.throws(() => validateWorkspaceBackupText("not json"), /Backup file must be valid JSON/)
 })

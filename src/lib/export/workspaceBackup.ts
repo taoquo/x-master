@@ -21,6 +21,7 @@ import {
   transactionDone
 } from "../storage/db.ts"
 import { saveSettings } from "../storage/settings.ts"
+import { isSyncErrorKind } from "../x/syncErrors.ts"
 import {
   WORKSPACE_EXPORT_VERSION,
   type WorkspaceExportBookmarkRecord,
@@ -126,6 +127,19 @@ function optionalString(record: Record<string, unknown>, key: string, path: stri
   return value
 }
 
+function optionalSyncErrorKind(record: Record<string, unknown>, key: string, path: string) {
+  const value = record[key]
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (!isSyncErrorKind(value)) {
+    throw new Error(`${path}.${key} is invalid`)
+  }
+
+  return value
+}
+
 function validateSyncSummary(value: unknown, path: string): SyncSummary {
   const record = requireObject(value, path)
   const status = requireString(record, "status", path)
@@ -141,6 +155,7 @@ function validateSyncSummary(value: unknown, path: string): SyncSummary {
     updatedCount: requireNumber(record, "updatedCount", path),
     failedCount: requireNumber(record, "failedCount", path),
     lastSyncedAt: optionalString(record, "lastSyncedAt", path),
+    errorKind: optionalSyncErrorKind(record, "errorKind", path),
     errorSummary: optionalString(record, "errorSummary", path)
   }
 }
@@ -162,6 +177,7 @@ function validateSyncRun(value: unknown, path: string): SyncRunRecord {
     insertedCount: requireNumber(record, "insertedCount", path),
     updatedCount: requireNumber(record, "updatedCount", path),
     failedCount: requireNumber(record, "failedCount", path),
+    errorKind: optionalSyncErrorKind(record, "errorKind", path),
     errorSummary: optionalString(record, "errorSummary", path)
   }
 }
