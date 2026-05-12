@@ -2578,21 +2578,6 @@
     margin-bottom: 8px;
   }
 
-  .options-data-safety-actions {
-    display: inline-flex;
-    align-items: center;
-  }
-
-  .options-data-safety-button {
-    height: 28px;
-    min-width: auto;
-    font-weight: 600;
-  }
-
-  .options-data-safety-button.is-danger {
-    color: var(--accent-primary);
-  }
-
   .options-data-safety-result {
     padding: 7px 9px;
     font-size: 11px;
@@ -2646,6 +2631,10 @@
   .options-footer-icon-button:hover {
     background: rgba(226, 232, 240, 0.5);
     color: var(--text-primary);
+  }
+
+  .options-footer-icon-button-danger:hover {
+    color: var(--accent-primary);
   }
 
   .options-inspector-field,

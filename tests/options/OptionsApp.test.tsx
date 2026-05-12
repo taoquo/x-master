@@ -105,6 +105,38 @@ function selectFile(input: HTMLInputElement, file: File, dom: { Event: typeof Ev
   input.dispatchEvent(new dom.Event("change", { bubbles: true }))
 }
 
+function installLocationReloadSpy() {
+  const target = globalThis as typeof globalThis & { location?: Location }
+  const hadLocation = Object.prototype.hasOwnProperty.call(target, "location")
+  const originalLocation = target.location
+  let reloadCount = 0
+
+  Object.defineProperty(target, "location", {
+    configurable: true,
+    writable: true,
+    value: {
+      reload: () => {
+        reloadCount += 1
+      }
+    } as Location
+  })
+
+  return {
+    getReloadCount: () => reloadCount,
+    restore: () => {
+      if (hadLocation) {
+        Object.defineProperty(target, "location", {
+          configurable: true,
+          writable: true,
+          value: originalLocation
+        })
+      } else {
+        Reflect.deleteProperty(target, "location")
+      }
+    }
+  }
+}
+
 test.afterEach(async () => {
   await cleanupRenders()
 })
@@ -342,18 +374,27 @@ test("OptionsApp renders compact data safety controls in the sidebar footer", as
   const { container } = render(React.createElement(OptionsApp))
   await settle()
 
-  const panel = findByTestId(container, "workspace-data-safety-panel")
-
-  assert.ok(panel)
-  assert.doesNotMatch(panel.textContent ?? "", /导出 JSON 包含/)
-  assert.doesNotMatch(panel.textContent ?? "", /校验备份/)
+  assert.equal(findByTestId(container, "workspace-data-safety-panel"), null)
   assert.equal(findByTestId(container, "data-safety-export-backup"), null)
   assert.equal(findByTestId(container, "data-safety-validate-backup"), null)
   assert.equal(findByTestId(container, "data-safety-validate-input"), null)
-  assert.ok(findByTestId(container, "data-safety-reset-local"))
-  assert.ok(findByTestId(container, "footer-export-toggle"))
-  assert.ok(findByTestId(container, "data-safety-restore-backup"))
+  const footerControls = container.querySelector(".options-sidebar-footer-controls")
+  const exportButton = findByTestId(container, "footer-export-toggle") as HTMLButtonElement | null
+  const restoreButton = findByTestId(container, "data-safety-restore-backup") as HTMLButtonElement | null
+  const resetButton = findByTestId(container, "data-safety-reset-local") as HTMLButtonElement | null
+
+  assert.ok(footerControls)
+  assert.ok(exportButton)
+  assert.ok(restoreButton)
+  assert.ok(resetButton)
+  assert.equal(footerControls.contains(resetButton), true)
+  assert.match(resetButton.className, /options-footer-icon-button/)
+  assert.equal(resetButton.textContent?.trim(), "")
   assert.ok(findByTestId(container, "footer-data-actions-divider"))
+  assert.equal(
+    Array.from(footerControls.children).indexOf(resetButton),
+    Array.from(footerControls.children).indexOf(restoreButton) + 1
+  )
 
   const exportButtons = container.querySelectorAll('[data-testid="footer-export-toggle"], [data-testid="data-safety-export-backup"]')
   assert.equal(exportButtons.length, 1)
@@ -429,22 +470,28 @@ test("OptionsApp surfaces import validation failures without changing local data
 
   const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
+  const reloadSpy = installLocationReloadSpy()
 
-  const restoreInput = findByTestId(container, "data-safety-restore-input") as HTMLInputElement | null
-  assert.ok(restoreInput)
+  try {
+    const restoreInput = findByTestId(container, "data-safety-restore-input") as HTMLInputElement | null
+    assert.ok(restoreInput)
 
-  await act(async () => {
-    selectFile(restoreInput, new dom.window.File(["not json"], "bad.json", { type: "application/json" }), dom.window)
-  })
-  await settle()
+    await act(async () => {
+      selectFile(restoreInput, new dom.window.File(["not json"], "bad.json", { type: "application/json" }), dom.window)
+    })
+    await settle()
 
-  const inlineMessage = findByTestId(container, "sidebar-status-section")?.querySelector(".folio-inline-message") as HTMLElement | null
-  assert.ok(inlineMessage)
-  assert.match(inlineMessage.textContent ?? "", /Backup file must be valid JSON/)
-  assert.match(container.textContent ?? "", /Original data survives invalid validation/)
+    const inlineMessage = findByTestId(container, "sidebar-status-section")?.querySelector(".folio-inline-message") as HTMLElement | null
+    assert.ok(inlineMessage)
+    assert.match(inlineMessage.textContent ?? "", /Backup file must be valid JSON/)
+    assert.match(container.textContent ?? "", /Original data survives invalid validation/)
+    assert.equal(reloadSpy.getReloadCount(), 0)
+  } finally {
+    reloadSpy.restore()
+  }
 })
 
-test("OptionsApp restores a confirmed backup and refreshes the local workspace", async () => {
+test("OptionsApp restores a confirmed backup and reloads the page", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await upsertBookmarks([
@@ -469,6 +516,7 @@ test("OptionsApp restores a confirmed backup and refreshes the local workspace",
 
   const { container, dom } = render(React.createElement(OptionsApp))
   const originalConfirm = dom.window.confirm
+  const reloadSpy = installLocationReloadSpy()
   dom.window.confirm = () => true
 
   try {
@@ -485,11 +533,11 @@ test("OptionsApp restores a confirmed backup and refreshes the local workspace",
     })
     await settle()
 
-    assert.match(container.textContent ?? "", /Restored backup bookmark/)
-    assert.doesNotMatch(container.textContent ?? "", /Old local bookmark/)
-    assert.match(findByTestId(container, "workspace-data-safety-panel")?.textContent ?? "", /Restored 1 bookmarks/)
+    assert.equal(reloadSpy.getReloadCount(), 1)
+    assert.equal((await getSettings()).locale, "en")
   } finally {
     dom.window.confirm = originalConfirm
+    reloadSpy.restore()
   }
 })
 
@@ -518,6 +566,7 @@ test("OptionsApp does not restore a backup when confirmation is cancelled", asyn
 
   const { container, dom } = render(React.createElement(OptionsApp))
   const originalConfirm = dom.window.confirm
+  const reloadSpy = installLocationReloadSpy()
   dom.window.confirm = () => false
 
   try {
@@ -536,8 +585,10 @@ test("OptionsApp does not restore a backup when confirmation is cancelled", asyn
 
     assert.match(container.textContent ?? "", /Old local bookmark remains/)
     assert.doesNotMatch(container.textContent ?? "", /Restored backup bookmark/)
+    assert.equal(reloadSpy.getReloadCount(), 0)
   } finally {
     dom.window.confirm = originalConfirm
+    reloadSpy.restore()
   }
 })
 
@@ -573,6 +624,7 @@ test("OptionsApp resets local data only after confirmation", async () => {
 
   const { container, dom } = render(React.createElement(OptionsApp))
   const originalConfirm = dom.window.confirm
+  const reloadSpy = installLocationReloadSpy()
   dom.window.confirm = () => false
 
   try {
@@ -586,6 +638,7 @@ test("OptionsApp resets local data only after confirmation", async () => {
     await settle()
 
     assert.match(container.textContent ?? "", /Resettable local bookmark/)
+    assert.equal(reloadSpy.getReloadCount(), 0)
 
     dom.window.confirm = () => true
     await act(async () => {
@@ -593,11 +646,11 @@ test("OptionsApp resets local data only after confirmation", async () => {
     })
     await settle()
 
-    assert.doesNotMatch(container.textContent ?? "", /Resettable local bookmark/)
-    assert.match(findByTestId(container, "workspace-data-safety-panel")?.textContent ?? "", /本地数据已重置/)
+    assert.equal(reloadSpy.getReloadCount(), 1)
     assert.equal((await getSettings()).locale, "en")
   } finally {
     dom.window.confirm = originalConfirm
+    reloadSpy.restore()
   }
 })
 

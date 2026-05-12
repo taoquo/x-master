@@ -111,6 +111,20 @@ export async function resetBookmarksDb() {
   })
 }
 
+export async function clearBookmarksDbStores() {
+  const db = await getBookmarksDb()
+  const transaction = db.transaction(
+    [BOOKMARKS_STORE, LISTS_STORE, BOOKMARK_LISTS_STORE, TAGS_STORE, BOOKMARK_TAGS_STORE, SYNC_RUNS_STORE],
+    "readwrite"
+  )
+
+  for (const storeName of transaction.objectStoreNames) {
+    transaction.objectStore(storeName).clear()
+  }
+
+  await transactionDone(transaction)
+}
+
 export {
   BOOKMARKS_STORE,
   LISTS_STORE,

@@ -566,19 +566,6 @@ function DataSafetyPanel({
   const restoreResult = workspace.restoreResult
   const resetResult = workspace.resetResult
 
-  async function handleResetLocalData() {
-    const shouldReset = typeof window.confirm === "function" ? window.confirm(copy.resetLocalDataConfirm) : true
-    if (!shouldReset) {
-      return
-    }
-
-    try {
-      await workspace.handleResetLocalData()
-    } catch {
-      // The shared command error area renders the failure.
-    }
-  }
-
   const statusText = (() => {
     if (restoreResult) {
       return `${copy.restoredBackup} ${restoreResult.counts.bookmarks} ${copy.bookmarksCountLabel}`
@@ -595,28 +582,19 @@ function DataSafetyPanel({
     return null
   })()
 
+  if (!statusText) {
+    return null
+  }
+
   return (
     <section data-testid="workspace-data-safety-panel" className="options-data-safety-panel">
-      <div className="options-data-safety-actions">
-        <button
-          type="button"
-          data-testid="data-safety-reset-local"
-          onClick={() => void handleResetLocalData()}
-          disabled={workspace.isResettingData}
-          className="options-footer-chip options-data-safety-button is-danger">
-          {workspace.isResettingData ? copy.resettingData : copy.resetLocalData}
-        </button>
+      <div data-testid="data-safety-validation-result">
+        <InlineMessage
+          message={statusText}
+          tone="info"
+          className="options-data-safety-result"
+        />
       </div>
-
-      {statusText ? (
-        <div data-testid="data-safety-validation-result">
-          <InlineMessage
-            message={statusText}
-            tone="info"
-            className="options-data-safety-result"
-          />
-        </div>
-      ) : null}
     </section>
   )
 }
@@ -979,6 +957,17 @@ function WorkspaceSidebar({
     }
   }
 
+  function reloadOptionsPage() {
+    if (typeof location !== "undefined" && typeof location.reload === "function") {
+      location.reload()
+      return
+    }
+
+    if (typeof window !== "undefined" && typeof window.location?.reload === "function") {
+      window.location.reload()
+    }
+  }
+
   async function handleRestoreFile(file: File | undefined, input: HTMLInputElement | null) {
     if (!file) {
       return
@@ -989,11 +978,26 @@ function WorkspaceSidebar({
       const shouldRestore = typeof window.confirm === "function" ? window.confirm(copy.restoreBackupConfirm) : true
       if (shouldRestore) {
         await workspace.handleRestoreBackupFile(file)
+        reloadOptionsPage()
       }
     } catch {
       // The shared command error area renders the failure.
     } finally {
       resetFileInput(input)
+    }
+  }
+
+  async function handleResetLocalData() {
+    const shouldReset = typeof window.confirm === "function" ? window.confirm(copy.resetLocalDataConfirm) : true
+    if (!shouldReset) {
+      return
+    }
+
+    try {
+      await workspace.handleResetLocalData()
+      reloadOptionsPage()
+    } catch {
+      // The shared command error area renders the failure.
     }
   }
 
@@ -1373,6 +1377,15 @@ function WorkspaceSidebar({
                 className="options-footer-icon-button"
                 aria-label={copy.restoreBackup}>
                 <AppIcon name="import" size={14} />
+              </button>
+              <button
+                type="button"
+                data-testid="data-safety-reset-local"
+                onClick={() => void handleResetLocalData()}
+                disabled={workspace.isResettingData}
+                className="options-footer-icon-button options-footer-icon-button-danger"
+                aria-label={workspace.isResettingData ? copy.resettingData : copy.resetLocalData}>
+                <AppIcon name="trash" size={14} />
               </button>
             </div>
           </div>
