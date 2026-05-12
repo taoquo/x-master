@@ -120,11 +120,6 @@ function getOptionsCopy(locale: Locale) {
       syncing: "同步中...",
       exportData: "导出数据",
       exporting: "导出中...",
-      dataSafetyTitle: "数据安全",
-      dataSafetyDescription: "导出 JSON 包含书签、列表、标签、规则和同步摘要；不包含原始 X payload。导入恢复会覆盖当前本地数据。",
-      exportBackup: "导出备份",
-      validateBackup: "校验备份",
-      validatingBackup: "校验中...",
       restoreBackup: "导入恢复",
       restoringBackup: "恢复中...",
       resetLocalData: "重置本地数据",
@@ -262,11 +257,6 @@ function getOptionsCopy(locale: Locale) {
     syncing: "Syncing...",
     exportData: "Export data",
     exporting: "Exporting...",
-    dataSafetyTitle: "Data safety",
-    dataSafetyDescription: "The exported JSON includes bookmarks, lists, tags, rules, and sync summary. It does not include the original X payload. Import restore overwrites current local data.",
-    exportBackup: "Export backup",
-    validateBackup: "Validate backup",
-    validatingBackup: "Validating...",
     restoreBackup: "Import restore",
     restoringBackup: "Restoring...",
     resetLocalData: "Reset local data",
@@ -572,51 +562,9 @@ function DataSafetyPanel({
   locale: Locale
   copy: OptionsCopy
 }) {
-  const validateInputRef = useRef<HTMLInputElement | null>(null)
-  const restoreInputRef = useRef<HTMLInputElement | null>(null)
   const validation = workspace.backupValidationResult
   const restoreResult = workspace.restoreResult
   const resetResult = workspace.resetResult
-
-  function resetInput(input: HTMLInputElement | null) {
-    if (input) {
-      input.value = ""
-    }
-  }
-
-  async function handleValidateFile(file: File | undefined, input: HTMLInputElement | null) {
-    if (!file) {
-      return
-    }
-
-    try {
-      await workspace.handleValidateBackupFile(file)
-    } catch {
-      // The shared command error area renders the failure.
-    } finally {
-      resetInput(input)
-    }
-  }
-
-  async function handleRestoreFile(file: File | undefined, input: HTMLInputElement | null) {
-    if (!file) {
-      return
-    }
-
-    const shouldRestore = typeof window.confirm === "function" ? window.confirm(copy.restoreBackupConfirm) : true
-    if (!shouldRestore) {
-      resetInput(input)
-      return
-    }
-
-    try {
-      await workspace.handleRestoreBackupFile(file)
-    } catch {
-      // The shared command error area renders the failure.
-    } finally {
-      resetInput(input)
-    }
-  }
 
   async function handleResetLocalData() {
     const shouldReset = typeof window.confirm === "function" ? window.confirm(copy.resetLocalDataConfirm) : true
@@ -649,36 +597,7 @@ function DataSafetyPanel({
 
   return (
     <section data-testid="workspace-data-safety-panel" className="options-data-safety-panel">
-      <div className="options-data-safety-head">
-        <span className="options-overline">{copy.dataSafetyTitle}</span>
-        <p className="options-data-safety-copy">{copy.dataSafetyDescription}</p>
-      </div>
-
       <div className="options-data-safety-actions">
-        <button
-          type="button"
-          data-testid="data-safety-export-backup"
-          onClick={() => void workspace.handleExportWorkspace()}
-          disabled={workspace.isExporting}
-          className="options-footer-chip options-data-safety-button">
-          {workspace.isExporting ? copy.exporting : copy.exportBackup}
-        </button>
-        <button
-          type="button"
-          data-testid="data-safety-validate-backup"
-          onClick={() => validateInputRef.current?.click()}
-          disabled={workspace.isValidatingBackup}
-          className="options-footer-chip options-data-safety-button">
-          {workspace.isValidatingBackup ? copy.validatingBackup : copy.validateBackup}
-        </button>
-        <button
-          type="button"
-          data-testid="data-safety-restore-backup"
-          onClick={() => restoreInputRef.current?.click()}
-          disabled={workspace.isRestoringBackup}
-          className="options-footer-chip options-data-safety-button">
-          {workspace.isRestoringBackup ? copy.restoringBackup : copy.restoreBackup}
-        </button>
         <button
           type="button"
           data-testid="data-safety-reset-local"
@@ -688,23 +607,6 @@ function DataSafetyPanel({
           {workspace.isResettingData ? copy.resettingData : copy.resetLocalData}
         </button>
       </div>
-
-      <input
-        ref={validateInputRef}
-        data-testid="data-safety-validate-input"
-        type="file"
-        accept="application/json,.json"
-        className="sr-only"
-        onChange={(event) => void handleValidateFile(event.currentTarget.files?.[0], event.currentTarget)}
-      />
-      <input
-        ref={restoreInputRef}
-        data-testid="data-safety-restore-input"
-        type="file"
-        accept="application/json,.json"
-        className="sr-only"
-        onChange={(event) => void handleRestoreFile(event.currentTarget.files?.[0], event.currentTarget)}
-      />
 
       {statusText ? (
         <div data-testid="data-safety-validation-result">
@@ -1043,6 +945,7 @@ function WorkspaceSidebar({
   const [draftTagName, setDraftTagName] = useState("")
   const [isSubmittingDraftTag, setIsSubmittingDraftTag] = useState(false)
   const draftTagInputRef = useRef<HTMLInputElement | null>(null)
+  const restoreInputRef = useRef<HTMLInputElement | null>(null)
   const draftTagBlurIntentRef = useRef<"idle" | "submit" | "cancel">("idle")
   const { items: visibleAuthorItems, shouldShowToggle: shouldShowAuthorToggle } = getVisibleAuthorSidebarItems({
     authorItems,
@@ -1068,6 +971,30 @@ function WorkspaceSidebar({
     setDraftTagName("")
     setIsSubmittingDraftTag(false)
     setIsCreatingTagInline(false)
+  }
+
+  function resetFileInput(input: HTMLInputElement | null) {
+    if (input) {
+      input.value = ""
+    }
+  }
+
+  async function handleRestoreFile(file: File | undefined, input: HTMLInputElement | null) {
+    if (!file) {
+      return
+    }
+
+    try {
+      await workspace.handleValidateBackupFile(file)
+      const shouldRestore = typeof window.confirm === "function" ? window.confirm(copy.restoreBackupConfirm) : true
+      if (shouldRestore) {
+        await workspace.handleRestoreBackupFile(file)
+      }
+    } catch {
+      // The shared command error area renders the failure.
+    } finally {
+      resetFileInput(input)
+    }
   }
 
   async function submitInlineTagDraft(nextName?: string) {
@@ -1424,6 +1351,11 @@ function WorkspaceSidebar({
                 aria-label={copy.themeLabel}>
                 <AppIcon name={resolvedTheme === "dark" ? "moon" : "sun"} size={14} />
               </button>
+              <span
+                data-testid="footer-data-actions-divider"
+                className="options-footer-divider"
+                aria-hidden="true"
+              />
               <button
                 type="button"
                 data-testid="footer-export-toggle"
@@ -1433,8 +1365,25 @@ function WorkspaceSidebar({
                 aria-label={copy.exportData}>
                 <AppIcon name="export" size={14} />
               </button>
+              <button
+                type="button"
+                data-testid="data-safety-restore-backup"
+                onClick={() => restoreInputRef.current?.click()}
+                disabled={workspace.isValidatingBackup || workspace.isRestoringBackup}
+                className="options-footer-icon-button"
+                aria-label={copy.restoreBackup}>
+                <AppIcon name="import" size={14} />
+              </button>
             </div>
           </div>
+          <input
+            ref={restoreInputRef}
+            data-testid="data-safety-restore-input"
+            type="file"
+            accept="application/json,.json"
+            className="sr-only"
+            onChange={(event) => void handleRestoreFile(event.currentTarget.files?.[0], event.currentTarget)}
+          />
         </div>
       </section>
     </aside>

@@ -8,6 +8,7 @@ import {
   CaretDown,
   Check,
   Copy,
+  DownloadSimple,
   FunnelSimple,
   Gear,
   GlobeSimple,
@@ -60,6 +61,7 @@ type AppIconName =
   | "heart"
   | "share"
   | "export"
+  | "import"
   | "caretDown"
 
 interface AppIconProps {
@@ -133,6 +135,8 @@ export function AppIcon({ name, size = 18, className }: AppIconProps) {
       return <ShareNetwork {...commonProps} />
     case "export":
       return <Export {...commonProps} />
+    case "import":
+      return <DownloadSimple {...commonProps} />
     case "caretDown":
       return <CaretDown {...commonProps} />
     default:

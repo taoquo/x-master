@@ -328,7 +328,7 @@ test("OptionsApp surfaces export failures in the shared command error area", asy
   }
 })
 
-test("OptionsApp renders the data safety panel with export guidance", async () => {
+test("OptionsApp renders compact data safety controls in the sidebar footer", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await saveSettings({
@@ -345,18 +345,21 @@ test("OptionsApp renders the data safety panel with export guidance", async () =
   const panel = findByTestId(container, "workspace-data-safety-panel")
 
   assert.ok(panel)
-  assert.match(panel.textContent ?? "", /数据安全/)
-  assert.match(panel.textContent ?? "", /JSON/)
-  assert.match(panel.textContent ?? "", /书签、列表、标签、规则和同步摘要/)
-  assert.match(panel.textContent ?? "", /不包含原始 X payload/)
-  assert.match(panel.textContent ?? "", /覆盖当前本地数据/)
-  assert.ok(findByTestId(container, "data-safety-export-backup"))
-  assert.ok(findByTestId(container, "data-safety-validate-backup"))
-  assert.ok(findByTestId(container, "data-safety-restore-backup"))
+  assert.doesNotMatch(panel.textContent ?? "", /导出 JSON 包含/)
+  assert.doesNotMatch(panel.textContent ?? "", /校验备份/)
+  assert.equal(findByTestId(container, "data-safety-export-backup"), null)
+  assert.equal(findByTestId(container, "data-safety-validate-backup"), null)
+  assert.equal(findByTestId(container, "data-safety-validate-input"), null)
   assert.ok(findByTestId(container, "data-safety-reset-local"))
+  assert.ok(findByTestId(container, "footer-export-toggle"))
+  assert.ok(findByTestId(container, "data-safety-restore-backup"))
+  assert.ok(findByTestId(container, "footer-data-actions-divider"))
+
+  const exportButtons = container.querySelectorAll('[data-testid="footer-export-toggle"], [data-testid="data-safety-export-backup"]')
+  assert.equal(exportButtons.length, 1)
 })
 
-test("OptionsApp validates a selected backup file and shows backup counts", async () => {
+test("OptionsApp validates a selected backup during import and shows backup counts", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await saveSettings({
@@ -368,34 +371,40 @@ test("OptionsApp validates a selected backup file and shows backup counts", asyn
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
+  const originalConfirm = dom.window.confirm
+  dom.window.confirm = () => false
   await settle()
 
-  const validateButton = findByTestId(container, "data-safety-validate-backup") as HTMLButtonElement | null
-  const validateInput = findByTestId(container, "data-safety-validate-input") as HTMLInputElement | null
-  assert.ok(validateButton)
-  assert.ok(validateInput)
+  try {
+    const restoreButton = findByTestId(container, "data-safety-restore-backup") as HTMLButtonElement | null
+    const restoreInput = findByTestId(container, "data-safety-restore-input") as HTMLInputElement | null
+    assert.ok(restoreButton)
+    assert.ok(restoreInput)
 
-  await act(async () => {
-    validateButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
-  })
-  await act(async () => {
-    selectFile(
-      validateInput,
-      new dom.window.File([JSON.stringify(createBackupPayload())], "xbm-workspace.json", { type: "application/json" }),
-      dom.window
-    )
-  })
-  await settle()
+    await act(async () => {
+      restoreButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    })
+    await act(async () => {
+      selectFile(
+        restoreInput,
+        new dom.window.File([JSON.stringify(createBackupPayload())], "xbm-workspace.json", { type: "application/json" }),
+        dom.window
+      )
+    })
+    await settle()
 
-  const result = findByTestId(container, "data-safety-validation-result")
-  assert.ok(result)
-  assert.match(result.textContent ?? "", /Valid backup/)
-  assert.match(result.textContent ?? "", /1 bookmarks/)
-  assert.match(result.textContent ?? "", /1 tags/)
-  assert.match(result.textContent ?? "", /2026/)
+    const result = findByTestId(container, "data-safety-validation-result")
+    assert.ok(result)
+    assert.match(result.textContent ?? "", /Valid backup/)
+    assert.match(result.textContent ?? "", /1 bookmarks/)
+    assert.match(result.textContent ?? "", /1 tags/)
+    assert.match(result.textContent ?? "", /2026/)
+  } finally {
+    dom.window.confirm = originalConfirm
+  }
 })
 
-test("OptionsApp surfaces backup validation failures without changing local data", async () => {
+test("OptionsApp surfaces import validation failures without changing local data", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await upsertBookmarks([
@@ -421,11 +430,11 @@ test("OptionsApp surfaces backup validation failures without changing local data
   const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
-  const validateInput = findByTestId(container, "data-safety-validate-input") as HTMLInputElement | null
-  assert.ok(validateInput)
+  const restoreInput = findByTestId(container, "data-safety-restore-input") as HTMLInputElement | null
+  assert.ok(restoreInput)
 
   await act(async () => {
-    selectFile(validateInput, new dom.window.File(["not json"], "bad.json", { type: "application/json" }), dom.window)
+    selectFile(restoreInput, new dom.window.File(["not json"], "bad.json", { type: "application/json" }), dom.window)
   })
   await settle()
 

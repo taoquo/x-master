@@ -2574,35 +2574,18 @@
 
   .options-data-safety-panel {
     display: grid;
-    gap: 10px;
-    margin-bottom: 14px;
-    padding-bottom: 14px;
-    border-bottom: 1px solid color-mix(in srgb, var(--theme-panel-border) 72%, transparent);
-  }
-
-  .options-data-safety-head {
-    display: grid;
-    gap: 5px;
-  }
-
-  .options-data-safety-copy {
-    margin: 0;
-    color: var(--text-tertiary);
-    font-size: 11px;
-    line-height: 1.45;
+    gap: 8px;
+    margin-bottom: 8px;
   }
 
   .options-data-safety-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
+    display: inline-flex;
+    align-items: center;
   }
 
   .options-data-safety-button {
-    height: 26px;
+    height: 28px;
     min-width: auto;
-    border: 1px solid color-mix(in srgb, var(--theme-panel-border) 72%, transparent);
-    background: color-mix(in srgb, var(--theme-elevated-bg) 78%, transparent);
     font-weight: 600;
   }
 
@@ -2613,6 +2596,14 @@
   .options-data-safety-result {
     padding: 7px 9px;
     font-size: 11px;
+  }
+
+  .options-footer-divider {
+    display: inline-block;
+    width: 1px;
+    height: 16px;
+    margin: 0 5px;
+    background: color-mix(in srgb, var(--theme-panel-border) 82%, transparent);
   }
 
   .options-footer-chip {
