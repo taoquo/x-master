@@ -87,7 +87,8 @@ test("runBookmarkSync stores fetched bookmarks, assigns inbox, and applies match
           requireLongform: false,
           targetTagIds: ["tag-ai"]
         }
-      ]
+      ],
+      savedViews: []
     }),
     createSyncRun: async (syncRun) => {
       recordedSyncRuns.push({
@@ -120,6 +121,7 @@ test("runBookmarkSync default summary persistence updates saved settings", async
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
     classificationRules: [],
+    savedViews: [],
     syncStrategyVersion: 1,
     hasCompletedInitialFullSync: false,
     incrementalStopBufferPages: 3
@@ -166,6 +168,7 @@ test("runBookmarkSync does not delete bookmarks that are already stored locally"
       themePreference: "system",
       lastSyncSummary: createEmptySyncSummary(),
       classificationRules: [],
+      savedViews: [],
       syncStrategyVersion: 1,
       hasCompletedInitialFullSync: true,
       incrementalStopBufferPages: 3
@@ -193,6 +196,7 @@ test("runBookmarkSync uses buffered incremental mode after initial sync complete
       themePreference: "system",
       lastSyncSummary: createEmptySyncSummary(),
       classificationRules: [],
+      savedViews: [],
       syncStrategyVersion: 1,
       hasCompletedInitialFullSync: true,
       incrementalStopBufferPages: 3
@@ -208,6 +212,7 @@ test("runBookmarkSync does not mark initial full sync complete when the first sy
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
     classificationRules: [],
+    savedViews: [],
     syncStrategyVersion: 1,
     hasCompletedInitialFullSync: false,
     incrementalStopBufferPages: 3
@@ -342,6 +347,7 @@ test("runBookmarkSync clears stale sync errors when a later sync succeeds", asyn
       errorSummary: "old error"
     },
     classificationRules: [],
+    savedViews: [],
     syncStrategyVersion: 1,
     hasCompletedInitialFullSync: true,
     incrementalStopBufferPages: 3

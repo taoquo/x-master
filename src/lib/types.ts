@@ -1,4 +1,5 @@
 import type { SyncErrorKind } from "./x/syncErrors.ts"
+import type { BookmarkSortOrder } from "./search/searchBookmarks.ts"
 
 export interface BookmarkRecord {
   id?: string
@@ -62,6 +63,20 @@ export interface ClassificationRule {
   requireMedia: boolean
   requireLongform: boolean
   targetTagIds: string[]
+}
+
+export interface SavedViewRecord {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
+  query: string
+  activeTagIds: string[]
+  activeAuthorHandles: string[]
+  onlyWithMedia: boolean
+  onlyLongform: boolean
+  sortOrder: BookmarkSortOrder
+  viewMode: "grid" | "list"
 }
 
 export interface SyncRunRecord {
@@ -130,6 +145,7 @@ export interface ExtensionSettings {
   incrementalStopBufferPages?: number
   leftSidebarWidth?: number
   rightSidebarWidth?: number
+  savedViews: SavedViewRecord[]
 }
 
 export interface WorkspaceData {
@@ -139,6 +155,7 @@ export interface WorkspaceData {
   tags: TagRecord[]
   bookmarkTags: BookmarkTagRecord[]
   classificationRules: ClassificationRule[]
+  savedViews: SavedViewRecord[]
   summary: SyncSummary
   latestSyncRun: SyncRunRecord | null
   stats: WorkspaceStats

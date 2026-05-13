@@ -1241,6 +1241,40 @@
     gap: 4px;
   }
 
+  .options-saved-view-create {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 28px;
+    gap: 6px;
+    padding-inline: 8px;
+    margin-bottom: 10px;
+  }
+
+  .options-saved-view-input {
+    min-height: 28px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .options-saved-view-row {
+    padding-right: 6px;
+  }
+
+  .options-saved-view-apply {
+    display: inline-flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    gap: 9px;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    color: inherit;
+    text-align: left;
+  }
+
+  .options-saved-view-empty {
+    padding-inline: 8px;
+  }
+
   .options-sidebar-config {
     border-top: 1px solid var(--border-subtle);
     margin-top: auto;
@@ -1816,6 +1850,63 @@
     border-color: var(--theme-selected-border);
     background: var(--theme-selected-bg);
     box-shadow: var(--theme-selected-shadow);
+  }
+
+  .options-bookmark-select-toggle {
+    position: absolute;
+    z-index: 2;
+    top: 10px;
+    left: 10px;
+    display: inline-flex;
+    height: 26px;
+    width: 26px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--theme-elevated-border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--theme-elevated-bg) 92%, transparent);
+    color: var(--text-tertiary);
+    box-shadow: var(--theme-elevated-shadow);
+  }
+
+  .options-bookmark-select-toggle:hover,
+  .options-bookmark-select-toggle.is-selected {
+    border-color: var(--theme-selected-border);
+    background: var(--theme-selected-bg);
+    color: var(--accent-primary);
+  }
+
+  .options-bulk-actions-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid var(--theme-panel-border);
+    border-radius: 12px;
+    padding: 10px;
+    margin-top: -6px;
+    margin-bottom: 14px;
+  }
+
+  .options-bulk-actions-meta,
+  .options-bulk-actions-controls {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .options-bulk-actions-meta {
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+
+  .options-bulk-tag-select {
+    min-height: 36px;
+    min-width: 140px;
+    border-radius: 10px;
+    padding-inline: 10px;
   }
 
   :root[data-theme="dark"] .options-result-card {

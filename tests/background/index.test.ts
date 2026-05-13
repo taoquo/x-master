@@ -21,6 +21,7 @@ test("background message handler loads workspace data", async () => {
       bookmarkTags: [],
       classificationRules: [],
       latestSyncRun: null,
+      savedViews: [],
       summary: {
         status: "idle",
         fetchedCount: 0,
@@ -67,6 +68,7 @@ test("background message handler runs sync", async () => {
       bookmarkTags: [],
       classificationRules: [],
       latestSyncRun: null,
+      savedViews: [],
       summary: {
         status: "idle",
         fetchedCount: 0,
@@ -111,6 +113,7 @@ test("background message handler resets local data", async () => {
       bookmarkTags: [],
       classificationRules: [],
       latestSyncRun: null,
+      savedViews: [],
       summary: {
         status: "idle",
         fetchedCount: 0,
@@ -153,6 +156,7 @@ test("background message handler prepares site tweet tagging state", async () =>
       bookmarkTags: [],
       classificationRules: [],
       latestSyncRun: null,
+      savedViews: [],
       summary: {
         status: "idle",
         fetchedCount: 0,
@@ -229,6 +233,7 @@ test("background message handler routes site tag toggles and site tag creation",
       bookmarkTags: [],
       classificationRules: [],
       latestSyncRun: null,
+      savedViews: [],
       summary: {
         status: "idle",
         fetchedCount: 0,
@@ -315,6 +320,7 @@ test("background message handler routes site bookmark sync", async () => {
       bookmarkTags: [],
       classificationRules: [],
       latestSyncRun: null,
+      savedViews: [],
       summary: {
         status: "idle",
         fetchedCount: 0,

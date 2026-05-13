@@ -24,6 +24,7 @@ export async function loadWorkspaceDataFromLocal(): Promise<WorkspaceData> {
     tags,
     bookmarkTags,
     classificationRules: settings.classificationRules,
+    savedViews: settings.savedViews,
     summary: settings.lastSyncSummary,
     latestSyncRun,
     stats: buildWorkspaceStats({

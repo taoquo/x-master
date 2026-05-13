@@ -199,6 +199,7 @@ test("OptionsApp renders the Chinese locale shell and keeps demo shell active", 
   assert.equal(findByTestId(container, "workspace-preferences-inline"), null)
   assert.equal(container.querySelector(".options-advanced-panel"), null)
   assert.equal(container.querySelector(".options-bulk-panel"), null)
+  assert.equal(findByTestId(container, "bulk-actions-bar"), null)
 
   const tagButton = findListButton(container, tag.id)
   assert.ok(tagButton)
@@ -739,7 +740,7 @@ test("OptionsApp renders the english demo shell by default and hides legacy opti
 
   assert.equal(findByTestId(container, "toggle-preferences-panel"), null)
   assert.equal(findButton(container, "高级筛选") ?? findButton(container, "Advanced filters"), undefined)
-  assert.equal(findButton(container, "选中当前可见项") ?? findButton(container, "Select visible"), undefined)
+  assert.equal(findByTestId(container, "bulk-actions-bar"), null)
   assert.equal(findByTestId(container, "workspace-preferences-inline"), null)
   assert.equal(container.querySelector(".options-advanced-panel"), null)
   assert.equal(container.querySelector(".options-bulk-panel"), null)
@@ -3005,7 +3006,7 @@ test("OptionsApp renders flat navigation rows and restrained result cards", asyn
   assert.match(searchInput.className, /options-toolbar-field/)
   assert.match(cards[0].className, /options-result-card/)
   assert.doesNotMatch(cards[0].className, /options-result-card-selected/)
-  assert.equal(cards[0].querySelector('input[type="checkbox"]'), null)
+  assert.ok(cards[0].querySelector('[data-testid="bookmark-select-toggle"]'))
 
   await act(async () => {
     cards[0].dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
@@ -3161,9 +3162,10 @@ test("OptionsApp saves inline tag drafts on blur and cancels them on escape", as
   assert.equal(findByTestId(container, "sidebar-create-tag-input"), null)
 })
 
-test("OptionsApp does not expose list rename controls in tag navigation", async () => {
+test("OptionsApp renames sidebar tags inline", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
+  const tag = await createTag({ name: "Research" })
 
   await upsertBookmarks([
     {
@@ -3177,8 +3179,7 @@ test("OptionsApp does not expose list rename controls in tag navigation", async 
       rawPayload: {}
     }
   ])
-
-  await createTag({ name: "Research" })
+  await attachTagToBookmark({ bookmarkId: "tweet-1", tagId: tag.id })
   await saveSettings({
     schemaVersion: 3,
     locale: "en",
@@ -3193,12 +3194,195 @@ test("OptionsApp does not expose list rename controls in tag navigation", async 
     classificationRules: []
   })
 
-  const { container } = render(React.createElement(OptionsApp))
+  const { container, dom } = render(React.createElement(OptionsApp))
   await settle()
 
+  const renameButton = findByTestId(container, "sidebar-rename-tag") as HTMLButtonElement | null
+  assert.ok(renameButton)
   assert.equal(findByTestId(container, "inline-list-name-input"), null)
   assert.equal(findByTestId(container, "add-list-button"), null)
   assert.match(findByTestId(container, "lists-sidebar")?.textContent ?? "", /Research/)
+
+  await act(async () => {
+    renameButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const renameInput = findByTestId(container, "sidebar-rename-tag-input") as HTMLInputElement | null
+  assert.ok(renameInput)
+  assert.equal(renameInput?.value, "Research")
+
+  await act(async () => {
+    setInputValue(renameInput, "Deep Read", dom.window)
+  })
+  await settle()
+
+  await act(async () => {
+    renameInput.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+  })
+  await settle()
+
+  assert.match(findByTestId(container, "lists-sidebar")?.textContent ?? "", /Deep Read/)
+  assert.doesNotMatch(findByTestId(container, "lists-sidebar")?.textContent ?? "", /Research/)
+  assert.match(getBookmarkCards(container)[0]?.textContent ?? "", /Deep Read/)
+  assert.equal(findByTestId(container, "sidebar-rename-tag-input"), null)
+})
+
+test("OptionsApp applies a tag to selected filtered results", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  const importantTag = await createTag({ name: "Important" })
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-filtered-1",
+      tweetUrl: "https://x.com/alice/status/tweet-filtered-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Agent workflow one",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T01:00:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-filtered-2",
+      tweetUrl: "https://x.com/bob/status/tweet-filtered-2",
+      authorName: "Bob",
+      authorHandle: "bob",
+      text: "Agent workflow two",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T02:00:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-other",
+      tweetUrl: "https://x.com/carol/status/tweet-other",
+      authorName: "Carol",
+      authorHandle: "carol",
+      text: "Design reference",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T03:00:00.000Z",
+      rawPayload: {}
+    }
+  ])
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  const searchInput = container.querySelector("#filters-search") as HTMLInputElement | null
+  assert.ok(searchInput)
+
+  await act(async () => {
+    setInputValue(searchInput, "Agent", dom.window)
+  })
+  await settle()
+
+  assert.equal(getBookmarkCards(container).length, 2)
+
+  const firstSelect = container.querySelector(
+    '[data-bookmark-card="tweet-filtered-1"] [data-testid="bookmark-select-toggle"]'
+  ) as HTMLButtonElement | null
+  assert.ok(firstSelect)
+
+  await act(async () => {
+    firstSelect.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const bulkBar = findByTestId(container, "bulk-actions-bar")
+  assert.ok(bulkBar)
+  assert.match(bulkBar?.textContent ?? "", /1 selected/)
+
+  const selectFilteredButton = findByTestId(container, "bulk-select-filtered") as HTMLButtonElement | null
+  assert.ok(selectFilteredButton)
+  await act(async () => {
+    selectFilteredButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.match(findByTestId(container, "bulk-actions-bar")?.textContent ?? "", /2 selected/)
+
+  const tagSelect = findByTestId(container, "bulk-tag-select") as HTMLSelectElement | null
+  const applyButton = findByTestId(container, "bulk-apply-tag") as HTMLButtonElement | null
+  assert.ok(tagSelect)
+  assert.ok(applyButton)
+
+  await act(async () => {
+    tagSelect.value = importantTag.id
+    tagSelect.dispatchEvent(new dom.window.Event("change", { bubbles: true }))
+  })
+  await settle()
+
+  await act(async () => {
+    applyButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const filteredCards = getBookmarkCards(container)
+  assert.equal(filteredCards.length, 2)
+  assert.match(filteredCards[0].textContent ?? "", /Important/)
+  assert.match(filteredCards[1].textContent ?? "", /Important/)
+  assert.equal(findByTestId(container, "bulk-actions-bar"), null)
+})
+
+test("OptionsApp keeps saved views hidden while the data model remains available", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-ai-media",
+      tweetUrl: "https://x.com/alice/status/tweet-ai-media",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Agent media bookmark",
+      media: [{ type: "photo", url: "https://example.com/agent.jpg" }],
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T01:00:00.000Z",
+      rawPayload: {}
+    },
+    {
+      tweetId: "tweet-other-view",
+      tweetUrl: "https://x.com/bob/status/tweet-other-view",
+      authorName: "Bob",
+      authorHandle: "bob",
+      text: "Other bookmark",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T02:00:00.000Z",
+      rawPayload: {}
+    }
+  ])
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    classificationRules: [],
+    savedViews: [
+      {
+        id: "view-ai",
+        name: "AI media",
+        createdAt: "2026-05-13T08:00:00.000Z",
+        updatedAt: "2026-05-13T08:10:00.000Z",
+        query: "Agent",
+        activeTagIds: ["all"],
+        activeAuthorHandles: [],
+        onlyWithMedia: true,
+        onlyLongform: false,
+        sortOrder: "timeline",
+        viewMode: "list"
+      }
+    ]
+  })
+
+  const { container } = render(React.createElement(OptionsApp))
+  await settle()
+
+  assert.equal(findByTestId(container, "saved-views-section"), null)
+  assert.equal(findByTestId(container, "saved-view-name-input"), null)
+  assert.equal(findByTestId(container, "save-current-view"), null)
+  assert.equal(findByTestId(container, "saved-view-apply"), null)
+  assert.doesNotMatch(findByTestId(container, "lists-sidebar")?.textContent ?? "", /AI media/)
+  assert.match(container.textContent ?? "", /Agent media bookmark/)
+  assert.match(container.textContent ?? "", /Other bookmark/)
 })
 
 test("OptionsApp renders an explorer sidebar and demo toolbar controls", async () => {

@@ -45,6 +45,7 @@ test("getSettings returns bookmark-manager defaults", async () => {
   assert.equal(settings.incrementalStopBufferPages, 3)
   assert.equal(settings.leftSidebarWidth, 280)
   assert.equal(settings.rightSidebarWidth, 360)
+  assert.deepEqual(settings.savedViews, [])
 })
 
 test("saveClassificationRules persists deterministic rule settings", async () => {
@@ -148,7 +149,22 @@ test("saveSettings persists locale and theme preferences", async () => {
     lastSyncSummary: createEmptySyncSummary(),
     classificationRules: [],
     leftSidebarWidth: 320,
-    rightSidebarWidth: 420
+    rightSidebarWidth: 420,
+    savedViews: [
+      {
+        id: "view-ai",
+        name: "AI media",
+        createdAt: "2026-05-12T08:00:00.000Z",
+        updatedAt: "2026-05-12T08:10:00.000Z",
+        query: "agent",
+        activeTagIds: ["tag-ai"],
+        activeAuthorHandles: ["alice"],
+        onlyWithMedia: true,
+        onlyLongform: false,
+        sortOrder: "likes-desc",
+        viewMode: "list"
+      }
+    ]
   })
 
   const settings = await getSettings()
@@ -157,6 +173,74 @@ test("saveSettings persists locale and theme preferences", async () => {
   assert.equal(settings.themePreference, "dark")
   assert.equal(settings.leftSidebarWidth, 320)
   assert.equal(settings.rightSidebarWidth, 420)
+  assert.equal(settings.savedViews.length, 1)
+  assert.equal(settings.savedViews[0].name, "AI media")
+  assert.equal(settings.savedViews[0].sortOrder, "likes-desc")
+  assert.equal(settings.savedViews[0].viewMode, "list")
+})
+
+test("getSettings normalizes saved views and drops invalid records", async () => {
+  const storage = installChromeStorageMock()
+  storage.setStoredValue({
+    savedViews: [
+      {
+        id: "view-valid",
+        name: "Valid view",
+        createdAt: "2026-05-12T08:00:00.000Z",
+        updatedAt: "2026-05-12T08:10:00.000Z",
+        query: "agent",
+        activeTagIds: ["tag-ai", 42],
+        activeAuthorHandles: ["alice", null],
+        onlyWithMedia: true,
+        onlyLongform: false,
+        sortOrder: "created-desc",
+        viewMode: "list"
+      },
+      {
+        id: "",
+        name: "Missing id",
+        createdAt: "2026-05-12T08:00:00.000Z",
+        updatedAt: "2026-05-12T08:10:00.000Z",
+        query: "",
+        activeTagIds: [],
+        activeAuthorHandles: [],
+        onlyWithMedia: false,
+        onlyLongform: false,
+        sortOrder: "timeline",
+        viewMode: "grid"
+      },
+      {
+        id: "view-invalid-sort",
+        name: "Invalid sort",
+        createdAt: "2026-05-12T08:00:00.000Z",
+        updatedAt: "2026-05-12T08:10:00.000Z",
+        query: "",
+        activeTagIds: [],
+        activeAuthorHandles: [],
+        onlyWithMedia: false,
+        onlyLongform: false,
+        sortOrder: "random",
+        viewMode: "grid"
+      }
+    ]
+  })
+
+  const settings = await getSettings()
+
+  assert.equal(settings.savedViews.length, 1)
+  assert.deepEqual(settings.savedViews[0], {
+    id: "view-valid",
+    name: "Valid view",
+    createdAt: "2026-05-12T08:00:00.000Z",
+    updatedAt: "2026-05-12T08:10:00.000Z",
+    query: "agent",
+    activeTagIds: ["tag-ai", "42"],
+    activeAuthorHandles: ["alice", "null"],
+    onlyWithMedia: true,
+    onlyLongform: false,
+    sortOrder: "created-desc",
+    viewMode: "list"
+  })
 })
 
 test("removeTagFromClassificationRules strips deleted tag ids from every rule", async () => {

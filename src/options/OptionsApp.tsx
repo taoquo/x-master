@@ -3,6 +3,7 @@ import type {
   BookmarkRecord,
   BookmarkTagRecord,
   Locale,
+  SavedViewRecord,
   TagRecord
 } from "../lib/types.ts"
 import { getSyncErrorSummary, type SyncErrorKind } from "../lib/x/syncErrors.ts"
@@ -183,12 +184,19 @@ function getOptionsCopy(locale: Locale) {
       noActiveFilters: "",
       clearAll: "清除全部",
       clearSelection: "清除选择",
+      selectCurrentResults: "选择当前结果",
+      selectRenderedResults: "选择已加载",
       moveSelectedTo: "将选中项移动到",
       chooseList: "选择列表",
       moveSelected: "移动选中项",
       tagSelectedWith: "为选中项添加标签",
       chooseTag: "选择标签",
       applyTag: "应用标签",
+      savedViewsTitle: "保存视图",
+      savedViewNamePlaceholder: "视图名称",
+      saveCurrentView: "保存当前视图",
+      deleteSavedView: "删除视图",
+      noSavedViews: "还没有保存视图。",
       emptyFeedTitle: "还没有保存任何书签",
       emptyFeedDescription: "从 X 保存内容后，书签会以当前卡片流布局出现在这里。",
       noBookmarksTitle: "当前筛选条件下没有匹配的书签",
@@ -224,6 +232,7 @@ function getOptionsCopy(locale: Locale) {
       bookmarkFocus: "书签内容",
       primaryList: "主列表",
       createTagLabel: "创建标签",
+      renameTagLabel: "重命名标签",
       createTagDescription: "",
       create: "创建",
       createTagPrompt: "输入新标签名称",
@@ -246,6 +255,7 @@ function getOptionsCopy(locale: Locale) {
       of: "/",
       deleteLabel: "删除",
       selectBookmark: "选择",
+      selectBookmarkForBulk: "选择书签",
       currentLocalInventory: "当前本地库存。",
       waitingForTags: "仍在等待标签覆盖。",
       preferencesLabel: "偏好设置",
@@ -320,12 +330,19 @@ function getOptionsCopy(locale: Locale) {
     noActiveFilters: "",
     clearAll: "Clear all",
     clearSelection: "Clear selection",
+    selectCurrentResults: "Select current results",
+    selectRenderedResults: "Select loaded",
     moveSelectedTo: "Move selected to",
     chooseList: "Choose list",
     moveSelected: "Move selected",
     tagSelectedWith: "Tag selected with",
     chooseTag: "Choose tag",
     applyTag: "Apply tag",
+    savedViewsTitle: "Saved views",
+    savedViewNamePlaceholder: "View name",
+    saveCurrentView: "Save current view",
+    deleteSavedView: "Delete view",
+    noSavedViews: "No saved views yet.",
     emptyFeedTitle: "No bookmarks saved yet",
     emptyFeedDescription: "Once you save items from X, they will appear here in the current card feed layout.",
     noBookmarksTitle: "No bookmarks match the current filters",
@@ -361,6 +378,7 @@ function getOptionsCopy(locale: Locale) {
     bookmarkFocus: "Bookmark focus",
     primaryList: "Primary list",
     createTagLabel: "Create tag",
+    renameTagLabel: "Rename tag",
     createTagDescription: "",
     create: "Create",
     createTagPrompt: "Enter a new tag name",
@@ -383,6 +401,7 @@ function getOptionsCopy(locale: Locale) {
     of: "of",
     deleteLabel: "Delete",
     selectBookmark: "Select",
+    selectBookmarkForBulk: "Select bookmark",
     currentLocalInventory: "Current local inventory.",
     waitingForTags: "Still waiting for tag coverage.",
     preferencesLabel: "Preferences",
@@ -429,6 +448,18 @@ function createFieldId(scope: string, name: string) {
 const SORT_ORDER_SEQUENCE: BookmarkSortOrder[] = ["timeline", "saved-asc", "created-desc", "likes-desc"]
 const INITIAL_RESULTS_RENDER_LIMIT = 80
 const RESULTS_RENDER_INCREMENT = 80
+const DEFAULT_SAVED_VIEW_NAME = "Saved view"
+const ENABLE_SAVED_VIEWS_UI = false
+
+interface ViewStateSnapshot {
+  query: string
+  activeTagIds: string[]
+  activeAuthorHandles: string[]
+  onlyWithMedia: boolean
+  onlyLongform: boolean
+  sortOrder: BookmarkSortOrder
+  viewMode: "grid" | "list"
+}
 
 function getSortLabel(copy: OptionsCopy, sortOrder: BookmarkSortOrder) {
   switch (sortOrder) {
@@ -604,6 +635,87 @@ function DataSafetyPanel({
   )
 }
 
+function SavedViewsPanel({
+  savedViews,
+  copy,
+  currentViewName,
+  onCurrentViewNameChange,
+  onSaveCurrentView,
+  onApplySavedView,
+  onDeleteSavedView
+}: {
+  savedViews: SavedViewRecord[]
+  copy: OptionsCopy
+  currentViewName: string
+  onCurrentViewNameChange: (value: string) => void
+  onSaveCurrentView: () => void
+  onApplySavedView: (savedView: SavedViewRecord) => void
+  onDeleteSavedView: (savedViewId: string) => void
+}) {
+  return (
+    <section data-testid="saved-views-section" className="options-sidebar-group options-sidebar-group-saved-views">
+      <div className="options-sidebar-section-head">
+        <div className="options-sidebar-title-group">
+          <span className="options-overline">{copy.savedViewsTitle}</span>
+        </div>
+      </div>
+
+      <div className="options-saved-view-create">
+        <input
+          data-testid="saved-view-name-input"
+          value={currentViewName}
+          placeholder={copy.savedViewNamePlaceholder}
+          aria-label={copy.savedViewNamePlaceholder}
+          className="options-nav-row-input options-saved-view-input"
+          onInput={(event) => onCurrentViewNameChange(event.currentTarget.value)}
+          onChange={(event) => onCurrentViewNameChange(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault()
+              onSaveCurrentView()
+            }
+          }}
+        />
+        <button
+          type="button"
+          data-testid="save-current-view"
+          aria-label={copy.saveCurrentView}
+          className="options-footer-icon-button"
+          onClick={onSaveCurrentView}>
+          <AppIcon name="bookmark" size={14} />
+        </button>
+      </div>
+
+      {savedViews.length ? (
+        <div className="options-sidebar-rows">
+          {savedViews.map((savedView) => (
+            <div key={savedView.id} className="options-nav-row options-saved-view-row">
+              <button
+                type="button"
+                data-testid="saved-view-apply"
+                className="options-saved-view-apply"
+                onClick={() => onApplySavedView(savedView)}>
+                <AppIcon name="bookmark" size={14} className="options-nav-row-icon" />
+                <span className="truncate">{savedView.name}</span>
+              </button>
+              <button
+                type="button"
+                data-testid="saved-view-delete"
+                aria-label={`${copy.deleteSavedView} ${savedView.name}`}
+                className="options-nav-row-delete"
+                onClick={() => onDeleteSavedView(savedView.id)}>
+                <AppIcon name="trash" size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="options-meta-copy options-saved-view-empty">{copy.noSavedViews}</div>
+      )}
+    </section>
+  )
+}
+
 function FieldBlock({
   label,
   htmlFor,
@@ -657,6 +769,7 @@ function TextInputField({
       type={type}
       value={value}
       placeholder={placeholder}
+      onInput={(event) => onChange(event.currentTarget.value)}
       onChange={(event) => onChange(event.currentTarget.value)}
       className={cn("field-shell w-full", className)}
     />
@@ -734,17 +847,23 @@ function BookmarkCard({
   index,
   currentTagNames,
   selected,
+  bulkSelected,
   viewMode,
   locale,
-  onSelect
+  copy,
+  onSelect,
+  onBulkToggle
 }: {
   bookmark: BookmarkRecord
   index: number
   currentTagNames: string[]
   selected: boolean
+  bulkSelected: boolean
   viewMode: "grid" | "list"
   locale: Locale
+  copy: OptionsCopy
   onSelect: () => void
+  onBulkToggle: () => void
 }) {
   const authorInitials = bookmark.authorName
     .split(/\s+/)
@@ -783,6 +902,18 @@ function BookmarkCard({
         listCardTemplateClass,
         selected && "options-result-card-selected"
       )}>
+      <button
+        type="button"
+        data-testid="bookmark-select-toggle"
+        aria-label={`${copy.selectBookmarkForBulk} ${bookmark.authorName || bookmark.authorHandle}`}
+        aria-pressed={bulkSelected}
+        className={cn("options-bookmark-select-toggle", bulkSelected && "is-selected")}
+        onClick={(event) => {
+          event.stopPropagation()
+          onBulkToggle()
+        }}>
+        <AppIcon name={bulkSelected ? "check" : "bookmark"} size={13} />
+      </button>
       {!showsInlineMedia ? mediaPreview : null}
 
       <div className="options-card-body flex flex-1 flex-col">
@@ -892,7 +1023,14 @@ function WorkspaceSidebar({
   onToggleAuthorsCollapsed,
   onExpandAuthors,
   onCreateTag,
+  onRenameTag,
   onDeleteTag,
+  savedViews,
+  currentViewName,
+  onCurrentViewNameChange,
+  onSaveCurrentView,
+  onApplySavedView,
+  onDeleteSavedView,
   setLocale,
   setThemePreference
 }: {
@@ -916,7 +1054,14 @@ function WorkspaceSidebar({
   onToggleAuthorsCollapsed: () => void
   onExpandAuthors: () => void
   onCreateTag: (name: string) => Promise<unknown>
+  onRenameTag: (tagId: string, name: string) => Promise<unknown>
   onDeleteTag: (tagId: string) => Promise<unknown>
+  savedViews: SavedViewRecord[]
+  currentViewName: string
+  onCurrentViewNameChange: (value: string) => void
+  onSaveCurrentView: () => void
+  onApplySavedView: (savedView: SavedViewRecord) => void
+  onDeleteSavedView: (savedViewId: string) => void
   setLocale: (locale: Locale) => Promise<void>
   setThemePreference: (themePreference: "system" | "light" | "dark") => Promise<void>
 }) {
@@ -926,10 +1071,15 @@ function WorkspaceSidebar({
   }, new Map<string, number>())
   const [isCreatingTagInline, setIsCreatingTagInline] = useState(false)
   const [draftTagName, setDraftTagName] = useState("")
+  const [renamingTagId, setRenamingTagId] = useState<string | null>(null)
+  const [renamingTagName, setRenamingTagName] = useState("")
+  const [isSubmittingRenameTag, setIsSubmittingRenameTag] = useState(false)
   const [isSubmittingDraftTag, setIsSubmittingDraftTag] = useState(false)
   const draftTagInputRef = useRef<HTMLInputElement | null>(null)
+  const renameTagInputRef = useRef<HTMLInputElement | null>(null)
   const restoreInputRef = useRef<HTMLInputElement | null>(null)
   const draftTagBlurIntentRef = useRef<"idle" | "submit" | "cancel">("idle")
+  const renameTagBlurIntentRef = useRef<"idle" | "submit" | "cancel">("idle")
   const { items: visibleAuthorItems, shouldShowToggle: shouldShowAuthorToggle } = getVisibleAuthorSidebarItems({
     authorItems,
     searchQuery: authorSearchQuery,
@@ -949,11 +1099,27 @@ function WorkspaceSidebar({
     draftTagInputRef.current.select()
   }, [isCreatingTagInline])
 
+  useEffect(() => {
+    if (!renamingTagId || !renameTagInputRef.current) {
+      return
+    }
+
+    renameTagInputRef.current.focus()
+    renameTagInputRef.current.select()
+  }, [renamingTagId])
+
   function resetInlineTagDraft() {
     draftTagBlurIntentRef.current = "idle"
     setDraftTagName("")
     setIsSubmittingDraftTag(false)
     setIsCreatingTagInline(false)
+  }
+
+  function resetInlineTagRename() {
+    renameTagBlurIntentRef.current = "idle"
+    setRenamingTagId(null)
+    setRenamingTagName("")
+    setIsSubmittingRenameTag(false)
   }
 
   function resetFileInput(input: HTMLInputElement | null) {
@@ -1035,6 +1201,32 @@ function WorkspaceSidebar({
 
     setDraftTagName("")
     setIsCreatingTagInline(true)
+  }
+
+  function handleRenameTagClick(tag: TagRecord) {
+    setRenamingTagId(tag.id)
+    setRenamingTagName(tag.name)
+  }
+
+  async function submitInlineTagRename(tagId: string, nextName?: string) {
+    if (isSubmittingRenameTag) {
+      return
+    }
+
+    const trimmedName = (nextName ?? renameTagInputRef.current?.value ?? renamingTagName).trim()
+    if (!trimmedName) {
+      resetInlineTagRename()
+      return
+    }
+
+    setIsSubmittingRenameTag(true)
+
+    try {
+      await onRenameTag(tagId, trimmedName)
+      resetInlineTagRename()
+    } catch {
+      setIsSubmittingRenameTag(false)
+    }
   }
 
   function handleDeleteTagClick(tagId: string, tagName: string) {
@@ -1192,14 +1384,23 @@ function WorkspaceSidebar({
 
                 {workspace.tags.map((tag) => {
                   const isSelected = activeTagIds.includes(tag.id)
+                  const isRenaming = renamingTagId === tag.id
                   return (
                     <div
                       key={tag.id}
                       role="button"
                       tabIndex={0}
                       data-list-button={tag.id}
-                      onClick={() => onTagToggle(tag.id)}
+                      onClick={() => {
+                        if (!isRenaming) {
+                          onTagToggle(tag.id)
+                        }
+                      }}
                       onKeyDown={(event) => {
+                        if (isRenaming) {
+                          return
+                        }
+
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault()
                           onTagToggle(tag.id)
@@ -1211,27 +1412,78 @@ function WorkspaceSidebar({
                       )}>
                       <span className="options-nav-row-main">
                         <AppIcon name="hash" size={14} className="options-nav-row-icon" />
-                        <span className="truncate">{tag.name}</span>
+                        {isRenaming ? (
+                          <input
+                            ref={renameTagInputRef}
+                            type="text"
+                            value={renamingTagName}
+                            data-testid="sidebar-rename-tag-input"
+                            aria-label={`${copy.createTagLabel} ${tag.name}`}
+                            disabled={isSubmittingRenameTag}
+                            className="options-nav-row-input"
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={(event) => setRenamingTagName(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault()
+                                event.stopPropagation()
+                                renameTagBlurIntentRef.current = "submit"
+                                void submitInlineTagRename(tag.id, event.currentTarget.value)
+                                return
+                              }
+
+                              if (event.key === "Escape") {
+                                event.preventDefault()
+                                event.stopPropagation()
+                                renameTagBlurIntentRef.current = "cancel"
+                                resetInlineTagRename()
+                              }
+                            }}
+                            onBlur={(event) => {
+                              if (renameTagBlurIntentRef.current === "submit" || renameTagBlurIntentRef.current === "cancel") {
+                                renameTagBlurIntentRef.current = "idle"
+                                return
+                              }
+
+                              void submitInlineTagRename(tag.id, event.currentTarget.value)
+                            }}
+                          />
+                        ) : (
+                          <span className="truncate">{tag.name}</span>
+                        )}
                       </span>
                       <span className="options-nav-row-trailing">
                         <span className="options-nav-count">{tagCountById.get(tag.id) ?? 0}</span>
-                        {isSelected ? (
+                        {isRenaming ? null : isSelected ? (
                           <span className="options-nav-row-check" aria-hidden="true">
                             <AppIcon name="check" size={12} />
                           </span>
                         ) : (
-                          <button
-                            type="button"
-                            data-testid="sidebar-delete-tag"
-                            className="options-nav-row-delete"
-                            aria-label={`${copy.deleteLabel} ${tag.name}`}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              handleDeleteTagClick(tag.id, tag.name)
-                            }}
-                          >
-                            <AppIcon name="trash" size={12} />
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              data-testid="sidebar-rename-tag"
+                              className="options-nav-row-delete"
+                              aria-label={`${copy.renameTagLabel} ${tag.name}`}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                handleRenameTagClick(tag)
+                              }}>
+                              <AppIcon name="edit" size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              data-testid="sidebar-delete-tag"
+                              className="options-nav-row-delete"
+                              aria-label={`${copy.deleteLabel} ${tag.name}`}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                handleDeleteTagClick(tag.id, tag.name)
+                              }}
+                            >
+                              <AppIcon name="trash" size={12} />
+                            </button>
+                          </>
                         )}
                       </span>
                     </div>
@@ -1241,6 +1493,18 @@ function WorkspaceSidebar({
               </div>
             ) : null}
           </section>
+
+          {ENABLE_SAVED_VIEWS_UI ? (
+            <SavedViewsPanel
+              savedViews={savedViews}
+              copy={copy}
+              currentViewName={currentViewName}
+              onCurrentViewNameChange={onCurrentViewNameChange}
+              onSaveCurrentView={onSaveCurrentView}
+              onApplySavedView={onApplySavedView}
+              onDeleteSavedView={onDeleteSavedView}
+            />
+          ) : null}
 
           <section data-testid="sidebar-authors-section" className="options-sidebar-group options-sidebar-group-authors">
             <div className="options-sidebar-section-head">
@@ -1593,6 +1857,76 @@ function WorkspaceToolbar({
   )
 }
 
+function BulkActionsBar({
+  copy,
+  selectedCount,
+  tags,
+  bulkTagId,
+  isSavingTags,
+  onBulkTagIdChange,
+  onSelectFiltered,
+  onSelectRendered,
+  onClearSelection,
+  onApplyTag
+}: {
+  copy: OptionsCopy
+  selectedCount: number
+  tags: TagRecord[]
+  bulkTagId: string
+  isSavingTags: boolean
+  onBulkTagIdChange: (tagId: string) => void
+  onSelectFiltered: () => void
+  onSelectRendered: () => void
+  onClearSelection: () => void
+  onApplyTag: () => void
+}) {
+  if (!selectedCount) {
+    return null
+  }
+
+  return (
+    <div data-testid="bulk-actions-bar" className="options-bulk-actions-bar options-theme-panel">
+      <div className="options-bulk-actions-meta">
+        <AppIcon name="check" size={14} />
+        <span>{selectedCount} {copy.selected}</span>
+      </div>
+      <div className="options-bulk-actions-controls">
+        <button type="button" data-testid="bulk-select-filtered" className="options-secondary-button" onClick={onSelectFiltered}>
+          {copy.selectCurrentResults}
+        </button>
+        <button type="button" data-testid="bulk-select-rendered" className="options-secondary-button" onClick={onSelectRendered}>
+          {copy.selectRenderedResults}
+        </button>
+        <select
+          data-testid="bulk-tag-select"
+          value={bulkTagId}
+          aria-label={copy.chooseTag}
+          className="field-shell options-bulk-tag-select"
+          onChange={(event) => onBulkTagIdChange(event.currentTarget.value)}>
+          <option value="">{copy.chooseTag}</option>
+          {tags.map((tag) => (
+            <option key={tag.id} value={tag.id}>
+              {tag.name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          data-testid="bulk-apply-tag"
+          className="options-secondary-button"
+          disabled={!bulkTagId || isSavingTags}
+          onClick={onApplyTag}>
+          <AppIcon name="tag" size={14} />
+          {copy.applyTag}
+        </button>
+        <button type="button" data-testid="bulk-clear-selection" className="options-footer-icon-button" aria-label={copy.clearSelection} onClick={onClearSelection}>
+          <AppIcon name="close" size={14} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function BookmarkResultsPane({
   workspace,
   isLoading,
@@ -1618,6 +1952,14 @@ function BookmarkResultsPane({
   renderedBookmarks,
   activeRefinementChips,
   tagNamesByBookmarkId,
+  selectedBulkBookmarkIds,
+  bulkTagId,
+  onBulkTagIdChange,
+  onBulkToggleBookmark,
+  onSelectFilteredBookmarks,
+  onSelectRenderedBookmarks,
+  onClearBulkSelection,
+  onApplyBulkTag,
   clearRefinement,
   onResultsScroll
 }: {
@@ -1645,6 +1987,14 @@ function BookmarkResultsPane({
   renderedBookmarks: BookmarkRecord[]
   activeRefinementChips: Array<{ key: string; label: string }>
   tagNamesByBookmarkId: Map<string, string[]>
+  selectedBulkBookmarkIds: Set<string>
+  bulkTagId: string
+  onBulkTagIdChange: (tagId: string) => void
+  onBulkToggleBookmark: (bookmarkId: string) => void
+  onSelectFilteredBookmarks: () => void
+  onSelectRenderedBookmarks: () => void
+  onClearBulkSelection: () => void
+  onApplyBulkTag: () => void
   clearRefinement: (key: string) => void
   onResultsScroll: (event: React.UIEvent<HTMLDivElement>) => void
 }) {
@@ -1688,6 +2038,19 @@ function BookmarkResultsPane({
               clearRefinement={clearRefinement}
             />
 
+            <BulkActionsBar
+              copy={copy}
+              selectedCount={selectedBulkBookmarkIds.size}
+              tags={workspace.tags}
+              bulkTagId={bulkTagId}
+              isSavingTags={workspace.isSavingTags}
+              onBulkTagIdChange={onBulkTagIdChange}
+              onSelectFiltered={onSelectFilteredBookmarks}
+              onSelectRendered={onSelectRenderedBookmarks}
+              onClearSelection={onClearBulkSelection}
+              onApplyTag={onApplyBulkTag}
+            />
+
             {isLoading ? (
               <FeedLoadingState copy={copy} />
             ) : showLoadErrorState ? (
@@ -1729,9 +2092,12 @@ function BookmarkResultsPane({
                       index={index}
                       currentTagNames={currentTagNames}
                       selected={isSelected}
+                      bulkSelected={selectedBulkBookmarkIds.has(bookmark.tweetId)}
                       viewMode={viewMode}
                       locale={locale}
+                      copy={copy}
                       onSelect={() => setSelectedBookmarkId(bookmark.tweetId)}
+                      onBulkToggle={() => onBulkToggleBookmark(bookmark.tweetId)}
                     />
                   )
                 })}
@@ -1771,6 +2137,9 @@ function OptionsScreen() {
   const [onlyWithMedia, setOnlyWithMedia] = useState(false)
   const [onlyLongform, setOnlyLongform] = useState(false)
   const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | undefined>(undefined)
+  const [selectedBulkBookmarkIds, setSelectedBulkBookmarkIds] = useState<Set<string>>(() => new Set())
+  const [bulkTagId, setBulkTagId] = useState("")
+  const [currentViewName, setCurrentViewName] = useState("")
   const [renderLimit, setRenderLimit] = useState(INITIAL_RESULTS_RENDER_LIMIT)
   const resizeStateRef = useRef<null | { side: "left" | "right"; startX: number; startWidth: number }>(null)
   const paneWidthsRef = useRef({ left: 280, right: 360 })
@@ -1906,6 +2275,14 @@ function OptionsScreen() {
   }, [selectedBookmarkId, visibleBookmarks])
 
   useEffect(() => {
+    const visibleBookmarkIds = new Set(visibleBookmarks.map((bookmark) => bookmark.tweetId))
+    setSelectedBulkBookmarkIds((current) => {
+      const next = new Set([...current].filter((bookmarkId) => visibleBookmarkIds.has(bookmarkId)))
+      return next.size === current.size ? current : next
+    })
+  }, [visibleBookmarks])
+
+  useEffect(() => {
     setRenderLimit(Math.min(INITIAL_RESULTS_RENDER_LIMIT, visibleBookmarks.length || INITIAL_RESULTS_RENDER_LIMIT))
   }, [visibleBookmarks])
 
@@ -2038,6 +2415,83 @@ function OptionsScreen() {
     setActiveAuthorHandles([authorHandle])
   }
 
+  function handleBulkToggleBookmark(bookmarkId: string) {
+    setSelectedBulkBookmarkIds((current) => {
+      const next = new Set(current)
+      if (next.has(bookmarkId)) {
+        next.delete(bookmarkId)
+      } else {
+        next.add(bookmarkId)
+      }
+      return next
+    })
+  }
+
+  function handleSelectFilteredBookmarks() {
+    setSelectedBulkBookmarkIds(new Set(visibleBookmarks.map((bookmark) => bookmark.tweetId)))
+  }
+
+  function handleSelectRenderedBookmarks() {
+    setSelectedBulkBookmarkIds(new Set(renderedBookmarks.map((bookmark) => bookmark.tweetId)))
+  }
+
+  function handleClearBulkSelection() {
+    setSelectedBulkBookmarkIds(new Set())
+    setBulkTagId("")
+  }
+
+  async function handleApplyBulkTag() {
+    if (!bulkTagId || !selectedBulkBookmarkIds.size) {
+      return
+    }
+
+    await workspace.handleBulkAttachTag([...selectedBulkBookmarkIds], bulkTagId)
+    handleClearBulkSelection()
+  }
+
+  function getCurrentViewSnapshot(): ViewStateSnapshot {
+    return {
+      query,
+      activeTagIds,
+      activeAuthorHandles,
+      onlyWithMedia,
+      onlyLongform,
+      sortOrder,
+      viewMode
+    }
+  }
+
+  async function handleSaveCurrentView() {
+    const name = currentViewName.trim() || DEFAULT_SAVED_VIEW_NAME
+    const now = new Date().toISOString()
+    const savedView: SavedViewRecord = {
+      id: `view-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      name,
+      createdAt: now,
+      updatedAt: now,
+      ...getCurrentViewSnapshot()
+    }
+
+    await workspace.handleSaveViews([savedView, ...workspace.savedViews])
+    setCurrentViewName("")
+  }
+
+  function handleApplySavedView(savedView: SavedViewRecord) {
+    setQuery(savedView.query)
+    setActiveTagIds(savedView.activeTagIds.length ? savedView.activeTagIds : ["all"])
+    setActiveAuthorHandles(savedView.activeAuthorHandles)
+    setOnlyWithMedia(savedView.onlyWithMedia)
+    setOnlyLongform(savedView.onlyLongform)
+    setSortOrder(savedView.sortOrder)
+    setViewMode(savedView.viewMode)
+    setFilterPopoverOpen(false)
+    handleClearBulkSelection()
+  }
+
+  async function handleDeleteSavedView(savedViewId: string) {
+    await workspace.handleSaveViews(workspace.savedViews.filter((savedView) => savedView.id !== savedViewId))
+  }
+
   function handleResultsScroll(event: React.UIEvent<HTMLDivElement>) {
     if (renderLimit >= visibleBookmarks.length) {
       return
@@ -2090,7 +2544,14 @@ function OptionsScreen() {
                 onToggleAuthorsCollapsed={() => setIsAuthorsCollapsed((current) => !current)}
                 onExpandAuthors={() => setAuthorsExpanded(true)}
                 onCreateTag={workspace.handleCreateTag}
+                onRenameTag={workspace.handleRenameTag}
                 onDeleteTag={workspace.handleDeleteTag}
+                savedViews={workspace.savedViews}
+                currentViewName={currentViewName}
+                onCurrentViewNameChange={setCurrentViewName}
+                onSaveCurrentView={() => void handleSaveCurrentView()}
+                onApplySavedView={handleApplySavedView}
+                onDeleteSavedView={(savedViewId) => void handleDeleteSavedView(savedViewId)}
                 setLocale={setLocale}
                 setThemePreference={setThemePreference}
               />
@@ -2145,6 +2606,14 @@ function OptionsScreen() {
                 renderedBookmarks={renderedBookmarks}
                 activeRefinementChips={activeRefinementChips}
                 tagNamesByBookmarkId={tagNamesByBookmarkId}
+                selectedBulkBookmarkIds={selectedBulkBookmarkIds}
+                bulkTagId={bulkTagId}
+                onBulkTagIdChange={setBulkTagId}
+                onBulkToggleBookmark={handleBulkToggleBookmark}
+                onSelectFilteredBookmarks={handleSelectFilteredBookmarks}
+                onSelectRenderedBookmarks={handleSelectRenderedBookmarks}
+                onClearBulkSelection={handleClearBulkSelection}
+                onApplyBulkTag={() => void handleApplyBulkTag()}
                 clearRefinement={clearRefinement}
                 onResultsScroll={handleResultsScroll}
               />

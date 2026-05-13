@@ -3,9 +3,11 @@ import {
   type ClassificationRule,
   type ExtensionSettings,
   type Locale,
+  type SavedViewRecord,
   type SyncSummary,
   type ThemePreference
 } from "../types.ts"
+import type { BookmarkSortOrder } from "../search/searchBookmarks.ts"
 import { isSyncErrorKind } from "../x/syncErrors.ts"
 
 const SETTINGS_STORAGE_KEY = "settings"
@@ -16,6 +18,7 @@ const DEFAULT_THEME_PREFERENCE: ThemePreference = "system"
 const DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES = 3
 const DEFAULT_LEFT_SIDEBAR_WIDTH = 280
 const DEFAULT_RIGHT_SIDEBAR_WIDTH = 360
+const SAVED_VIEW_SORT_ORDERS = new Set<BookmarkSortOrder>(["timeline", "saved-desc", "saved-asc", "created-desc", "likes-desc"])
 
 function normalizeLocale(locale: unknown): Locale {
   return locale === "en" || locale === "zh-CN" ? locale : DEFAULT_LOCALE
@@ -38,6 +41,49 @@ function normalizeRule(rule: Partial<ClassificationRule> | undefined, index: num
     requireLongform: Boolean(rule?.requireLongform),
     targetTagIds: Array.isArray(rule?.targetTagIds) ? rule.targetTagIds.map(String) : []
   }
+}
+
+function normalizeStringArray(value: unknown) {
+  return Array.isArray(value) ? value.map(String) : []
+}
+
+function isSavedViewSortOrder(value: unknown): value is BookmarkSortOrder {
+  return typeof value === "string" && SAVED_VIEW_SORT_ORDERS.has(value as BookmarkSortOrder)
+}
+
+function normalizeSavedView(view: Partial<SavedViewRecord> | undefined): SavedViewRecord | null {
+  const id = String(view?.id ?? "").trim()
+  const name = String(view?.name ?? "").trim()
+  const createdAt = String(view?.createdAt ?? "").trim()
+  const updatedAt = String(view?.updatedAt ?? "").trim()
+
+  if (!id || !name || !createdAt || !updatedAt || !isSavedViewSortOrder(view?.sortOrder)) {
+    return null
+  }
+
+  return {
+    id,
+    name,
+    createdAt,
+    updatedAt,
+    query: String(view?.query ?? ""),
+    activeTagIds: normalizeStringArray(view?.activeTagIds),
+    activeAuthorHandles: normalizeStringArray(view?.activeAuthorHandles),
+    onlyWithMedia: Boolean(view?.onlyWithMedia),
+    onlyLongform: Boolean(view?.onlyLongform),
+    sortOrder: view.sortOrder,
+    viewMode: view?.viewMode === "list" ? "list" : "grid"
+  }
+}
+
+function normalizeSavedViews(savedViews: unknown): SavedViewRecord[] {
+  if (!Array.isArray(savedViews)) {
+    return []
+  }
+
+  return savedViews
+    .map((savedView) => normalizeSavedView(savedView as Partial<SavedViewRecord> | undefined))
+    .filter((savedView): savedView is SavedViewRecord => savedView !== null)
 }
 
 function normalizePositiveInteger(value: unknown, fallback: number) {
@@ -86,6 +132,7 @@ function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): Ex
     ),
     leftSidebarWidth: normalizeRange(settings?.leftSidebarWidth, DEFAULT_LEFT_SIDEBAR_WIDTH, 260, 420),
     rightSidebarWidth: normalizeRange(settings?.rightSidebarWidth, DEFAULT_RIGHT_SIDEBAR_WIDTH, 320, 520),
+    savedViews: normalizeSavedViews(settings?.savedViews),
     classificationRules: Array.isArray(settings?.classificationRules)
       ? settings.classificationRules.map((rule, index) => normalizeRule(rule, index))
       : defaults.classificationRules
@@ -103,7 +150,8 @@ export function createDefaultSettings(): ExtensionSettings {
     hasCompletedInitialFullSync: false,
     incrementalStopBufferPages: DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES,
     leftSidebarWidth: DEFAULT_LEFT_SIDEBAR_WIDTH,
-    rightSidebarWidth: DEFAULT_RIGHT_SIDEBAR_WIDTH
+    rightSidebarWidth: DEFAULT_RIGHT_SIDEBAR_WIDTH,
+    savedViews: []
   }
 }
 
@@ -119,7 +167,7 @@ export async function getSettings(): Promise<ExtensionSettings> {
   return normalizeSettings(stored)
 }
 
-export async function saveSettings(settings: ExtensionSettings) {
+export async function saveSettings(settings: Partial<ExtensionSettings>) {
   if (typeof chrome === "undefined" || !chrome.storage?.local?.set) {
     return
   }

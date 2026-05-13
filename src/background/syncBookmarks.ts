@@ -4,7 +4,13 @@ import { getAllBookmarks, upsertBookmarks } from "../lib/storage/bookmarksStore.
 import { getSettings, saveSettings } from "../lib/storage/settings.ts"
 import { createSyncRun } from "../lib/storage/syncRunsStore.ts"
 import { attachBookmarkTags, getAllBookmarkTags, getAllTags } from "../lib/storage/tagsStore.ts"
-import { createEmptySyncSummary, type BookmarkRecord, type SyncSummary, type SyncRunRecord } from "../lib/types.ts"
+import {
+  createEmptySyncSummary,
+  type BookmarkRecord,
+  type ExtensionSettings,
+  type SyncSummary,
+  type SyncRunRecord
+} from "../lib/types.ts"
 import { extractCsrfToken, getXCookieHeader } from "../lib/x/auth.ts"
 import { fetchBookmarksPage } from "../lib/x/client.ts"
 import { fetchAllBookmarks } from "../lib/x/paginateBookmarks.ts"
@@ -34,8 +40,10 @@ interface RunBookmarkSyncOptions {
   createSyncRun?: (syncRun: SyncRunRecord) => Promise<void>
   updateSyncSummary?: (summary: SyncSummary) => Promise<void>
   getSettings?: typeof getSettings
-  saveSettings?: typeof saveSettings
+  saveSettings?: (settings: ExtensionSettings) => Promise<void>
 }
+
+type SaveCompleteSettings = (settings: ExtensionSettings) => Promise<void>
 
 function createSummary(summary: Partial<SyncSummary>): SyncSummary {
   return {
@@ -47,7 +55,7 @@ function createSummary(summary: Partial<SyncSummary>): SyncSummary {
 async function defaultUpdateSyncSummary(
   summary: SyncSummary,
   readSettings: typeof getSettings,
-  writeSettings: typeof saveSettings
+  writeSettings: SaveCompleteSettings
 ) {
   const settings = await readSettings()
   const lastSyncSummary: SyncSummary = {
@@ -73,7 +81,7 @@ async function persistSummary(
   summary: SyncSummary,
   updateSyncSummary: RunBookmarkSyncOptions["updateSyncSummary"],
   readSettings: typeof getSettings,
-  writeSettings: typeof saveSettings
+  writeSettings: SaveCompleteSettings
 ) {
   if (updateSyncSummary) {
     await updateSyncSummary(summary)

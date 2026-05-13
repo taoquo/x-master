@@ -17,6 +17,7 @@ export interface WorkspaceExportSettings {
   locale: ExtensionSettings["locale"]
   themePreference: ExtensionSettings["themePreference"]
   classificationRules: ExtensionSettings["classificationRules"]
+  savedViews?: ExtensionSettings["savedViews"]
   lastSyncSummary?: SyncSummary
 }
 
@@ -66,6 +67,7 @@ export function createWorkspaceExportPayload({
       locale: settings.locale,
       themePreference: settings.themePreference,
       classificationRules: settings.classificationRules,
+      savedViews: settings.savedViews,
       lastSyncSummary: settings.lastSyncSummary
     },
     summary: workspace.summary,

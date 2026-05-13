@@ -17,6 +17,7 @@ function createWorkspaceData(overrides: Partial<WorkspaceData> = {}): WorkspaceD
     tags: [],
     bookmarkTags: [],
     classificationRules: [],
+    savedViews: [],
     summary: createEmptySyncSummary(),
     latestSyncRun: null,
     stats: createEmptyWorkspaceStats(),
@@ -31,6 +32,7 @@ function createSettings(overrides: Partial<ExtensionSettings> = {}): ExtensionSe
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
     classificationRules: [],
+    savedViews: [],
     ...overrides
   }
 }
@@ -90,7 +92,22 @@ test("createWorkspaceExportPayload includes workspace data and strips rawPayload
     locale: "zh-CN",
     themePreference: "dark",
     classificationRules: workspace.classificationRules,
-    lastSyncSummary: workspace.summary
+    lastSyncSummary: workspace.summary,
+    savedViews: [
+      {
+        id: "view-ai",
+        name: "AI media",
+        createdAt: "2026-05-12T08:00:00.000Z",
+        updatedAt: "2026-05-12T08:10:00.000Z",
+        query: "agent",
+        activeTagIds: ["tag-ai"],
+        activeAuthorHandles: ["alice"],
+        onlyWithMedia: true,
+        onlyLongform: false,
+        sortOrder: "likes-desc",
+        viewMode: "list"
+      }
+    ]
   })
 
   const payload = createWorkspaceExportPayload({
@@ -107,6 +124,8 @@ test("createWorkspaceExportPayload includes workspace data and strips rawPayload
   assert.equal(payload.bookmarks[0].lastSeenAt, "2026-04-11T08:08:00.000Z")
   assert.equal(payload.settings.locale, "zh-CN")
   assert.equal(payload.settings.themePreference, "dark")
+  assert.equal(payload.settings.savedViews?.length, 1)
+  assert.equal(payload.settings.savedViews?.[0].name, "AI media")
   assert.deepEqual(payload.summary, workspace.summary)
   assert.deepEqual(payload.latestSyncRun, workspace.latestSyncRun)
 })

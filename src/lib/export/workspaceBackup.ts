@@ -5,10 +5,12 @@ import type {
   ClassificationRule,
   ExtensionSettings,
   ListRecord,
+  SavedViewRecord,
   SyncRunRecord,
   SyncSummary,
   TagRecord
 } from "../types.ts"
+import type { BookmarkSortOrder } from "../search/searchBookmarks.ts"
 import {
   BOOKMARK_LISTS_STORE,
   BOOKMARKS_STORE,
@@ -138,6 +140,36 @@ function optionalSyncErrorKind(record: Record<string, unknown>, key: string, pat
   }
 
   return value
+}
+
+const SAVED_VIEW_SORT_ORDERS = new Set<BookmarkSortOrder>(["timeline", "saved-desc", "saved-asc", "created-desc", "likes-desc"])
+
+function validateSavedView(value: unknown, path: string): SavedViewRecord {
+  const record = requireObject(value, path)
+  const sortOrder = requireString(record, "sortOrder", path)
+  const viewMode = requireString(record, "viewMode", path)
+
+  if (!SAVED_VIEW_SORT_ORDERS.has(sortOrder as BookmarkSortOrder)) {
+    throw new Error(`${path}.sortOrder is invalid`)
+  }
+
+  if (viewMode !== "grid" && viewMode !== "list") {
+    throw new Error(`${path}.viewMode is invalid`)
+  }
+
+  return {
+    id: requireNonEmptyString(record, "id", path),
+    name: requireNonEmptyString(record, "name", path),
+    createdAt: requireString(record, "createdAt", path),
+    updatedAt: requireString(record, "updatedAt", path),
+    query: requireString(record, "query", path),
+    activeTagIds: requireStringArray(record, "activeTagIds", path),
+    activeAuthorHandles: requireStringArray(record, "activeAuthorHandles", path),
+    onlyWithMedia: requireBoolean(record, "onlyWithMedia", path),
+    onlyLongform: requireBoolean(record, "onlyLongform", path),
+    sortOrder: sortOrder as BookmarkSortOrder,
+    viewMode
+  }
 }
 
 function validateSyncSummary(value: unknown, path: string): SyncSummary {
@@ -289,6 +321,11 @@ function validateSettings(value: unknown, path: string): WorkspaceExportPayload[
     classificationRules: requireArray(record, "classificationRules", path).map((rule, index) =>
       validateRule(rule, `${path}.classificationRules[${index}]`)
     ),
+    savedViews: record.savedViews === undefined
+      ? undefined
+      : requireArray(record, "savedViews", path).map((savedView, index) =>
+          validateSavedView(savedView, `${path}.savedViews[${index}]`)
+        ),
     lastSyncSummary: record.lastSyncSummary === undefined
       ? undefined
       : validateSyncSummary(record.lastSyncSummary, `${path}.lastSyncSummary`)
@@ -479,6 +516,7 @@ export async function restoreWorkspaceBackup(payload: WorkspaceExportPayload): P
     locale: validation.payload.settings.locale,
     themePreference: validation.payload.settings.themePreference,
     lastSyncSummary: validation.payload.settings.lastSyncSummary ?? validation.payload.summary,
+    savedViews: validation.payload.settings.savedViews ?? [],
     classificationRules: validation.payload.classificationRules
   })
 

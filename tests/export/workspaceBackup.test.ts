@@ -41,6 +41,7 @@ function createSettings(overrides: Partial<ExtensionSettings> = {}): ExtensionSe
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
     classificationRules: [],
+    savedViews: [],
     ...overrides
   }
 }
@@ -98,6 +99,21 @@ function createBackupPayload(overrides: Partial<WorkspaceExportPayload> = {}): W
       locale: "zh-CN",
       themePreference: "dark",
       classificationRules,
+      savedViews: [
+        {
+          id: "view-ai",
+          name: "AI media",
+          createdAt: "2026-05-12T08:00:00.000Z",
+          updatedAt: "2026-05-12T08:10:00.000Z",
+          query: "agent",
+          activeTagIds: ["tag-ai"],
+          activeAuthorHandles: ["alice"],
+          onlyWithMedia: true,
+          onlyLongform: false,
+          sortOrder: "likes-desc",
+          viewMode: "list"
+        }
+      ],
       lastSyncSummary: summary
     },
     summary,
@@ -125,6 +141,8 @@ test("validateWorkspaceBackupText accepts a valid workspace backup and returns c
 
   assert.equal(result.exportedAt, "2026-04-11T09:00:00.000Z")
   assert.equal(result.payload.exportVersion, WORKSPACE_EXPORT_VERSION)
+  assert.equal(result.payload.settings.savedViews?.length, 1)
+  assert.equal(result.payload.settings.savedViews?.[0].name, "AI media")
   assert.deepEqual(result.counts, {
     bookmarks: 1,
     lists: 1,
@@ -280,7 +298,18 @@ test("restoreWorkspaceBackup overwrites local data with a validated backup", asy
   assert.equal(settings.themePreference, "dark")
   assert.equal(settings.lastSyncSummary.status, "success")
   assert.equal(settings.classificationRules.length, 1)
+  assert.equal(settings.savedViews.length, 1)
+  assert.equal(settings.savedViews[0].name, "AI media")
   assert.equal(latestSyncRun?.id, "sync-1")
+})
+
+test("validateWorkspaceBackupText accepts legacy settings without saved views", () => {
+  const payload = createBackupPayload()
+  delete (payload.settings as Partial<typeof payload.settings>).savedViews
+
+  const result = validateWorkspaceBackupText(JSON.stringify(payload))
+
+  assert.equal(result.payload.settings.savedViews, undefined)
 })
 
 test("restoreWorkspaceBackup keeps sync runs empty when the backup has no latest sync run", async () => {

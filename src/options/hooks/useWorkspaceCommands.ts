@@ -8,9 +8,9 @@ import {
 } from "../../lib/export/workspaceBackup.ts"
 import { resetStoredData, runSync } from "../../lib/runtime/popupClient.ts"
 import { createList, deleteList, moveBookmarkToList, moveBookmarksToList, renameList } from "../../lib/storage/listsStore.ts"
-import { getSettings, removeTagFromClassificationRules, saveClassificationRules } from "../../lib/storage/settings.ts"
-import { attachTagToBookmark, attachTagToBookmarks, createTag, deleteTag, detachTagFromBookmark } from "../../lib/storage/tagsStore.ts"
-import type { ClassificationRule, WorkspaceData } from "../../lib/types.ts"
+import { getSettings, removeTagFromClassificationRules, saveClassificationRules, saveSettings } from "../../lib/storage/settings.ts"
+import { attachTagToBookmark, attachTagToBookmarks, createTag, deleteTag, detachTagFromBookmark, renameTag } from "../../lib/storage/tagsStore.ts"
+import type { ClassificationRule, SavedViewRecord, WorkspaceData } from "../../lib/types.ts"
 
 function toErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
@@ -286,6 +286,27 @@ export function useWorkspaceCommands({
     }
   }
 
+  async function handleRenameTag(tagId: string, name: string) {
+    const trimmedName = name.trim()
+    if (!tagId || !trimmedName) {
+      return
+    }
+
+    setCommandError(null)
+    setIsSavingTags(true)
+
+    try {
+      const tag = await renameTag({ tagId, name: trimmedName })
+      await refreshData()
+      return tag
+    } catch (error) {
+      setCommandError(toErrorMessage(error, "Failed to rename tag"))
+      throw error
+    } finally {
+      setIsSavingTags(false)
+    }
+  }
+
   async function handleAttachTag(bookmarkId: string, tagId: string) {
     if (!bookmarkId || !tagId) {
       return
@@ -354,6 +375,22 @@ export function useWorkspaceCommands({
     }
   }
 
+  async function handleSaveViews(savedViews: SavedViewRecord[]) {
+    setCommandError(null)
+
+    try {
+      const settings = await getSettings()
+      await saveSettings({
+        ...settings,
+        savedViews
+      })
+      await refreshData()
+    } catch (error) {
+      setCommandError(toErrorMessage(error, "Failed to save view"))
+      throw error
+    }
+  }
+
   return {
     isSyncing,
     isExporting,
@@ -379,9 +416,11 @@ export function useWorkspaceCommands({
     handleMoveBookmarksToList,
     handleCreateTag,
     handleDeleteTag,
+    handleRenameTag,
     handleAttachTag,
     handleDetachTag,
     handleBulkAttachTag,
-    handleSaveRules
+    handleSaveRules,
+    handleSaveViews
   }
 }

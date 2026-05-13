@@ -18,6 +18,7 @@ function createEmptyWorkspaceData(): WorkspaceData {
     tags: [],
     bookmarkTags: [],
     classificationRules: [],
+    savedViews: [],
     summary: createEmptySyncSummary(),
     latestSyncRun: null,
     stats: createEmptyWorkspaceStats()
