@@ -87,7 +87,7 @@ async function writeStaticFiles() {
   </head>
   <body>
     <div id="root"></div>
-    <script src="./options.js"></script>
+    <script type="module" src="./options.js"></script>
   </body>
 </html>
 `
@@ -179,15 +179,22 @@ function createBuildOptions(entryPoint, outfile, format) {
   }
 }
 
+function createSplittingBuildOptions(entryPoint) {
+  const { outfile: _outfile, ...baseOptions } = createBuildOptions(entryPoint, "", "esm")
+
+  return {
+    ...baseOptions,
+    outdir: outDir,
+    splitting: true,
+    chunkNames: "chunks/[name]-[hash]"
+  }
+}
+
 async function buildExtension() {
   await rm(outDir, { recursive: true, force: true })
   await mkdir(outDir, { recursive: true })
 
-  const optionsPageOptions = createBuildOptions(
-    path.join(appDir, "src", "options.tsx"),
-    path.join(outDir, "options.js"),
-    "iife"
-  )
+  const optionsPageOptions = createSplittingBuildOptions(path.join(appDir, "src", "options.tsx"))
   const backgroundOptions = createBuildOptions(
     path.join(appDir, "src", "background.ts"),
     path.join(outDir, "background.js"),
