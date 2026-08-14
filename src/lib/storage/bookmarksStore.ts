@@ -11,39 +11,57 @@ import type { BookmarkTagRecord } from "../types.ts"
 
 type StoredBookmark = BookmarkRecord & { updatedAt?: string; id?: string }
 
+const UPSERT_BATCH_SIZE = 500
+
 export async function upsertBookmarks(bookmarks: BookmarkRecord[]) {
-  const db = await getBookmarksDb()
-  const transaction = db.transaction(BOOKMARKS_STORE, "readwrite")
-  const store = transaction.objectStore(BOOKMARKS_STORE)
   let insertedCount = 0
   let updatedCount = 0
 
-  for (const bookmark of bookmarks) {
-    const { rawPayload: _legacyRawPayload, ...bookmarkFields } = bookmark as BookmarkRecord & { rawPayload?: unknown }
-    const existing = (await requestToPromise(store.get(bookmark.tweetId))) as StoredBookmark | undefined
-    const timestamp = new Date().toISOString()
-    const savedAt = String(existing?.savedAt ?? bookmark.savedAt ?? timestamp)
-    const lastSeenAt = String(bookmark.lastSeenAt ?? bookmark.savedAt ?? existing?.lastSeenAt ?? existing?.savedAt ?? timestamp)
-
-    store.put({
-      ...existing,
-      ...bookmarkFields,
-      savedAt,
-      lastSeenAt,
-      authorAvatarUrl: bookmark.authorAvatarUrl ?? existing?.authorAvatarUrl,
-      bookmarkTimelineRank: bookmark.bookmarkTimelineRank ?? existing?.bookmarkTimelineRank,
-      id: bookmark.id ?? bookmark.tweetId,
-      updatedAt: timestamp
-    })
-
-    if (existing) {
-      updatedCount += 1
-    } else {
-      insertedCount += 1
-    }
+  if (!bookmarks.length) {
+    return { insertedCount, updatedCount }
   }
 
-  await transactionDone(transaction)
+  const db = await getBookmarksDb()
+
+  for (let offset = 0; offset < bookmarks.length; offset += UPSERT_BATCH_SIZE) {
+    const batch = bookmarks.slice(offset, offset + UPSERT_BATCH_SIZE)
+    const transaction = db.transaction(BOOKMARKS_STORE, "readwrite")
+    const store = transaction.objectStore(BOOKMARKS_STORE)
+    const existingRecords = await Promise.all(
+      batch.map((bookmark) => requestToPromise(store.get(bookmark.tweetId)) as Promise<StoredBookmark | undefined>)
+    )
+    const timestamp = new Date().toISOString()
+    const pendingPuts = new Map<string, StoredBookmark>()
+
+    batch.forEach((bookmark, index) => {
+      const { rawPayload: _legacyRawPayload, ...bookmarkFields } = bookmark as BookmarkRecord & { rawPayload?: unknown }
+      const existing = pendingPuts.get(bookmark.tweetId) ?? existingRecords[index]
+      const savedAt = String(existing?.savedAt ?? bookmark.savedAt ?? timestamp)
+      const lastSeenAt = String(bookmark.lastSeenAt ?? bookmark.savedAt ?? existing?.lastSeenAt ?? existing?.savedAt ?? timestamp)
+
+      const nextRecord: StoredBookmark = {
+        ...existing,
+        ...bookmarkFields,
+        savedAt,
+        lastSeenAt,
+        authorAvatarUrl: bookmark.authorAvatarUrl ?? existing?.authorAvatarUrl,
+        bookmarkTimelineRank: bookmark.bookmarkTimelineRank ?? existing?.bookmarkTimelineRank,
+        id: bookmark.id ?? bookmark.tweetId,
+        updatedAt: timestamp
+      }
+
+      store.put(nextRecord)
+      pendingPuts.set(bookmark.tweetId, nextRecord)
+
+      if (existing) {
+        updatedCount += 1
+      } else {
+        insertedCount += 1
+      }
+    })
+
+    await transactionDone(transaction)
+  }
 
   return { insertedCount, updatedCount }
 }
@@ -58,6 +76,16 @@ export async function getAllBookmarks() {
   return (bookmarks as StoredBookmark[]).sort((left, right) => {
     return String(right.savedAt ?? "").localeCompare(String(left.savedAt ?? ""))
   })
+}
+
+export async function getAllBookmarkIds() {
+  const db = await getBookmarksDb()
+  const transaction = db.transaction(BOOKMARKS_STORE, "readonly")
+  const store = transaction.objectStore(BOOKMARKS_STORE)
+  const keys = await requestToPromise(store.getAllKeys())
+  await transactionDone(transaction)
+
+  return keys.map((key) => String(key))
 }
 
 export async function upsertBookmarkSnapshot(snapshot: SiteTweetDraft): Promise<BookmarkRecord> {

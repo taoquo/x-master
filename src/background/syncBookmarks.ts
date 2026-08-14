@@ -1,4 +1,4 @@
-import { getAllBookmarks, upsertBookmarks } from "../lib/storage/bookmarksStore.ts"
+import { getAllBookmarkIds, upsertBookmarks } from "../lib/storage/bookmarksStore.ts"
 import { upsertRawPayloads } from "../lib/storage/rawPayloadsStore.ts"
 import { getSettings, saveSettings } from "../lib/storage/settings.ts"
 import { createSyncRun } from "../lib/storage/syncRunsStore.ts"
@@ -133,7 +133,7 @@ export async function runBookmarkSync({
         ? settings.incrementalStopBufferPages
         : DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES
     const knownBookmarkIds = hasCompletedInitialFullSync
-      ? new Set((await getAllBookmarks()).map((bookmark) => bookmark.tweetId))
+      ? new Set(await getAllBookmarkIds())
       : null
     const { bookmarks, failedCount } = await paginateBookmarks({
       limit: syncLimit,
