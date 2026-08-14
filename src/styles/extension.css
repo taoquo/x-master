@@ -1822,6 +1822,8 @@
     --options-card-section-gap: 14px;
     --options-card-header-gap: 12px;
     --options-card-footer-gap: 12px;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 280px;
     border: 1px solid var(--theme-elevated-border);
     border-radius: 16px;
     cursor: pointer;

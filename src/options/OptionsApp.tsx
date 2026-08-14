@@ -1,4 +1,4 @@
-import React, { startTransition, useEffect, useMemo, useRef, useState } from "react"
+import React, { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import type { SavedViewRecord } from "../lib/types.ts"
 import {
   filterBookmarks,
@@ -32,7 +32,7 @@ function OptionsScreen() {
   const { locale, themePreference, resolvedTheme, setLocale, setThemePreference } = useExtensionUi()
   const copy = getOptionsCopy(locale)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(280)
-  const [rightSidebarWidth, setRightSidebarWidth] = useState(360)
+  const [_rightSidebarWidth, setRightSidebarWidth] = useState(360)
   const [activeTagIds, setActiveTagIds] = useState<string[]>(["all"])
   const [activeAuthorHandles, setActiveAuthorHandles] = useState<string[]>([])
   const [authorSearchQuery, setAuthorSearchQuery] = useState("")
@@ -40,6 +40,7 @@ function OptionsScreen() {
   const [isTagsCollapsed, setIsTagsCollapsed] = useState(false)
   const [isAuthorsCollapsed, setIsAuthorsCollapsed] = useState(true)
   const [query, setQuery] = useState("")
+  const deferredQuery = useDeferredValue(query)
   const [sortOrder, setSortOrder] = useState<BookmarkSortOrder>("timeline")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false)
@@ -120,7 +121,8 @@ function OptionsScreen() {
       window.removeEventListener("mouseup", handlePointerUp)
       stopResizeMode()
     }
-  }, [leftSidebarWidth, rightSidebarWidth])
+    // Handlers only read refs, so the listeners never need re-binding.
+  }, [])
 
   const tagsById = useMemo(() => new Map(workspace.tags.map((tag) => [tag.id, tag])), [workspace.tags])
   const authorItems = useMemo(() => buildAuthorSidebarItems(workspace.bookmarks), [workspace.bookmarks])
@@ -145,7 +147,7 @@ function OptionsScreen() {
 
       return sortBookmarks(
         filterBookmarksByFlags(
-          filterBookmarks(filterBookmarksByAuthors(scopedBookmarks, activeAuthorHandles), query),
+          filterBookmarks(filterBookmarksByAuthors(scopedBookmarks, activeAuthorHandles), deferredQuery),
           {
             onlyWithMedia,
             onlyLongform
@@ -157,7 +159,7 @@ function OptionsScreen() {
     [
       onlyLongform,
       onlyWithMedia,
-      query,
+      deferredQuery,
       sortOrder,
       activeAuthorHandles,
       activeTagIds,
