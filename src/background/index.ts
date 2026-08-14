@@ -1,7 +1,7 @@
 import { runBookmarkSync } from "./syncBookmarks.ts"
 import { removeBookmarkSnapshot, upsertBookmarkSnapshot } from "../lib/storage/bookmarksStore.ts"
 import { resetLocalData } from "../lib/storage/resetLocalData.ts"
-import { getSettings } from "../lib/storage/settings.ts"
+import { getSettings, saveLastSyncSummary } from "../lib/storage/settings.ts"
 import {
   attachTagToBookmark,
   createTag,
@@ -58,6 +58,8 @@ export function createBackgroundMessageHandler({
   setSiteTweetTag = async ({ bookmarkId, tagId, enabled }) => setSiteTweetTagDefault({ bookmarkId, tagId, enabled }),
   createSiteTweetTag = async ({ bookmarkId, name }) => createSiteTweetTagDefault({ bookmarkId, name })
 }: BackgroundDependencies) {
+  let isSyncRunning = false
+
   return async function handleMessage(message: BackgroundMessage | { type: string; [key: string]: unknown }) {
     if (message.type === LOAD_WORKSPACE_DATA_MESSAGE) {
       return loadWorkspaceData()
@@ -68,7 +70,25 @@ export function createBackgroundMessageHandler({
     }
 
     if (message.type === RUN_SYNC_MESSAGE) {
-      return runSync()
+      if (isSyncRunning) {
+        return { started: false, alreadyRunning: true }
+      }
+
+      isSyncRunning = true
+      // Run the sync in the background instead of holding the message channel
+      // open for the whole run. Progress and errors are persisted by the sync
+      // itself (lastSyncSummary + sync runs), so callers poll that state.
+      void (async () => {
+        try {
+          await runSync()
+        } catch (error) {
+          await persistSyncErrorFallback(error)
+        } finally {
+          isSyncRunning = false
+        }
+      })()
+
+      return { started: true }
     }
 
     if (message.type === SITE_TWEET_BOOKMARK_SYNC_MESSAGE) {
@@ -98,6 +118,30 @@ export function createBackgroundMessageHandler({
     }
 
     throw new Error(`Unsupported message type: ${message.type}`)
+  }
+}
+
+async function persistSyncErrorFallback(error: unknown) {
+  try {
+    const settings = await getSettings()
+
+    // runBookmarkSync persists a terminal error summary before throwing. Only
+    // write a fallback when the failure happened before that persistence.
+    if (settings.lastSyncSummary.status === "error") {
+      return
+    }
+
+    await saveLastSyncSummary({
+      status: "error",
+      fetchedCount: 0,
+      insertedCount: 0,
+      updatedCount: 0,
+      failedCount: 1,
+      lastSyncedAt: new Date().toISOString(),
+      errorSummary: error instanceof Error ? error.message : String(error)
+    })
+  } catch {
+    // Nothing left to report to; polling clients will hit their timeout.
   }
 }
 

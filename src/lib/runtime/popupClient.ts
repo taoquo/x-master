@@ -30,17 +30,17 @@ export async function loadWorkspaceData(): Promise<WorkspaceData> {
   return assertNoRuntimeError(await chrome.runtime.sendMessage({ type: LOAD_WORKSPACE_DATA_MESSAGE }))
 }
 
-export async function runSync() {
+export interface RunSyncResponse {
+  started: boolean
+  alreadyRunning?: boolean
+}
+
+export async function runSync(): Promise<RunSyncResponse> {
   if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) {
-    return {
-      fetchedCount: 0,
-      insertedCount: 0,
-      updatedCount: 0,
-      failedCount: 0
-    }
+    return { started: false }
   }
 
-  return assertNoRuntimeError(await chrome.runtime.sendMessage({ type: RUN_SYNC_MESSAGE }))
+  return assertNoRuntimeError<RunSyncResponse>(await chrome.runtime.sendMessage({ type: RUN_SYNC_MESSAGE }))
 }
 
 export async function resetStoredData() {

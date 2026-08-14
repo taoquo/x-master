@@ -53,7 +53,13 @@ test("background message handler loads workspace data", async () => {
   assert.equal(response.stats.totalBookmarks, 0)
 })
 
-test("background message handler runs sync", async () => {
+test("background message handler starts sync in the background", async () => {
+  let syncStarted = false
+  let releaseSync: () => void = () => {}
+  const syncGate = new Promise<void>((resolve) => {
+    releaseSync = resolve
+  })
+
   const handler = createBackgroundMessageHandler({
     loadWorkspaceData: async () => ({
       bookmarks: [],
@@ -76,21 +82,40 @@ test("background message handler runs sync", async () => {
       }
     }),
     resetData: async () => ({ success: true }),
-    runSync: async () => ({
-      fetchedCount: 1,
-      insertedCount: 1,
-      updatedCount: 0,
-      failedCount: 0
-    })
+    runSync: async () => {
+      syncStarted = true
+      await syncGate
+      return {
+        fetchedCount: 1,
+        insertedCount: 1,
+        updatedCount: 0,
+        failedCount: 0
+      }
+    }
   })
 
   const response = (await handler({ type: RUN_SYNC_MESSAGE })) as {
-    fetchedCount: number
-    insertedCount: number
+    started: boolean
+    alreadyRunning?: boolean
   }
 
-  assert.equal(response.fetchedCount, 1)
-  assert.equal(response.insertedCount, 1)
+  assert.equal(response.started, true)
+  assert.equal(syncStarted, true)
+
+  const repeatedResponse = (await handler({ type: RUN_SYNC_MESSAGE })) as {
+    started: boolean
+    alreadyRunning?: boolean
+  }
+
+  assert.equal(repeatedResponse.started, false)
+  assert.equal(repeatedResponse.alreadyRunning, true)
+
+  releaseSync()
+  await Promise.resolve()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  const afterFinishResponse = (await handler({ type: RUN_SYNC_MESSAGE })) as { started: boolean }
+  assert.equal(afterFinishResponse.started, true)
 })
 
 test("background message handler resets local data", async () => {

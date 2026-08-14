@@ -6,7 +6,8 @@ import {
   type WorkspaceBackupValidationResult,
   type WorkspaceRestoreResult
 } from "../../lib/export/workspaceBackup.ts"
-import { resetStoredData, runSync } from "../../lib/runtime/popupClient.ts"
+import { resetStoredData } from "../../lib/runtime/popupClient.ts"
+import { runSyncAndWait } from "../../lib/runtime/syncStatus.ts"
 import { getSettings, saveSettings } from "../../lib/storage/settings.ts"
 import { attachTagToBookmark, attachTagToBookmarks, createTag, deleteTag, detachTagFromBookmark, renameTag } from "../../lib/storage/tagsStore.ts"
 import type { SavedViewRecord, WorkspaceData } from "../../lib/types.ts"
@@ -38,7 +39,7 @@ export function useWorkspaceCommands({
     setIsSyncing(true)
 
     try {
-      await runSync()
+      await runSyncAndWait()
     } catch (error) {
       setCommandError(toErrorMessage(error, "Sync failed"))
     } finally {

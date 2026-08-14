@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react"
-import { loadWorkspaceData, runSync } from "../lib/runtime/popupClient.ts"
+import { loadWorkspaceData } from "../lib/runtime/popupClient.ts"
+import { runSyncAndWait } from "../lib/runtime/syncStatus.ts"
 import type { Locale, WorkspaceData } from "../lib/types.ts"
 import { createEmptySyncSummary } from "../lib/types.ts"
 import { createEmptyWorkspaceStats } from "../lib/workspace/stats.ts"
@@ -84,7 +85,7 @@ function PopupScreen() {
     setIsSyncing(true)
 
     try {
-      await runSync()
+      await runSyncAndWait()
     } finally {
       await refreshData()
       setIsSyncing(false)
