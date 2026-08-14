@@ -133,8 +133,15 @@ export async function attachTagToBookmarks({
 }: {
   bookmarkIds: string[]
   tagId: string
-}) {
+}): Promise<BookmarkTagRecord[]> {
   await attachBookmarkTags(bookmarkIds.map((bookmarkId) => ({ bookmarkId, tagId })))
+  const createdAt = new Date().toISOString()
+  return bookmarkIds.map((bookmarkId) => ({
+    id: createBookmarkTagId(bookmarkId, tagId),
+    bookmarkId,
+    tagId,
+    createdAt
+  }))
 }
 
 export async function detachTagFromBookmark({

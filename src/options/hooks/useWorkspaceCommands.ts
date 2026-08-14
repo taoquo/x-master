@@ -10,18 +10,36 @@ import { resetStoredData } from "../../lib/runtime/popupClient.ts"
 import { runSyncAndWait } from "../../lib/runtime/syncStatus.ts"
 import { getSettings, saveSettings } from "../../lib/storage/settings.ts"
 import { attachTagToBookmark, attachTagToBookmarks, createTag, deleteTag, detachTagFromBookmark, renameTag } from "../../lib/storage/tagsStore.ts"
-import type { SavedViewRecord, WorkspaceData } from "../../lib/types.ts"
+import type { BookmarkTagRecord, SavedViewRecord, TagRecord, WorkspaceData } from "../../lib/types.ts"
+import type { WorkspaceTagPatch } from "./useWorkspaceQueries.ts"
 
 function toErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 
+function sortTagsByName(tags: TagRecord[]) {
+  return [...tags].sort((left, right) => left.name.localeCompare(right.name))
+}
+
+function appendMissingRelations(
+  bookmarkTags: BookmarkTagRecord[],
+  relations: BookmarkTagRecord[]
+): BookmarkTagRecord[] {
+  const existingIds = new Set(bookmarkTags.map((relation) => relation.id))
+  const additions = relations.filter((relation) => !existingIds.has(relation.id))
+  return additions.length ? [...bookmarkTags, ...additions] : bookmarkTags
+}
+
 export function useWorkspaceCommands({
   refreshData,
-  getWorkspaceData
+  getWorkspaceData,
+  applyWorkspacePatch
 }: {
   refreshData: () => Promise<void>
   getWorkspaceData: () => WorkspaceData
+  applyWorkspacePatch: (
+    mutate: (current: Pick<WorkspaceData, "tags" | "bookmarkTags">) => WorkspaceTagPatch
+  ) => void
 }) {
   const [isSyncing, setIsSyncing] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
@@ -167,7 +185,7 @@ export function useWorkspaceCommands({
 
     try {
       const tag = await createTag({ name: trimmedName })
-      await refreshData()
+      applyWorkspacePatch(({ tags }) => ({ tags: sortTagsByName([...tags, tag]) }))
       return tag
     } catch (error) {
       setCommandError(toErrorMessage(error, "Failed to create tag"))
@@ -183,7 +201,10 @@ export function useWorkspaceCommands({
 
     try {
       await deleteTag(tagId)
-      await refreshData()
+      applyWorkspacePatch(({ tags, bookmarkTags }) => ({
+        tags: tags.filter((tag) => tag.id !== tagId),
+        bookmarkTags: bookmarkTags.filter((relation) => relation.tagId !== tagId)
+      }))
     } catch (error) {
       setCommandError(toErrorMessage(error, "Failed to delete tag"))
       throw error
@@ -203,7 +224,9 @@ export function useWorkspaceCommands({
 
     try {
       const tag = await renameTag({ tagId, name: trimmedName })
-      await refreshData()
+      applyWorkspacePatch(({ tags }) => ({
+        tags: sortTagsByName(tags.map((existing) => (existing.id === tagId ? tag : existing)))
+      }))
       return tag
     } catch (error) {
       setCommandError(toErrorMessage(error, "Failed to rename tag"))
@@ -222,8 +245,10 @@ export function useWorkspaceCommands({
     setIsSavingTags(true)
 
     try {
-      await attachTagToBookmark({ bookmarkId, tagId })
-      await refreshData()
+      const relation = await attachTagToBookmark({ bookmarkId, tagId })
+      applyWorkspacePatch(({ bookmarkTags }) => ({
+        bookmarkTags: appendMissingRelations(bookmarkTags, [relation])
+      }))
     } catch (error) {
       setCommandError(toErrorMessage(error, "Failed to attach tag"))
       throw error
@@ -238,7 +263,11 @@ export function useWorkspaceCommands({
 
     try {
       await detachTagFromBookmark({ bookmarkId, tagId })
-      await refreshData()
+      applyWorkspacePatch(({ bookmarkTags }) => ({
+        bookmarkTags: bookmarkTags.filter(
+          (relation) => !(relation.bookmarkId === bookmarkId && relation.tagId === tagId)
+        )
+      }))
     } catch (error) {
       setCommandError(toErrorMessage(error, "Failed to detach tag"))
       throw error
@@ -256,8 +285,10 @@ export function useWorkspaceCommands({
     setIsSavingTags(true)
 
     try {
-      await attachTagToBookmarks({ bookmarkIds, tagId })
-      await refreshData()
+      const relations = await attachTagToBookmarks({ bookmarkIds, tagId })
+      applyWorkspacePatch(({ bookmarkTags }) => ({
+        bookmarkTags: appendMissingRelations(bookmarkTags, relations)
+      }))
     } catch (error) {
       setCommandError(toErrorMessage(error, "Failed to apply tag"))
       throw error

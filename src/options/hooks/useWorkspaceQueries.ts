@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react"
-import type { WorkspaceData } from "../../lib/types.ts"
+import type { BookmarkTagRecord, TagRecord, WorkspaceData } from "../../lib/types.ts"
 import { createEmptySyncSummary } from "../../lib/types.ts"
-import { createEmptyWorkspaceStats } from "../../lib/workspace/stats.ts"
+import { buildWorkspaceStats, createEmptyWorkspaceStats } from "../../lib/workspace/stats.ts"
 import { loadWorkspaceDataFromLocal } from "../../lib/workspace/loadWorkspaceData.ts"
+
+export type WorkspaceTagPatch = {
+  tags?: TagRecord[]
+  bookmarkTags?: BookmarkTagRecord[]
+}
 
 function createEmptyWorkspaceData(): WorkspaceData {
   return {
@@ -43,6 +48,23 @@ export function useWorkspaceQueries() {
     }
   }
 
+  function applyWorkspacePatch(
+    mutate: (current: Pick<WorkspaceData, "tags" | "bookmarkTags">) => WorkspaceTagPatch
+  ) {
+    setData((previous) => {
+      const patch = mutate({ tags: previous.tags, bookmarkTags: previous.bookmarkTags })
+      const tags = patch.tags ?? previous.tags
+      const bookmarkTags = patch.bookmarkTags ?? previous.bookmarkTags
+
+      return {
+        ...previous,
+        tags,
+        bookmarkTags,
+        stats: buildWorkspaceStats({ bookmarks: previous.bookmarks, tags, bookmarkTags })
+      }
+    })
+  }
+
   useEffect(() => {
     void refreshData()
   }, [])
@@ -79,6 +101,7 @@ export function useWorkspaceQueries() {
     ...data,
     isLoading,
     loadError,
-    refreshData
+    refreshData,
+    applyWorkspacePatch
   }
 }

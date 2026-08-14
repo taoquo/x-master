@@ -5,6 +5,7 @@ export function useWorkspaceData() {
   const queries = useWorkspaceQueries()
   const commands = useWorkspaceCommands({
     refreshData: queries.refreshData,
+    applyWorkspacePatch: queries.applyWorkspacePatch,
     getWorkspaceData: () => ({
       bookmarks: queries.bookmarks,
       tags: queries.tags,
