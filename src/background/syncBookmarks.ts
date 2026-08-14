@@ -1,10 +1,12 @@
 import { getAllBookmarks, upsertBookmarks } from "../lib/storage/bookmarksStore.ts"
+import { upsertRawPayloads } from "../lib/storage/rawPayloadsStore.ts"
 import { getSettings, saveSettings } from "../lib/storage/settings.ts"
 import { createSyncRun } from "../lib/storage/syncRunsStore.ts"
 import {
   createEmptySyncSummary,
   type BookmarkRecord,
   type ExtensionSettings,
+  type RawPayloadRecord,
   type SyncSummary,
   type SyncRunRecord
 } from "../lib/types.ts"
@@ -30,6 +32,7 @@ interface RunBookmarkSyncOptions {
   fetchBookmarksPage?: typeof fetchBookmarksPage
   syncLimit?: number
   upsertBookmarks?: (bookmarks: BookmarkRecord[]) => Promise<{ insertedCount: number; updatedCount: number }>
+  upsertRawPayloads?: (rawPayloads: RawPayloadRecord[]) => Promise<void>
   createSyncRun?: (syncRun: SyncRunRecord) => Promise<void>
   updateSyncSummary?: (summary: SyncSummary) => Promise<void>
   getSettings?: typeof getSettings
@@ -90,6 +93,7 @@ export async function runBookmarkSync({
   fetchBookmarksPage: loadBookmarksPage = fetchBookmarksPage,
   syncLimit = DEFAULT_SYNC_LIMIT,
   upsertBookmarks: saveBookmarks = upsertBookmarks,
+  upsertRawPayloads: saveRawPayloads = upsertRawPayloads,
   createSyncRun: persistSyncRun = createSyncRun,
   updateSyncSummary,
   getSettings: readSettings = getSettings,
@@ -159,8 +163,18 @@ export async function runBookmarkSync({
         })
     })
 
-    const normalizedBookmarks = bookmarks as BookmarkRecord[]
+    const rawPayloads: RawPayloadRecord[] = []
+    const normalizedBookmarks = bookmarks.map((bookmark) => {
+      const { rawPayload, ...bookmarkFields } = bookmark as BookmarkRecord & { rawPayload?: unknown }
+
+      if (bookmarkFields.tweetId && rawPayload !== undefined) {
+        rawPayloads.push({ tweetId: bookmarkFields.tweetId, payload: rawPayload })
+      }
+
+      return bookmarkFields as BookmarkRecord
+    })
     const { insertedCount, updatedCount } = await saveBookmarks(normalizedBookmarks)
+    await saveRawPayloads(rawPayloads)
 
     if (!hasCompletedInitialFullSync) {
       await writeSettings({

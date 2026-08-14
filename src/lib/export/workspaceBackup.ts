@@ -1,5 +1,4 @@
 import type {
-  BookmarkRecord,
   BookmarkTagRecord,
   ExtensionSettings,
   SavedViewRecord,
@@ -378,15 +377,6 @@ export function validateWorkspaceBackupText(text: string): WorkspaceBackupValida
   }
 }
 
-function restoreBookmark(bookmark: WorkspaceExportBookmarkRecord): BookmarkRecord {
-  return {
-    ...bookmark,
-    rawPayload: {
-      source: "workspace-restore"
-    }
-  }
-}
-
 export async function restoreWorkspaceBackup(payload: WorkspaceExportPayload): Promise<WorkspaceRestoreResult> {
   const validation = validateWorkspaceBackupText(JSON.stringify(payload))
   const db = await getBookmarksDb()
@@ -408,7 +398,7 @@ export async function restoreWorkspaceBackup(payload: WorkspaceExportPayload): P
   ])
 
   for (const bookmark of validation.payload.bookmarks) {
-    bookmarksStore.put(restoreBookmark(bookmark))
+    bookmarksStore.put(bookmark)
   }
 
   for (const tag of validation.payload.tags) {

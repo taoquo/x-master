@@ -23,7 +23,6 @@ test("upsertBookmarks stores bookmarks and getAllBookmarks returns them", async 
       text: "hello",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: { id: "123" }
     }
   ])
 
@@ -47,7 +46,6 @@ test("upsertBookmarks updates an existing bookmark with the same tweetId", async
       text: "hello",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: { id: "123" }
     }
   ])
 
@@ -60,7 +58,6 @@ test("upsertBookmarks updates an existing bookmark with the same tweetId", async
       text: "updated text",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T02:00:00.000Z",
-      rawPayload: { id: "123", version: 2 }
     }
   ])
 
@@ -85,7 +82,6 @@ test("upsertBookmarks preserves the original savedAt for existing bookmarks", as
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
       lastSeenAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: { id: "123" }
     }
   ])
 
@@ -99,7 +95,6 @@ test("upsertBookmarks preserves the original savedAt for existing bookmarks", as
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T02:00:00.000Z",
       lastSeenAt: "2026-03-15T02:00:00.000Z",
-      rawPayload: { id: "123", version: 2 }
     }
   ])
 
@@ -124,7 +119,6 @@ test("upsertBookmarks preserves an existing avatar when a later sync has none", 
       text: "hello",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: { id: "123" }
     }
   ])
 
@@ -138,7 +132,6 @@ test("upsertBookmarks preserves an existing avatar when a later sync has none", 
       text: "updated text",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T02:00:00.000Z",
-      rawPayload: { id: "123", version: 2 }
     }
   ])
 
@@ -160,7 +153,6 @@ test("upsertBookmarks stores bookmarkTimelineRank from synced bookmarks", async 
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
       bookmarkTimelineRank: 7,
-      rawPayload: { id: "123" }
     }
   ])
 
@@ -233,7 +225,6 @@ test("upsertBookmarkSnapshot creates a minimal bookmark without overwriting rich
       lastSeenAt: "2026-04-01T00:10:00.000Z",
       media: [{ type: "photo", url: "https://example.com/media.jpg", altText: "cover" }],
       metrics: { likes: 8, retweets: 2, replies: 1 },
-      rawPayload: { source: "sync" }
     }
   ])
 
@@ -255,7 +246,6 @@ test("upsertBookmarkSnapshot creates a minimal bookmark without overwriting rich
   assert.equal(bookmarks[0].authorAvatarUrl, "https://example.com/synced-alice.jpg")
   assert.equal(bookmarks[0].savedAt, "2026-04-01T00:10:00.000Z")
   assert.deepEqual(bookmarks[0].metrics, { likes: 8, retweets: 2, replies: 1 })
-  assert.deepEqual(bookmarks[0].rawPayload, { source: "sync" })
   assert.match(String(bookmarks[0].lastSeenAt), /^\d{4}-\d{2}-\d{2}T/)
 })
 

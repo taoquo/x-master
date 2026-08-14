@@ -65,18 +65,7 @@ export function AuthorAvatar({
 }
 
 export function getMediaPosterUrl(bookmark: BookmarkRecord, mediaIndex = 0) {
-  const mediaItem = bookmark.media?.[mediaIndex]
-
-  if (!mediaItem) {
-    return undefined
-  }
-
-  if (mediaItem.posterUrl) {
-    return mediaItem.posterUrl
-  }
-
-  const rawMedia = (bookmark.rawPayload as any)?.legacy?.extended_entities?.media?.[mediaIndex]
-  return rawMedia?.media_url_https ?? rawMedia?.media_url ?? undefined
+  return bookmark.media?.[mediaIndex]?.posterUrl || undefined
 }
 
 export function BookmarkCard({

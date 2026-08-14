@@ -33,7 +33,6 @@ test("OptionsApp keeps the same lightbox image element while switching between i
       ],
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -98,7 +97,6 @@ test("OptionsApp preloads adjacent image media while preview is open", async () 
       ],
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -162,7 +160,6 @@ test("OptionsApp keeps preview controls and media surface mounted inside the lig
       media: [{ type: "photo", url: "https://example.com/media-1.jpg" }],
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
 

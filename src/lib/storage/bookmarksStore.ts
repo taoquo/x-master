@@ -2,6 +2,7 @@ import type { BookmarkRecord, SiteTweetDraft } from "../types.ts"
 import {
   BOOKMARKS_STORE,
   BOOKMARK_TAGS_STORE,
+  RAW_PAYLOADS_STORE,
   getBookmarksDb,
   requestToPromise,
   transactionDone
@@ -18,6 +19,7 @@ export async function upsertBookmarks(bookmarks: BookmarkRecord[]) {
   let updatedCount = 0
 
   for (const bookmark of bookmarks) {
+    const { rawPayload: _legacyRawPayload, ...bookmarkFields } = bookmark as BookmarkRecord & { rawPayload?: unknown }
     const existing = (await requestToPromise(store.get(bookmark.tweetId))) as StoredBookmark | undefined
     const timestamp = new Date().toISOString()
     const savedAt = String(existing?.savedAt ?? bookmark.savedAt ?? timestamp)
@@ -25,7 +27,7 @@ export async function upsertBookmarks(bookmarks: BookmarkRecord[]) {
 
     store.put({
       ...existing,
-      ...bookmark,
+      ...bookmarkFields,
       savedAt,
       lastSeenAt,
       authorAvatarUrl: bookmark.authorAvatarUrl ?? existing?.authorAvatarUrl,
@@ -80,7 +82,6 @@ export async function upsertBookmarkSnapshot(snapshot: SiteTweetDraft): Promise<
     bookmarkTimelineRank: existing?.bookmarkTimelineRank ?? temporaryTimelineRank,
     media: existing?.media,
     metrics: existing?.metrics,
-    rawPayload: existing?.rawPayload ?? { source: "site-inline-tagging" },
     updatedAt: now
   }
 
@@ -92,12 +93,13 @@ export async function upsertBookmarkSnapshot(snapshot: SiteTweetDraft): Promise<
 
 export async function removeBookmarkSnapshot(bookmarkId: string) {
   const db = await getBookmarksDb()
-  const transaction = db.transaction([BOOKMARKS_STORE, BOOKMARK_TAGS_STORE], "readwrite")
+  const transaction = db.transaction([BOOKMARKS_STORE, BOOKMARK_TAGS_STORE, RAW_PAYLOADS_STORE], "readwrite")
   const bookmarksStore = transaction.objectStore(BOOKMARKS_STORE)
   const bookmarkTagsStore = transaction.objectStore(BOOKMARK_TAGS_STORE)
   const relatedBookmarkTags = (await requestToPromise(bookmarkTagsStore.index("bookmarkId").getAll(bookmarkId))) as BookmarkTagRecord[]
 
   bookmarksStore.delete(bookmarkId)
+  transaction.objectStore(RAW_PAYLOADS_STORE).delete(bookmarkId)
 
   for (const bookmarkTag of relatedBookmarkTags) {
     bookmarkTagsStore.delete(bookmarkTag.id)

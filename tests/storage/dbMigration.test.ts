@@ -1,8 +1,9 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import "fake-indexeddb/auto"
-import { DB_NAME, getBookmarksDb, requestToPromise, resetBookmarksDb, transactionDone } from "../../src/lib/storage/db.ts"
+import { DB_NAME, DB_VERSION, getBookmarksDb, requestToPromise, resetBookmarksDb, transactionDone } from "../../src/lib/storage/db.ts"
 import { getAllBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
+import { getRawPayload } from "../../src/lib/storage/rawPayloadsStore.ts"
 import { getAllTags } from "../../src/lib/storage/tagsStore.ts"
 
 function openLegacyV5Db() {
@@ -40,7 +41,7 @@ test("upgrading from DB v5 removes legacy list stores and keeps bookmarks and ta
     text: "hello migration",
     createdAtOnX: "2026-03-15T00:00:00.000Z",
     savedAt: "2026-03-15T01:00:00.000Z",
-    rawPayload: {}
+    rawPayload: { legacy: { id: "tweet-1" } }
   })
   seedTransaction.objectStore("tags").put({ id: "tag-ai", name: "AI", createdAt: "2026-03-15T00:00:00.000Z" })
   seedTransaction.objectStore("folders").put({ id: "list-inbox", name: "Inbox", createdAt: "2026-03-15T00:00:00.000Z" })
@@ -54,17 +55,22 @@ test("upgrading from DB v5 removes legacy list stores and keeps bookmarks and ta
 
   const db = await getBookmarksDb()
 
-  assert.equal(db.version, 6)
+  assert.equal(db.version, DB_VERSION)
   assert.equal(db.objectStoreNames.contains("folders"), false)
   assert.equal(db.objectStoreNames.contains("bookmark-folders"), false)
   assert.equal(db.objectStoreNames.contains("bookmarks"), true)
   assert.equal(db.objectStoreNames.contains("tags"), true)
   assert.equal(db.objectStoreNames.contains("bookmark-tags"), true)
   assert.equal(db.objectStoreNames.contains("sync-runs"), true)
+  assert.equal(db.objectStoreNames.contains("raw-payloads"), true)
 
   const bookmarks = await getAllBookmarks()
   assert.equal(bookmarks.length, 1)
   assert.equal(bookmarks[0].tweetId, "tweet-1")
+  assert.equal("rawPayload" in bookmarks[0], false)
+
+  const migratedPayload = await getRawPayload("tweet-1")
+  assert.deepEqual(migratedPayload, { legacy: { id: "tweet-1" } })
 
   const tags = await getAllTags()
   assert.equal(tags.length, 1)
@@ -74,4 +80,36 @@ test("upgrading from DB v5 removes legacy list stores and keeps bookmarks and ta
     db.transaction("bookmark-tags", "readonly").objectStore("bookmark-tags").count()
   )
   assert.equal(bookmarkTagsCount, 0)
+})
+
+test("upgrading to DB v7 backfills media posterUrl from legacy rawPayload", async () => {
+  await resetBookmarksDb()
+
+  const legacyDb = await openLegacyV5Db()
+  const seedTransaction = legacyDb.transaction(["bookmarks"], "readwrite")
+  seedTransaction.objectStore("bookmarks").put({
+    tweetId: "tweet-video",
+    tweetUrl: "https://x.com/alice/status/tweet-video",
+    authorName: "Alice",
+    authorHandle: "alice",
+    text: "legacy video",
+    createdAtOnX: "2026-03-15T00:00:00.000Z",
+    savedAt: "2026-03-15T01:00:00.000Z",
+    media: [{ type: "video", url: "https://example.com/video.mp4" }],
+    rawPayload: {
+      legacy: {
+        extended_entities: {
+          media: [{ type: "video", media_url_https: "https://example.com/poster.jpg" }]
+        }
+      }
+    }
+  })
+  await transactionDone(seedTransaction)
+  legacyDb.close()
+
+  await getBookmarksDb()
+
+  const bookmarks = await getAllBookmarks()
+  assert.equal(bookmarks.length, 1)
+  assert.equal(bookmarks[0].media?.[0]?.posterUrl, "https://example.com/poster.jpg")
 })

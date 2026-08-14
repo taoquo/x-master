@@ -25,7 +25,6 @@ const bookmarks = [
     savedAt: "2026-03-16T00:00:00.000Z",
     media: [{ type: "photo", url: "https://example.com/1.png" }],
     metrics: { likes: 5, retweets: 1, replies: 0 },
-    rawPayload: {}
   },
   {
     tweetId: "2",
@@ -36,7 +35,6 @@ const bookmarks = [
     createdAtOnX: "2026-03-12T00:00:00.000Z",
     savedAt: "2026-03-14T00:00:00.000Z",
     metrics: { likes: 12, retweets: 4, replies: 1 },
-    rawPayload: {}
   },
   {
     tweetId: "3",
@@ -46,7 +44,6 @@ const bookmarks = [
     text: "L".repeat(320),
     createdAtOnX: "2026-03-13T00:00:00.000Z",
     savedAt: "2026-03-13T00:00:00.000Z",
-    rawPayload: {}
   }
 ]
 

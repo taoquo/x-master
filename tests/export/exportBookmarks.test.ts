@@ -45,7 +45,6 @@ test("createWorkspaceExportPayload includes workspace data and strips rawPayload
         createdAtOnX: "2026-04-11T08:00:00.000Z",
         savedAt: "2026-04-11T08:05:00.000Z",
         lastSeenAt: "2026-04-11T08:08:00.000Z",
-        rawPayload: { hidden: true },
         updatedAt: "2026-04-11T08:06:00.000Z"
       }
     ],

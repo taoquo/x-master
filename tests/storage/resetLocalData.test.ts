@@ -39,7 +39,6 @@ test("resetLocalData clears IndexedDB stores and resets reduced extension settin
       text: "hello",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T00:01:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -112,7 +111,6 @@ test("resetLocalData is not blocked by another open IndexedDB connection", async
       text: "open connection should not block reset",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T00:01:00.000Z",
-      rawPayload: {}
     }
   ])
 

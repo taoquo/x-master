@@ -18,7 +18,7 @@ export interface WorkspaceExportSettings {
   lastSyncSummary?: SyncSummary
 }
 
-export type WorkspaceExportBookmarkRecord = Omit<BookmarkRecord, "rawPayload">
+export type WorkspaceExportBookmarkRecord = BookmarkRecord
 
 export interface WorkspaceExportPayload {
   exportVersion: number
@@ -33,7 +33,7 @@ export interface WorkspaceExportPayload {
 }
 
 function toExportBookmark(bookmark: BookmarkRecord): WorkspaceExportBookmarkRecord {
-  const { rawPayload: _rawPayload, ...exportableBookmark } = bookmark
+  const { rawPayload: _rawPayload, ...exportableBookmark } = bookmark as BookmarkRecord & { rawPayload?: unknown }
   return exportableBookmark
 }
 

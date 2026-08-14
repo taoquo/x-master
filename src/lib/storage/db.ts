@@ -1,9 +1,10 @@
 const DB_NAME = "x-bookmark-manager"
-const DB_VERSION = 6
+const DB_VERSION = 7
 const BOOKMARKS_STORE = "bookmarks"
 const TAGS_STORE = "tags"
 const BOOKMARK_TAGS_STORE = "bookmark-tags"
 const SYNC_RUNS_STORE = "sync-runs"
+const RAW_PAYLOADS_STORE = "raw-payloads"
 const LEGACY_KNOWLEDGE_CARDS_STORE = "knowledge-cards"
 const LEGACY_LISTS_STORE = "folders"
 const LEGACY_BOOKMARK_LISTS_STORE = "bookmark-folders"
@@ -23,6 +24,7 @@ function openBookmarksDb() {
 
     request.onupgradeneeded = () => {
       const db = request.result
+      const upgradeTransaction = request.transaction
 
       if (db.objectStoreNames.contains(LEGACY_KNOWLEDGE_CARDS_STORE)) {
         db.deleteObjectStore(LEGACY_KNOWLEDGE_CARDS_STORE)
@@ -53,6 +55,11 @@ function openBookmarksDb() {
       if (!db.objectStoreNames.contains(SYNC_RUNS_STORE)) {
         db.createObjectStore(SYNC_RUNS_STORE, { keyPath: "id" })
       }
+
+      if (!db.objectStoreNames.contains(RAW_PAYLOADS_STORE)) {
+        db.createObjectStore(RAW_PAYLOADS_STORE, { keyPath: "tweetId" })
+        migrateRawPayloadsOutOfBookmarks(upgradeTransaction)
+      }
     }
 
     request.onsuccess = () => {
@@ -62,6 +69,72 @@ function openBookmarksDb() {
     request.onerror = () => {
       reject(request.error ?? new Error("Failed to open IndexedDB"))
     }
+  })
+}
+
+function migrateRawPayloadsOutOfBookmarks(upgradeTransaction: IDBTransaction | null) {
+  if (!upgradeTransaction) {
+    return
+  }
+
+  const bookmarksStore = upgradeTransaction.objectStore(BOOKMARKS_STORE)
+  const rawPayloadsStore = upgradeTransaction.objectStore(RAW_PAYLOADS_STORE)
+  const cursorRequest = bookmarksStore.openCursor()
+
+  cursorRequest.onsuccess = () => {
+    const cursor = cursorRequest.result
+    if (!cursor) {
+      return
+    }
+
+    const bookmark = cursor.value as {
+      tweetId?: string
+      rawPayload?: unknown
+      media?: Array<{ type?: string; url?: string; posterUrl?: string; altText?: string }>
+    }
+    if (bookmark && "rawPayload" in bookmark) {
+      const { rawPayload, ...rest } = bookmark
+      if (bookmark.tweetId && rawPayload !== undefined) {
+        rawPayloadsStore.put({ tweetId: bookmark.tweetId, payload: rawPayload })
+      }
+      cursor.update({
+        ...rest,
+        media: backfillPosterUrls(bookmark.media, rawPayload)
+      })
+    }
+
+    cursor.continue()
+  }
+}
+
+function backfillPosterUrls(
+  media: Array<{ type?: string; url?: string; posterUrl?: string; altText?: string }> | undefined,
+  rawPayload: unknown
+) {
+  if (!media?.length) {
+    return media
+  }
+
+  const rawMedia = (rawPayload as { legacy?: { extended_entities?: { media?: Array<Record<string, unknown>> } } } | null | undefined)
+    ?.legacy?.extended_entities?.media
+
+  if (!Array.isArray(rawMedia)) {
+    return media
+  }
+
+  return media.map((item, index) => {
+    if (item.posterUrl) {
+      return item
+    }
+
+    const rawItem = rawMedia[index]
+    const posterUrl = rawItem?.media_url_https ?? rawItem?.media_url
+
+    if (typeof posterUrl !== "string" || !posterUrl) {
+      return item
+    }
+
+    return { ...item, posterUrl }
   })
 }
 
@@ -114,7 +187,7 @@ export async function resetBookmarksDb() {
 export async function clearBookmarksDbStores() {
   const db = await getBookmarksDb()
   const transaction = db.transaction(
-    [BOOKMARKS_STORE, TAGS_STORE, BOOKMARK_TAGS_STORE, SYNC_RUNS_STORE],
+    [BOOKMARKS_STORE, TAGS_STORE, BOOKMARK_TAGS_STORE, SYNC_RUNS_STORE, RAW_PAYLOADS_STORE],
     "readwrite"
   )
 
@@ -130,6 +203,7 @@ export {
   TAGS_STORE,
   BOOKMARK_TAGS_STORE,
   SYNC_RUNS_STORE,
+  RAW_PAYLOADS_STORE,
   DB_NAME,
   DB_VERSION
 }

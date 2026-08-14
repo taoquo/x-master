@@ -13,7 +13,6 @@ function createBookmark(authorHandle: string, authorName: string, suffix: string
     text: `${authorName} ${suffix}`,
     createdAtOnX: "2026-03-15T00:00:00.000Z",
     savedAt: "2026-03-15T01:00:00.000Z",
-    rawPayload: {}
   }
 }
 

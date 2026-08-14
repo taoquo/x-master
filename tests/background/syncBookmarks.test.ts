@@ -33,7 +33,6 @@ test("runBookmarkSync stores fetched bookmarks", async () => {
             text: "hello agents",
             createdAtOnX: "2026-03-15T00:00:00.000Z",
             savedAt: "2026-03-15T01:00:00.000Z",
-            rawPayload: {}
           },
           {
             tweetId: "124",
@@ -43,7 +42,6 @@ test("runBookmarkSync stores fetched bookmarks", async () => {
             text: "plain note",
             createdAtOnX: "2026-03-15T00:00:00.000Z",
             savedAt: "2026-03-15T01:05:00.000Z",
-            rawPayload: {}
           }
         ],
         nextCursor: null,
@@ -122,7 +120,6 @@ test("runBookmarkSync does not delete bookmarks that are already stored locally"
       text: "keep me",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T00:01:00.000Z",
-      rawPayload: {}
     }
   ])
 

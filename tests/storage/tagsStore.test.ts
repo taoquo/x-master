@@ -40,7 +40,6 @@ test("attachTagToBookmark stores a unique bookmark-tag relation and list helpers
       text: "taggable",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T00:01:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -71,7 +70,6 @@ test("detachTagFromBookmark removes the relation", async () => {
       text: "taggable",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T00:01:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -96,7 +94,6 @@ test("attachTagToBookmarks stores one relation per bookmark", async () => {
       text: "taggable",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T00:01:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-2",
@@ -106,7 +103,6 @@ test("attachTagToBookmarks stores one relation per bookmark", async () => {
       text: "taggable too",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T00:02:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -141,7 +137,6 @@ test("deleteTag removes the tag and all of its bookmark relations", async () => 
       text: "taggable",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T00:01:00.000Z",
-      rawPayload: {}
     }
   ])
 

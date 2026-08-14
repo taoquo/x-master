@@ -41,7 +41,6 @@ test("OptionsApp filters results by selected sidebar author", async () => {
       text: "Alice bookmark one",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-author-2",
@@ -51,7 +50,6 @@ test("OptionsApp filters results by selected sidebar author", async () => {
       text: "Alice bookmark two",
       createdAtOnX: "2026-03-15T00:05:00.000Z",
       savedAt: "2026-03-15T02:00:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-author-3",
@@ -62,7 +60,6 @@ test("OptionsApp filters results by selected sidebar author", async () => {
       text: "Bob bookmark",
       createdAtOnX: "2026-03-15T00:10:00.000Z",
       savedAt: "2026-03-15T03:00:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -127,7 +124,6 @@ test("OptionsApp intersects selected author and tag scopes and All bookmarks cle
       text: "Alice AI bookmark",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-intersection-2",
@@ -137,7 +133,6 @@ test("OptionsApp intersects selected author and tag scopes and All bookmarks cle
       text: "Alice misc bookmark",
       createdAtOnX: "2026-03-15T00:05:00.000Z",
       savedAt: "2026-03-15T02:00:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-intersection-3",
@@ -147,7 +142,6 @@ test("OptionsApp intersects selected author and tag scopes and All bookmarks cle
       text: "Bob AI bookmark",
       createdAtOnX: "2026-03-15T00:10:00.000Z",
       savedAt: "2026-03-15T03:00:00.000Z",
-      rawPayload: {}
     }
   ])
 

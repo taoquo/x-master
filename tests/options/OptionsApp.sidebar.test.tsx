@@ -29,7 +29,6 @@ test("OptionsApp defaults to expanded tags and collapsed authors, then toggles b
       text: "Collapse bookmark",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -94,7 +93,6 @@ test("OptionsApp styles the authors search input and keeps show more without col
       text: `Style ${index + 1}`,
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: {}
     }))
   )
 
@@ -204,7 +202,6 @@ test("OptionsApp restores large result sets in batches after clearing an author 
       text: `Alice batch ${index + 1}`,
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: `2026-03-15T01:${String(index).padStart(2, "0")}:00.000Z`,
-      rawPayload: {}
     })),
     ...Array.from({ length: 80 }, (_, index) => ({
       tweetId: `tweet-batch-bob-${index + 1}`,
@@ -214,7 +211,6 @@ test("OptionsApp restores large result sets in batches after clearing an author 
       text: `Bob batch ${index + 1}`,
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: `2026-03-15T02:${String(index).padStart(2, "0")}:00.000Z`,
-      rawPayload: {}
     }))
   ])
 

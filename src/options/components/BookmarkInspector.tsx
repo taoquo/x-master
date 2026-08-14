@@ -65,26 +65,12 @@ function isVideoMediaType(type: string | undefined) {
 }
 
 function getMediaPosterUrl(bookmark: BookmarkRecord, mediaIndex = 0) {
-  const mediaItem = bookmark.media?.[mediaIndex]
-
-  if (!mediaItem) {
-    return undefined
-  }
-
-  if (mediaItem.posterUrl) {
-    return mediaItem.posterUrl
-  }
-
-  const rawMedia = (bookmark.rawPayload as any)?.legacy?.extended_entities?.media?.[mediaIndex]
-  return rawMedia?.media_url_https ?? rawMedia?.media_url ?? undefined
+  return bookmark.media?.[mediaIndex]?.posterUrl || undefined
 }
 
 function getSourceLink(bookmark: BookmarkRecord) {
   const fieldNames = ["url", "link", "tweetUrl", "sourceUrl", "externalUrl"]
-  const sources = [
-    bookmark as unknown as Record<string, unknown>,
-    bookmark.rawPayload as Record<string, unknown> | null | undefined
-  ]
+  const sources = [bookmark as unknown as Record<string, unknown>]
 
   for (const source of sources) {
     if (!source || typeof source !== "object") {

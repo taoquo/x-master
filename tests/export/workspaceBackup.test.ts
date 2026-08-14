@@ -235,7 +235,6 @@ test("restoreWorkspaceBackup overwrites local data with a validated backup", asy
       text: "Old local data",
       createdAtOnX: "2026-04-10T08:00:00.000Z",
       savedAt: "2026-04-10T08:05:00.000Z",
-      rawPayload: { source: "old" }
     }
   ])
   await createSyncRun({
@@ -264,7 +263,6 @@ test("restoreWorkspaceBackup overwrites local data with a validated backup", asy
 
   assert.equal(bookmarks.length, 1)
   assert.equal(bookmarks[0].tweetId, "tweet-1")
-  assert.deepEqual(bookmarks[0].rawPayload, { source: "workspace-restore" })
   assert.equal(tags.length, 1)
   assert.equal(bookmarkTags.length, 1)
   assert.equal(settings.locale, "zh-CN")

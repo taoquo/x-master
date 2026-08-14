@@ -149,7 +149,6 @@ test("OptionsApp renders the Chinese locale shell and keeps demo shell active", 
       text: "React agents workflow",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-2",
@@ -159,7 +158,6 @@ test("OptionsApp renders the Chinese locale shell and keeps demo shell active", 
       text: "Prompt engineering notes",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T02:00:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -253,7 +251,6 @@ test("OptionsApp renders an export action and downloads a workspace backup", asy
       text: "Export this bookmark",
       createdAtOnX: "2026-04-11T08:00:00.000Z",
       savedAt: "2026-04-11T08:05:00.000Z",
-      rawPayload: { source: "x" }
     }
   ])
   await saveSettings({
@@ -447,7 +444,6 @@ test("OptionsApp surfaces import validation failures without changing local data
       text: "Original data survives invalid validation",
       createdAtOnX: "2026-04-10T08:00:00.000Z",
       savedAt: "2026-04-10T08:05:00.000Z",
-      rawPayload: {}
     }
   ])
   await saveSettings({
@@ -492,7 +488,6 @@ test("OptionsApp restores a confirmed backup and reloads the page", async () => 
       text: "Old local bookmark",
       createdAtOnX: "2026-04-10T08:00:00.000Z",
       savedAt: "2026-04-10T08:05:00.000Z",
-      rawPayload: {}
     }
   ])
   await saveSettings({
@@ -541,7 +536,6 @@ test("OptionsApp does not restore a backup when confirmation is cancelled", asyn
       text: "Old local bookmark remains",
       createdAtOnX: "2026-04-10T08:00:00.000Z",
       savedAt: "2026-04-10T08:05:00.000Z",
-      rawPayload: {}
     }
   ])
   await saveSettings({
@@ -591,7 +585,6 @@ test("OptionsApp resets local data only after confirmation", async () => {
       text: "Resettable local bookmark",
       createdAtOnX: "2026-04-10T08:00:00.000Z",
       savedAt: "2026-04-10T08:05:00.000Z",
-      rawPayload: {}
     }
   ])
   await saveSettings({
@@ -652,7 +645,6 @@ test("OptionsApp renders the Figma shell with editorial rails", async () => {
       text: "Figma shell snapshot",
       createdAtOnX: "2026-04-06T08:00:00.000Z",
       savedAt: "2026-04-06T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
   await saveSettings({
@@ -707,7 +699,6 @@ test("OptionsApp renders the english demo shell by default and hides legacy opti
       text: "Demo shell bookmark",
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -743,7 +734,6 @@ test("OptionsApp uses demo tag navigation and footer preference toggles", async 
       text: "Tagged bookmark",
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
   await attachTagToBookmark({ bookmarkId: "tweet-demo-tag", tagId: tag.id })
@@ -807,7 +797,6 @@ test("OptionsApp switches between grid and list views and shows english demo fil
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
       metrics: { likes: 2, replies: 0, retweets: 0 },
-      rawPayload: {}
     },
     {
       tweetId: "tweet-grid-long",
@@ -818,7 +807,6 @@ test("OptionsApp switches between grid and list views and shows english demo fil
       createdAtOnX: "2026-04-09T07:20:00.000Z",
       savedAt: "2026-04-09T08:30:00.000Z",
       metrics: { likes: 99, replies: 0, retweets: 0 },
-      rawPayload: {}
     },
     {
       tweetId: "tweet-grid-created",
@@ -829,7 +817,6 @@ test("OptionsApp switches between grid and list views and shows english demo fil
       createdAtOnX: "2026-04-09T09:20:00.000Z",
       savedAt: "2026-04-09T08:20:00.000Z",
       metrics: { likes: 5, replies: 0, retweets: 0 },
-      rawPayload: {}
     }
   ])
 
@@ -970,7 +957,6 @@ test("OptionsApp keeps a shared card hierarchy across short, long, and media boo
       text: "Short bookmark",
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-card-long",
@@ -980,7 +966,6 @@ test("OptionsApp keeps a shared card hierarchy across short, long, and media boo
       text: "L".repeat(360),
       createdAtOnX: "2026-04-09T07:20:00.000Z",
       savedAt: "2026-04-09T08:30:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-card-media",
@@ -991,7 +976,6 @@ test("OptionsApp keeps a shared card hierarchy across short, long, and media boo
       media: [{ type: "photo", url: "https://example.com/image.jpg" }],
       createdAtOnX: "2026-04-09T09:20:00.000Z",
       savedAt: "2026-04-09T08:20:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -1044,7 +1028,6 @@ test("OptionsApp adapts list summary density to media tags and text length", asy
       text: "Short summary.",
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-list-copy-base",
@@ -1054,7 +1037,6 @@ test("OptionsApp adapts list summary density to media tags and text length", asy
       text: "This is a medium length summary for the list view that should stay readable and can safely use the fuller three-line treatment when there are no media or tag chips competing for vertical space.",
       createdAtOnX: "2026-04-09T07:20:00.000Z",
       savedAt: "2026-04-09T08:30:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-list-copy-media",
@@ -1065,7 +1047,6 @@ test("OptionsApp adapts list summary density to media tags and text length", asy
       media: [{ type: "photo", url: "https://example.com/image.jpg" }],
       createdAtOnX: "2026-04-09T09:20:00.000Z",
       savedAt: "2026-04-09T08:20:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-list-copy-tagged",
@@ -1075,7 +1056,6 @@ test("OptionsApp adapts list summary density to media tags and text length", asy
       text: "Tagged summaries should not expand to the loosest three-line mode because the tag row already adds another layer under the body copy in the compact list layout.",
       createdAtOnX: "2026-04-09T09:40:00.000Z",
       savedAt: "2026-04-09T08:40:00.000Z",
-      rawPayload: {}
     }
   ])
   const designTag = await createTag({ name: "Design" })
@@ -1126,7 +1106,6 @@ test("OptionsApp stabilizes list cards with explicit templates and capped tags",
       metrics: { likes: 1245, replies: 12, retweets: 8 },
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-list-template-tagged",
@@ -1137,7 +1116,6 @@ test("OptionsApp stabilizes list cards with explicit templates and capped tags",
       metrics: { likes: 9876, replies: 54, retweets: 32 },
       createdAtOnX: "2026-04-09T07:20:00.000Z",
       savedAt: "2026-04-09T08:30:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-list-template-media",
@@ -1149,7 +1127,6 @@ test("OptionsApp stabilizes list cards with explicit templates and capped tags",
       metrics: { likes: 45, replies: 4, retweets: 3 },
       createdAtOnX: "2026-04-09T09:20:00.000Z",
       savedAt: "2026-04-09T08:20:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -1203,7 +1180,6 @@ test("OptionsApp renders the demo inspector and localized copy", async () => {
       text: "Inspector content summary",
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
   await saveSettings({
@@ -1365,7 +1341,6 @@ test("OptionsApp applies shared theme surface hooks to primary shells", async ()
       text: "Theme surface bookmark",
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
   await saveSettings({
@@ -1430,7 +1405,6 @@ test("OptionsApp applies shared theme surface hooks to secondary overlays and fe
       media: [{ type: "photo", url: "https://example.com/theme-lightbox.jpg" }],
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -1476,7 +1450,6 @@ test("OptionsApp applies shared theme hooks to chips pills and secondary actions
       media: [{ type: "photo", url: "https://example.com/theme-controls.jpg" }],
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
   const importantTag = await createTag({ name: "Important" })
@@ -1551,7 +1524,6 @@ test("OptionsApp applies demo multi-tag AND filtering and falls back to all", as
       text: "AI only bookmark",
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-both",
@@ -1561,7 +1533,6 @@ test("OptionsApp applies demo multi-tag AND filtering and falls back to all", as
       text: "AI and Design bookmark",
       createdAtOnX: "2026-04-09T08:20:00.000Z",
       savedAt: "2026-04-09T08:30:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-design",
@@ -1571,7 +1542,6 @@ test("OptionsApp applies demo multi-tag AND filtering and falls back to all", as
       text: "Design only bookmark",
       createdAtOnX: "2026-04-09T08:40:00.000Z",
       savedAt: "2026-04-09T08:50:00.000Z",
-      rawPayload: {}
     }
   ])
   const aiTag = await createTag({ name: "AI" })
@@ -1654,7 +1624,6 @@ test("OptionsApp supports adding existing tags in the inspector without legacy b
       text: "Agents",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-2",
@@ -1664,7 +1633,6 @@ test("OptionsApp supports adding existing tags in the inspector without legacy b
       text: "Prompts",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T02:00:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -1730,7 +1698,6 @@ test("OptionsApp filters results by selected sidebar tag", async () => {
       text: "Agents workflow notes",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-2",
@@ -1740,7 +1707,6 @@ test("OptionsApp filters results by selected sidebar tag", async () => {
       text: "Prompt engineering notes",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T02:00:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -1833,7 +1799,6 @@ test("OptionsApp opens the detail card on card click and clears selection when i
       text: "Agents",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: {}
     }
   ])
   await saveSettings({
@@ -1893,7 +1858,6 @@ test("OptionsApp prioritizes detail card hero summary tags and media sections", 
       media: [{ type: "photo", url: "https://example.com/detail-priority.jpg" }],
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
   const importantTag = await createTag({ name: "Important" })
@@ -2001,7 +1965,6 @@ test("OptionsApp preserves bookmark summary whitespace and renders stored avatar
       text: "First line\n\n  indented line with   spaces",
       createdAtOnX: "2026-05-04T15:32:00.000Z",
       savedAt: "2026-05-05T14:19:00.000Z",
-      rawPayload: {}
     }
   ])
   await saveSettings({
@@ -2050,7 +2013,6 @@ test("OptionsApp opens bookmark details as a centered focus card with timeline a
       text: "Focused detail content should use the existing bookmark summary text without inventing a replacement.",
       createdAtOnX: "2026-05-04T15:32:00.000Z",
       savedAt: "2026-05-05T14:19:00.000Z",
-      rawPayload: {}
     }
   ])
   await saveSettings({
@@ -2119,7 +2081,6 @@ test("OptionsApp creates and attaches a new tag from the focused detail card", a
       text: "Create tag inside detail card",
       createdAtOnX: "2026-05-04T15:32:00.000Z",
       savedAt: "2026-05-05T14:19:00.000Z",
-      rawPayload: {}
     }
   ])
   await saveSettings({
@@ -2171,7 +2132,6 @@ test("OptionsApp reuses the detail tag entry to attach an existing tag by name",
       text: "Reuse tag entry inside detail card",
       createdAtOnX: "2026-05-04T15:32:00.000Z",
       savedAt: "2026-05-05T14:19:00.000Z",
-      rawPayload: {}
     }
   ])
   await createTag({ name: "法国" })
@@ -2225,7 +2185,6 @@ test("OptionsApp commits the detail tag input on blur and keeps the input inline
       text: "Blur should commit the inline tag input.",
       createdAtOnX: "2026-05-04T15:32:00.000Z",
       savedAt: "2026-05-05T14:19:00.000Z",
-      rawPayload: {}
     }
   ])
   await saveSettings({
@@ -2282,7 +2241,6 @@ test("OptionsApp renders detail tag suggestions as a dropdown inside the detail 
       text: "Tag suggestions should stay inside the detail rail.",
       createdAtOnX: "2026-05-04T15:32:00.000Z",
       savedAt: "2026-05-05T14:19:00.000Z",
-      rawPayload: {}
     }
   ])
   await createTag({ name: "发" })
@@ -2349,7 +2307,6 @@ test("OptionsApp closes the centered detail card from backdrop and done action",
       text: "Closing focused modal",
       createdAtOnX: "2026-05-04T15:32:00.000Z",
       savedAt: "2026-05-05T14:19:00.000Z",
-      rawPayload: {}
     }
   ])
   await saveSettings({
@@ -2410,7 +2367,6 @@ test("OptionsApp copies the bookmark link from the focused detail card", async (
       text: "Copy link bookmark",
       createdAtOnX: "2026-05-04T15:32:00.000Z",
       savedAt: "2026-05-05T14:19:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -2461,7 +2417,6 @@ test("OptionsApp keeps copy link available and shows a toast when no source link
       text: "Missing link bookmark",
       createdAtOnX: "2026-05-04T15:32:00.000Z",
       savedAt: "2026-05-05T14:19:00.000Z",
-      rawPayload: {}
     }
   ])
   await saveSettings({
@@ -2505,7 +2460,6 @@ test("OptionsApp supports keyboard selection from bookmark cards", async () => {
       text: "Keyboard interaction bookmark",
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -2540,7 +2494,6 @@ test("OptionsApp renders a dedicated media section in the inspector when a bookm
       media: [{ type: "photo", url: "https://example.com/media.jpg" }],
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -2597,7 +2550,6 @@ test("OptionsApp previews video media as a poster in the modal and plays it in t
       media: [{ type: "video", url: "https://example.com/video.mp4", posterUrl: "https://example.com/video-poster.jpg" }],
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -2648,7 +2600,6 @@ test("OptionsApp previews animated gifs as video media in the modal", async () =
       media: [{ type: "animated_gif", url: "https://example.com/animated.mp4", posterUrl: "https://example.com/animated-poster.jpg" }],
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -2676,7 +2627,7 @@ test("OptionsApp previews animated gifs as video media in the modal", async () =
   assert.equal(findByTestId(container, "media-lightbox-image"), null)
 })
 
-test("OptionsApp falls back to rawPayload poster data for legacy video bookmarks", async () => {
+test("OptionsApp shows migrated poster data for legacy video bookmarks", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await upsertBookmarks([
@@ -2686,21 +2637,9 @@ test("OptionsApp falls back to rawPayload poster data for legacy video bookmarks
       authorName: "Alice",
       authorHandle: "alice",
       text: "Legacy video bookmark",
-      media: [{ type: "video", url: "https://example.com/video.mp4" }],
+      media: [{ type: "video", url: "https://example.com/video.mp4", posterUrl: "https://example.com/video-poster-from-raw.jpg" }],
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {
-        legacy: {
-          extended_entities: {
-            media: [
-              {
-                type: "video",
-                media_url_https: "https://example.com/video-poster-from-raw.jpg"
-              }
-            ]
-          }
-        }
-      }
     }
   ])
 
@@ -2722,7 +2661,7 @@ test("OptionsApp falls back to rawPayload poster data for legacy video bookmarks
   assert.equal(modalPoster?.getAttribute("src"), "https://example.com/video-poster-from-raw.jpg")
 })
 
-test("OptionsApp reuses legacy rawPayload poster data inside the media modal", async () => {
+test("OptionsApp reuses migrated poster data inside the media modal", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()
   await upsertBookmarks([
@@ -2732,21 +2671,9 @@ test("OptionsApp reuses legacy rawPayload poster data inside the media modal", a
       authorName: "Alice",
       authorHandle: "alice",
       text: "Legacy video bookmark for modal",
-      media: [{ type: "video", url: "https://example.com/video.mp4" }],
+      media: [{ type: "video", url: "https://example.com/video.mp4", posterUrl: "https://example.com/video-poster-from-raw-modal.jpg" }],
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {
-        legacy: {
-          extended_entities: {
-            media: [
-              {
-                type: "video",
-                media_url_https: "https://example.com/video-poster-from-raw-modal.jpg"
-              }
-            ]
-          }
-        }
-      }
     }
   ])
 
@@ -2785,7 +2712,6 @@ test("OptionsApp closes the detail card on Escape", async () => {
       text: "Escape closes the modal",
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -2822,7 +2748,6 @@ test("OptionsApp treats the media modal as a focusable dialog and restores focus
       media: [{ type: "photo", url: "https://example.com/media-dialog.jpg" }],
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -2886,7 +2811,6 @@ test("OptionsApp media preview supports multiple assets with previous and next c
       ],
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -2943,7 +2867,6 @@ test("OptionsApp renders flat navigation rows and restrained result cards", asyn
       text: "Agents workflow notes",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: {}
     }
   ])
   const aiTag = await createTag({ name: "AI" })
@@ -3146,7 +3069,6 @@ test("OptionsApp renames sidebar tags inline", async () => {
       text: "Agents workflow notes",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: {}
     }
   ])
   await attachTagToBookmark({ bookmarkId: "tweet-1", tagId: tag.id })
@@ -3210,7 +3132,6 @@ test("OptionsApp applies a tag to selected filtered results", async () => {
       text: "Agent workflow one",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-filtered-2",
@@ -3220,7 +3141,6 @@ test("OptionsApp applies a tag to selected filtered results", async () => {
       text: "Agent workflow two",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T02:00:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-other",
@@ -3230,7 +3150,6 @@ test("OptionsApp applies a tag to selected filtered results", async () => {
       text: "Design reference",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T03:00:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -3306,7 +3225,6 @@ test("OptionsApp keeps saved views hidden while the data model remains available
       media: [{ type: "photo", url: "https://example.com/agent.jpg" }],
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: {}
     },
     {
       tweetId: "tweet-other-view",
@@ -3316,7 +3234,6 @@ test("OptionsApp keeps saved views hidden while the data model remains available
       text: "Other bookmark",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T02:00:00.000Z",
-      rawPayload: {}
     }
   ])
   await saveSettings({
@@ -3366,7 +3283,6 @@ test("OptionsApp renders an explorer sidebar and demo toolbar controls", async (
       text: "Agents workflow notes",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -3435,7 +3351,6 @@ test("OptionsApp keeps sidebar lists and library results in separate scroll regi
       text: "Agents workflow notes",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -3517,7 +3432,6 @@ test("OptionsApp renders a single tags summary and preferences inside the left s
       text: "Agents workflow notes",
       createdAtOnX: "2026-03-15T00:00:00.000Z",
       savedAt: "2026-03-15T01:00:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -3733,7 +3647,6 @@ test("OptionsApp retries feed loading from the error state and recovers the resu
       text: "Retry success bookmark",
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:10:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -3879,7 +3792,6 @@ test("OptionsApp loads workspace data without depending on the runtime workspace
       text: "Loaded directly from IndexedDB",
       createdAtOnX: "2026-04-14T08:00:00.000Z",
       savedAt: "2026-04-14T08:05:00.000Z",
-      rawPayload: {}
     }
   ])
 
@@ -3955,7 +3867,6 @@ test("OptionsApp shows a newly site-bookmarked tweet first under the default rec
       createdAtOnX: "2026-04-10T08:00:00.000Z",
       savedAt: "2026-04-10T08:05:00.000Z",
       bookmarkTimelineRank: 0,
-      rawPayload: {}
     },
     {
       tweetId: "tweet-ranked-2",
@@ -3966,7 +3877,6 @@ test("OptionsApp shows a newly site-bookmarked tweet first under the default rec
       createdAtOnX: "2026-04-09T08:00:00.000Z",
       savedAt: "2026-04-09T08:05:00.000Z",
       bookmarkTimelineRank: 1,
-      rawPayload: {}
     }
   ])
 
@@ -4012,7 +3922,6 @@ test("OptionsApp removes a bookmark from the results after a site-side unbookmar
       createdAtOnX: "2026-04-10T08:00:00.000Z",
       savedAt: "2026-04-10T08:05:00.000Z",
       bookmarkTimelineRank: 0,
-      rawPayload: {}
     }
   ])
 
