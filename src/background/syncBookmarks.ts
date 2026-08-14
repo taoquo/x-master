@@ -14,6 +14,7 @@ import { extractCsrfToken, getXCookieHeader } from "../lib/x/auth.ts"
 import { fetchBookmarksPage } from "../lib/x/client.ts"
 import { fetchAllBookmarks } from "../lib/x/paginateBookmarks.ts"
 import { normalizeSyncError } from "../lib/x/syncErrors.ts"
+import { broadcastSyncProgress } from "../lib/runtime/syncProgress.ts"
 
 const DEFAULT_SYNC_LIMIT = 10000
 const DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES = 3
@@ -138,6 +139,7 @@ export async function runBookmarkSync({
     const { bookmarks, failedCount } = await paginateBookmarks({
       limit: syncLimit,
       stopAfterConsecutiveKnownPages: hasCompletedInitialFullSync ? incrementalStopBufferPages : undefined,
+      onProgress: broadcastSyncProgress,
       isExistingBookmark: knownBookmarkIds
         ? (bookmark) => {
             const tweetId = bookmark.tweetId

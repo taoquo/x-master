@@ -11,18 +11,21 @@ interface FetchAllBookmarksOptions {
   limit?: number
   stopAfterConsecutiveKnownPages?: number
   isExistingBookmark?: (bookmark: Partial<BookmarkRecord>) => boolean
+  onProgress?: (progress: { pageCount: number; fetchedCount: number }) => void
 }
 
 export async function fetchAllBookmarks({
   fetchPage,
   limit = Number.POSITIVE_INFINITY,
   stopAfterConsecutiveKnownPages,
-  isExistingBookmark
+  isExistingBookmark,
+  onProgress
 }: FetchAllBookmarksOptions) {
   const bookmarks: Array<Partial<BookmarkRecord>> = []
   let failedCount = 0
   let cursor: string | null | undefined = undefined
   let consecutiveKnownPages = 0
+  let pageCount = 0
 
   while (bookmarks.length < limit) {
     try {
@@ -31,6 +34,8 @@ export async function fetchAllBookmarks({
       const pageBookmarks = Number.isFinite(limit) ? page.bookmarks.slice(0, remaining) : page.bookmarks
       bookmarks.push(...pageBookmarks)
       failedCount += page.failedCount ?? 0
+      pageCount += 1
+      onProgress?.({ pageCount, fetchedCount: bookmarks.length })
 
       if (typeof stopAfterConsecutiveKnownPages === "number" && stopAfterConsecutiveKnownPages > 0) {
         const hasNewBookmark = pageBookmarks.some((bookmark) => !isExistingBookmark?.(bookmark))

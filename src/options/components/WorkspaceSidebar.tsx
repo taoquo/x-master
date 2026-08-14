@@ -6,6 +6,7 @@ import {
   type AuthorSidebarItem
 } from "../authorSidebar.ts"
 import type { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
+import { formatSyncProgressLabel } from "../../lib/runtime/syncProgress.ts"
 import { StatusBadge } from "../../ui/components.tsx"
 import { BrandLogo } from "../../ui/branding.tsx"
 import { AppIcon } from "../../ui/icons.tsx"
@@ -377,7 +378,13 @@ export function WorkspaceSidebar({
             disabled={workspace.isSyncing}
             className="workspace-sync-primary folio-secondary-action">
             <AppIcon name="sync" size={16} className={workspace.isSyncing ? "animate-spin" : undefined} />
-            <span>{workspace.isSyncing ? copy.syncing : copy.syncNow}</span>
+            <span>
+              {workspace.isSyncing
+                ? workspace.syncProgress
+                  ? formatSyncProgressLabel(locale, workspace.syncProgress)
+                  : copy.syncing
+                : copy.syncNow}
+            </span>
           </button>
 
           <InlineMessage message={formatSyncErrorSummary(workspace.summary, locale) ?? workspace.commandError} />

@@ -184,3 +184,33 @@ test("fetchAllBookmarks resets the known-page buffer after new bookmarks arrive"
   assert.deepEqual(calls, [undefined, "cursor-2", "cursor-3", "cursor-4"])
   assert.deepEqual(result.bookmarks.map((bookmark) => bookmark.tweetId), ["known-1", "2", "known-2", "known-3"])
 })
+
+test("fetchAllBookmarks reports per-page progress", async () => {
+  const progressEvents: Array<{ pageCount: number; fetchedCount: number }> = []
+  const fetchPage = async ({ cursor }: { cursor?: string | null }) => {
+    if (!cursor) {
+      return {
+        bookmarks: [{ tweetId: "1" }, { tweetId: "2" }],
+        nextCursor: "cursor-2",
+        failedCount: 0
+      }
+    }
+
+    return {
+      bookmarks: [{ tweetId: "3" }],
+      nextCursor: null,
+      failedCount: 0
+    }
+  }
+
+  await fetchAllBookmarks({
+    fetchPage,
+    limit: 100,
+    onProgress: (progress) => progressEvents.push(progress)
+  })
+
+  assert.deepEqual(progressEvents, [
+    { pageCount: 1, fetchedCount: 2 },
+    { pageCount: 2, fetchedCount: 3 }
+  ])
+})

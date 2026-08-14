@@ -1,5 +1,6 @@
 export const LOAD_WORKSPACE_DATA_MESSAGE = "workspace/load"
 export const RUN_SYNC_MESSAGE = "sync/run"
+export const SYNC_PROGRESS_MESSAGE = "sync/progress"
 export const RESET_LOCAL_DATA_MESSAGE = "storage/reset"
 export const SITE_TWEET_BOOKMARK_SYNC_MESSAGE = "site-tweet/bookmark/sync"
 export const SITE_TWEET_TAGGING_PREPARE_MESSAGE = "site-tweet/tagging/prepare"

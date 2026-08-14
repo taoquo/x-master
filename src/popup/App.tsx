@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react"
 import { loadWorkspaceData } from "../lib/runtime/popupClient.ts"
 import { runSyncAndWait } from "../lib/runtime/syncStatus.ts"
+import { subscribeSyncProgress, type SyncProgress } from "../lib/runtime/syncProgress.ts"
 import type { Locale, WorkspaceData } from "../lib/types.ts"
 import { createEmptySyncSummary } from "../lib/types.ts"
 import { createEmptyWorkspaceStats } from "../lib/workspace/stats.ts"
@@ -71,6 +72,7 @@ function PopupScreen() {
   const copy = getPopupAppCopy(locale)
   const [data, setData] = useState<WorkspaceData>(createEmptyWorkspaceData())
   const [isSyncing, setIsSyncing] = useState(false)
+  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null)
 
   async function refreshData() {
     const nextData = await loadWorkspaceData()
@@ -81,7 +83,10 @@ function PopupScreen() {
     void refreshData()
   }, [])
 
+  useEffect(() => subscribeSyncProgress(setSyncProgress), [])
+
   async function handleSync() {
+    setSyncProgress(null)
     setIsSyncing(true)
 
     try {
@@ -89,6 +94,7 @@ function PopupScreen() {
     } finally {
       await refreshData()
       setIsSyncing(false)
+      setSyncProgress(null)
     }
   }
 
@@ -147,7 +153,7 @@ function PopupScreen() {
         </div>
       </SurfaceCard>
 
-      <SyncPanel summary={data.summary} isSyncing={isSyncing} onSync={handleSync} />
+      <SyncPanel summary={data.summary} isSyncing={isSyncing} syncProgress={syncProgress} onSync={handleSync} />
     </main>
   )
 }

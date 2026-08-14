@@ -1,6 +1,7 @@
 import React from "react"
 import type { Locale, SyncSummary } from "../../lib/types.ts"
 import { getSyncErrorSummary } from "../../lib/x/syncErrors.ts"
+import { formatSyncProgressLabel, type SyncProgress } from "../../lib/runtime/syncProgress.ts"
 import { AppIcon } from "../../ui/icons.tsx"
 import { StatusBadge, SurfaceCard } from "../../ui/components.tsx"
 import { useExtensionUi } from "../../ui/provider.tsx"
@@ -70,10 +71,12 @@ function getPopupCopy(locale: Locale) {
 export function SyncPanel({
   summary,
   isSyncing,
+  syncProgress = null,
   onSync
 }: {
   summary: SyncSummary
   isSyncing: boolean
+  syncProgress?: SyncProgress | null
   onSync: () => Promise<void>
 }) {
   const { locale } = useExtensionUi()
@@ -131,7 +134,9 @@ export function SyncPanel({
           disabled={isSyncing}
           className="primary-button popup-sync-button folio-primary-action options-theme-elevated w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
           <AppIcon name="sync" size={16} className={isSyncing ? "animate-spin" : undefined} />
-          <span>{isSyncing ? copy.syncing : copy.syncNow}</span>
+          <span>
+            {isSyncing ? (syncProgress ? formatSyncProgressLabel(locale, syncProgress) : copy.syncing) : copy.syncNow}
+          </span>
         </button>
       </div>
       </div>

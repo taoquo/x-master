@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { createWorkspaceExportFilename, exportBookmarks } from "../../lib/export/exportBookmarks.ts"
 import {
   restoreWorkspaceBackup,
@@ -8,6 +8,7 @@ import {
 } from "../../lib/export/workspaceBackup.ts"
 import { resetStoredData } from "../../lib/runtime/popupClient.ts"
 import { runSyncAndWait } from "../../lib/runtime/syncStatus.ts"
+import { subscribeSyncProgress, type SyncProgress } from "../../lib/runtime/syncProgress.ts"
 import { getSettings, saveSettings } from "../../lib/storage/settings.ts"
 import { attachTagToBookmark, attachTagToBookmarks, createTag, deleteTag, detachTagFromBookmark, renameTag } from "../../lib/storage/tagsStore.ts"
 import type { BookmarkTagRecord, SavedViewRecord, TagRecord, WorkspaceData } from "../../lib/types.ts"
@@ -42,6 +43,7 @@ export function useWorkspaceCommands({
   ) => void
 }) {
   const [isSyncing, setIsSyncing] = useState(false)
+  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const [isValidatingBackup, setIsValidatingBackup] = useState(false)
   const [isRestoringBackup, setIsRestoringBackup] = useState(false)
@@ -52,8 +54,11 @@ export function useWorkspaceCommands({
   const [restoreResult, setRestoreResult] = useState<WorkspaceRestoreResult | null>(null)
   const [resetResult, setResetResult] = useState<{ success: true } | null>(null)
 
+  useEffect(() => subscribeSyncProgress(setSyncProgress), [])
+
   async function handleSync() {
     setCommandError(null)
+    setSyncProgress(null)
     setIsSyncing(true)
 
     try {
@@ -63,6 +68,7 @@ export function useWorkspaceCommands({
     } finally {
       await refreshData()
       setIsSyncing(false)
+      setSyncProgress(null)
     }
   }
 
@@ -315,6 +321,7 @@ export function useWorkspaceCommands({
 
   return {
     isSyncing,
+    syncProgress,
     isExporting,
     isValidatingBackup,
     isRestoringBackup,
