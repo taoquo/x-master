@@ -1038,6 +1038,12 @@ test("OptionsApp keeps a shared card hierarchy across short, long, and media boo
   assert.equal(shortCard?.querySelector(".options-card-media"), null)
   assert.equal(longCard?.querySelector(".options-card-media"), null)
   assert.ok(mediaCard?.querySelector(".options-card-media"))
+  assert.match(mediaCard?.className ?? "", /options-result-card-has-top-media/)
+  assert.equal(mediaCard?.querySelector(".options-card-main [data-testid='bookmark-select-toggle']"), null)
+  assert.equal(
+    mediaCard?.querySelector(":scope > [data-testid='bookmark-select-toggle']")?.getAttribute("aria-pressed"),
+    "false"
+  )
   assert.match(mediaCard?.querySelector(".options-card-copy")?.className ?? "", /is-media/)
   assert.match(shortCard?.querySelector(".options-card-main")?.className ?? "", /options-card-main/)
   assert.match(longCard?.querySelector(".options-card-main")?.className ?? "", /options-card-main/)
@@ -3006,15 +3012,21 @@ test("OptionsApp renders flat navigation rows and restrained result cards", asyn
   assert.match(searchInput.className, /options-toolbar-field/)
   assert.match(cards[0].className, /options-result-card/)
   assert.doesNotMatch(cards[0].className, /options-result-card-selected/)
-  assert.ok(cards[0].querySelector('[data-testid="bookmark-select-toggle"]'))
+  const selectToggle = cards[0].querySelector('[data-testid="bookmark-select-toggle"]') as HTMLButtonElement | null
+  assert.ok(selectToggle)
+  assert.equal(selectToggle.querySelector("[data-select-check]"), null)
 
   await act(async () => {
-    cards[0].dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    selectToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
   await settle()
 
   cards = getBookmarkCards(container)
-  assert.match(cards[0].className, /options-result-card-selected/)
+  const selectedToggle = cards[0].querySelector('[data-testid="bookmark-select-toggle"]') as HTMLButtonElement | null
+  assert.ok(selectedToggle)
+  assert.equal(selectedToggle?.getAttribute("aria-pressed"), "true")
+  assert.ok(selectedToggle.querySelector("[data-select-check]"))
+  assert.doesNotMatch(cards[0].className, /options-result-card-selected/)
 
   await act(async () => {
     aiTagButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))

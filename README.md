@@ -17,7 +17,7 @@ X Bookmark Manager is a Chrome extension for people who save too much on X and s
 ## Why Use It
 
 - X bookmarks are easy to save and hard to revisit.
-- Native X bookmark management does not give you a proper local inventory, tagging workflow, or rules-based organization.
+- Native X bookmark management does not give you a proper local inventory or tagging workflow.
 - This extension gives you a dedicated workspace for collecting, classifying, and reviewing bookmarks you actually want to keep useful.
 
 ## What the Extension Does
@@ -25,9 +25,8 @@ X Bookmark Manager is a Chrome extension for people who save too much on X and s
 - Sync bookmarks from X into local IndexedDB storage.
 - Show sync status, inventory counts, and unclassified bookmark counts in the popup.
 - Open a full manager view for browsing bookmarks, filtering by tags, and inspecting details.
-- Organize bookmarks with lists and tags.
+- Organize bookmarks with tags.
 - Apply tags inline on X without leaving the timeline.
-- Auto-attach tags through rules based on author handles, keywords, media, or longform posts.
 - Keep data local-first inside the browser instead of sending bookmarks to a hosted service.
 
 ## Who It Is For
@@ -62,10 +61,9 @@ Load it into Chrome:
 2. Open the extension popup and click `Sync now`.
 3. Wait for the first bookmark sync to finish.
 4. Click `Open manager` to enter the full workspace.
-5. Review bookmarks, filter them, and attach tags or move them into lists.
+5. Review bookmarks, filter them, and attach tags.
 6. Create tags that match how you actually read or archive content.
-7. Define classification rules so future bookmarks can be tagged automatically.
-8. While browsing X, use the inline tag action to tag bookmarked posts directly on the site.
+7. While browsing X, use the inline tag action to tag bookmarked posts directly on the site.
 
 ## Typical Workflow
 
@@ -73,8 +71,7 @@ Load it into Chrome:
 2. Run a sync from the popup.
 3. Open the manager and inspect what is still unclassified.
 4. Create a small tag system such as `AI`, `Product`, `Reading`, or `To Review`.
-5. Add rules for recurring authors or keywords.
-6. Revisit the workspace instead of scrolling through a flat bookmark list.
+5. Revisit the workspace by searching, filtering by tags or authors, and narrowing to media or longform posts.
 
 ## Data and Storage
 

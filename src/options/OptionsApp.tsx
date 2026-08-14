@@ -131,12 +131,11 @@ function getOptionsCopy(locale: Locale) {
       resetLocalData: "重置本地数据",
       resettingData: "重置中...",
       restoreBackupConfirm: "导入恢复会覆盖当前本地数据，确认继续？",
-      resetLocalDataConfirm: "重置会清空本地书签、列表、标签和设置，确认继续？",
+      resetLocalDataConfirm: "重置会清空所有本地书签、标签和设置，确认继续？",
       validBackup: "有效备份",
       restoredBackup: "已恢复",
       localDataReset: "本地数据已重置",
       bookmarksCountLabel: "书签",
-      listsCountLabel: "列表",
       tagsCountLabel: "标签",
       totalTags: "总标签数",
       unclassified: "未分类",
@@ -145,11 +144,7 @@ function getOptionsCopy(locale: Locale) {
       preferencesDescription: "",
       languageLabel: "语言",
       themeLabel: "主题",
-      listsTitle: "书签列表",
       allBookmarks: "全部书签",
-      newList: "新建列表",
-      newListDescription: "",
-      createList: "创建列表",
       libraryTitle: "资料库",
       libraryDescription: "",
       search: "搜索",
@@ -186,9 +181,6 @@ function getOptionsCopy(locale: Locale) {
       clearSelection: "清除选择",
       selectCurrentResults: "选择当前结果",
       selectRenderedResults: "选择已加载",
-      moveSelectedTo: "将选中项移动到",
-      chooseList: "选择列表",
-      moveSelected: "移动选中项",
       tagSelectedWith: "为选中项添加标签",
       chooseTag: "选择标签",
       applyTag: "应用标签",
@@ -228,9 +220,7 @@ function getOptionsCopy(locale: Locale) {
       copyLink: "复制链接",
       done: "完成",
       noLinkToCopy: "暂无可复制链接",
-      assignmentTitle: "归档",
       bookmarkFocus: "书签内容",
-      primaryList: "主列表",
       createTagLabel: "创建标签",
       renameTagLabel: "重命名标签",
       createTagDescription: "",
@@ -241,13 +231,11 @@ function getOptionsCopy(locale: Locale) {
       noTagsCreated: "还没有创建任何标签。",
       results: "结果",
       selected: "已选择",
-      noList: "未分组",
       loadingStateDescription: "正在从扩展运行时加载本地状态。",
       loadFailedTitle: "书签加载失败",
       loadFailedDescription: "暂时无法读取本地工作区数据，你可以立即重试。",
       retryLoad: "重新加载",
       scopedTo: "当前范围",
-      listPrefix: "列表",
       searchPrefix: "搜索",
       authorPrefix: "作者",
       tagPrefix: "标签",
@@ -277,12 +265,11 @@ function getOptionsCopy(locale: Locale) {
     resetLocalData: "Reset local data",
     resettingData: "Resetting...",
     restoreBackupConfirm: "Import restore will overwrite current local data. Continue?",
-    resetLocalDataConfirm: "Reset will clear local bookmarks, lists, tags, and settings. Continue?",
+    resetLocalDataConfirm: "Reset will clear all local bookmarks, tags, and settings. Continue?",
     validBackup: "Valid backup",
     restoredBackup: "Restored",
     localDataReset: "Local data reset",
     bookmarksCountLabel: "bookmarks",
-    listsCountLabel: "lists",
     tagsCountLabel: "tags",
     totalTags: "Total tags",
     unclassified: "Unclassified",
@@ -291,11 +278,7 @@ function getOptionsCopy(locale: Locale) {
     preferencesDescription: "",
     languageLabel: "Language",
     themeLabel: "Theme",
-    listsTitle: "Lists",
     allBookmarks: "All bookmarks",
-    newList: "New list",
-    newListDescription: "",
-    createList: "Create list",
     libraryTitle: "Library",
     libraryDescription: "",
     search: "Search",
@@ -332,9 +315,6 @@ function getOptionsCopy(locale: Locale) {
     clearSelection: "Clear selection",
     selectCurrentResults: "Select current results",
     selectRenderedResults: "Select loaded",
-    moveSelectedTo: "Move selected to",
-    chooseList: "Choose list",
-    moveSelected: "Move selected",
     tagSelectedWith: "Tag selected with",
     chooseTag: "Choose tag",
     applyTag: "Apply tag",
@@ -374,9 +354,7 @@ function getOptionsCopy(locale: Locale) {
     copyLink: "Copy link",
     done: "Done",
     noLinkToCopy: "No link available",
-    assignmentTitle: "Assignment",
     bookmarkFocus: "Bookmark focus",
-    primaryList: "Primary list",
     createTagLabel: "Create tag",
     renameTagLabel: "Rename tag",
     createTagDescription: "",
@@ -387,13 +365,11 @@ function getOptionsCopy(locale: Locale) {
     noTagsCreated: "No tags created yet.",
     results: "results",
     selected: "selected",
-    noList: "No list",
     loadingStateDescription: "Loading local state from the extension runtime.",
     loadFailedTitle: "Failed to load bookmarks",
     loadFailedDescription: "The local workspace could not be read right now. Try loading it again.",
     retryLoad: "Retry load",
     scopedTo: "Scoped to",
-    listPrefix: "List",
     searchPrefix: "Search",
     authorPrefix: "Author",
     tagPrefix: "Tag",
@@ -872,6 +848,7 @@ function BookmarkCard({
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("") || bookmark.authorHandle.slice(0, 2).toUpperCase()
   const showsInlineMedia = viewMode === "list" && !!bookmark.media?.length
+  const hasTopMediaPreview = !showsInlineMedia && !!bookmark.media?.length
   const mediaPreview = <PreviewMedia bookmark={bookmark} index={index} className={showsInlineMedia ? "options-card-media-inline" : undefined} />
   const hasTags = currentTagNames.length > 0
   const visibleTagNames = getVisibleCardTagNames(currentTagNames, viewMode)
@@ -899,6 +876,7 @@ function BookmarkCard({
       className={cn(
         "options-result-card options-theme-elevated group relative flex flex-col overflow-hidden",
         viewMode === "list" && "options-result-card-list",
+        hasTopMediaPreview && "options-result-card-has-top-media",
         listCardTemplateClass,
         selected && "options-result-card-selected"
       )}>
@@ -912,7 +890,11 @@ function BookmarkCard({
           event.stopPropagation()
           onBulkToggle()
         }}>
-        <AppIcon name={bulkSelected ? "check" : "bookmark"} size={13} />
+        {bulkSelected ? (
+          <span data-select-check="" className="options-bookmark-select-check">
+            <AppIcon name="check" size={13} />
+          </span>
+        ) : null}
       </button>
       {!showsInlineMedia ? mediaPreview : null}
 

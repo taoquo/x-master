@@ -51,3 +51,16 @@ test("extension stylesheet keeps detail tag input compact inline", async () => {
   assert.match(css, /\.options-detail-new-tag-input\s*\{[^}]*min-height:\s*28px/s)
   assert.match(css, /@media \(max-width:\s*900px\)[\s\S]*\.options-detail-new-tag-input\s*\{[^}]*width:\s*clamp\(96px,\s*32vw,\s*136px\)/)
 })
+
+test("extension stylesheet keeps bookmark selection controls compact, subdued, and clear of avatars", async () => {
+  const css = await readFile(path.join(process.cwd(), "src", "styles", "extension.css"), "utf8")
+  const baseBlock = css.match(/\.options-bookmark-select-toggle\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? ""
+  const selectedBlock = css.match(/\.options-bookmark-select-toggle\.is-selected\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? ""
+
+  assert.match(baseBlock, /height:\s*20px/)
+  assert.match(baseBlock, /width:\s*20px/)
+  assert.match(baseBlock, /position:\s*absolute/)
+  assert.match(css, /\.options-result-card:not\(\.options-result-card-has-top-media\)\s+\.options-card-main\s*\{[^}]*padding-left:\s*30px/s)
+  assert.doesNotMatch(selectedBlock, /background:\s*var\(--accent-primary\)/)
+  assert.doesNotMatch(selectedBlock, /0\s+0\s+0\s+3px/)
+})
