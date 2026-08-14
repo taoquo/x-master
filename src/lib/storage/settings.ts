@@ -1,6 +1,5 @@
 import {
   createEmptySyncSummary,
-  type ClassificationRule,
   type ExtensionSettings,
   type Locale,
   type SavedViewRecord,
@@ -11,7 +10,7 @@ import type { BookmarkSortOrder } from "../search/searchBookmarks.ts"
 import { isSyncErrorKind } from "../x/syncErrors.ts"
 
 const SETTINGS_STORAGE_KEY = "settings"
-const SETTINGS_SCHEMA_VERSION = 4
+const SETTINGS_SCHEMA_VERSION = 5
 const SYNC_STRATEGY_VERSION = 1
 const DEFAULT_LOCALE: Locale = "en"
 const DEFAULT_THEME_PREFERENCE: ThemePreference = "system"
@@ -28,19 +27,6 @@ function normalizeThemePreference(themePreference: unknown): ThemePreference {
   return themePreference === "light" || themePreference === "dark" || themePreference === "system"
     ? themePreference
     : DEFAULT_THEME_PREFERENCE
-}
-
-function normalizeRule(rule: Partial<ClassificationRule> | undefined, index: number): ClassificationRule {
-  return {
-    id: String(rule?.id ?? `rule-${index + 1}`),
-    name: String(rule?.name ?? "").trim(),
-    enabled: rule?.enabled ?? true,
-    authorHandles: Array.isArray(rule?.authorHandles) ? rule.authorHandles.map(String) : [],
-    keywords: Array.isArray(rule?.keywords) ? rule.keywords.map(String) : [],
-    requireMedia: Boolean(rule?.requireMedia),
-    requireLongform: Boolean(rule?.requireLongform),
-    targetTagIds: Array.isArray(rule?.targetTagIds) ? rule.targetTagIds.map(String) : []
-  }
 }
 
 function normalizeStringArray(value: unknown) {
@@ -117,8 +103,6 @@ function normalizeSyncSummary(summary: Partial<SyncSummary> | undefined): SyncSu
 }
 
 function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): ExtensionSettings {
-  const defaults = createDefaultSettings()
-
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     locale: normalizeLocale(settings?.locale),
@@ -132,10 +116,7 @@ function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): Ex
     ),
     leftSidebarWidth: normalizeRange(settings?.leftSidebarWidth, DEFAULT_LEFT_SIDEBAR_WIDTH, 260, 420),
     rightSidebarWidth: normalizeRange(settings?.rightSidebarWidth, DEFAULT_RIGHT_SIDEBAR_WIDTH, 320, 520),
-    savedViews: normalizeSavedViews(settings?.savedViews),
-    classificationRules: Array.isArray(settings?.classificationRules)
-      ? settings.classificationRules.map((rule, index) => normalizeRule(rule, index))
-      : defaults.classificationRules
+    savedViews: normalizeSavedViews(settings?.savedViews)
   }
 }
 
@@ -145,7 +126,6 @@ export function createDefaultSettings(): ExtensionSettings {
     locale: DEFAULT_LOCALE,
     themePreference: DEFAULT_THEME_PREFERENCE,
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: [],
     syncStrategyVersion: SYNC_STRATEGY_VERSION,
     hasCompletedInitialFullSync: false,
     incrementalStopBufferPages: DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES,
@@ -185,25 +165,6 @@ export async function saveLastSyncSummary(summary: SyncSummary) {
       ...settings.lastSyncSummary,
       ...summary
     }
-  })
-}
-
-export async function saveClassificationRules(classificationRules: ClassificationRule[]) {
-  const settings = await getSettings()
-  await saveSettings({
-    ...settings,
-    classificationRules: classificationRules.map((rule, index) => normalizeRule(rule, index))
-  })
-}
-
-export async function removeTagFromClassificationRules(tagId: string) {
-  const settings = await getSettings()
-  await saveSettings({
-    ...settings,
-    classificationRules: settings.classificationRules.map((rule) => ({
-      ...rule,
-      targetTagIds: rule.targetTagIds.filter((currentTagId) => currentTagId !== tagId)
-    }))
   })
 }
 

@@ -3,7 +3,6 @@ import assert from "node:assert/strict"
 import "fake-indexeddb/auto"
 import { getAllBookmarks, upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
-import { getAllBookmarkLists, getAllLists } from "../../src/lib/storage/listsStore.ts"
 import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
 import { createSyncRun, getLatestSyncRun } from "../../src/lib/storage/syncRunsStore.ts"
 import { getAllBookmarkTags, getAllTags } from "../../src/lib/storage/tagsStore.ts"
@@ -40,7 +39,6 @@ function createSettings(overrides: Partial<ExtensionSettings> = {}): ExtensionSe
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: [],
     savedViews: [],
     ...overrides
   }
@@ -55,18 +53,6 @@ function createBackupPayload(overrides: Partial<WorkspaceExportPayload> = {}): W
     failedCount: 0,
     lastSyncedAt: "2026-04-11T08:05:00.000Z"
   }
-  const classificationRules = [
-    {
-      id: "rule-1",
-      name: "AI",
-      enabled: true,
-      authorHandles: ["alice"],
-      keywords: ["agent"],
-      requireMedia: false,
-      requireLongform: false,
-      targetTagIds: ["tag-ai"]
-    }
-  ]
 
   return {
     exportVersion: WORKSPACE_EXPORT_VERSION,
@@ -89,16 +75,12 @@ function createBackupPayload(overrides: Partial<WorkspaceExportPayload> = {}): W
         }
       }
     ],
-    lists: [{ id: "list-inbox", name: "Inbox", createdAt: "2026-04-11T08:00:00.000Z" }],
-    bookmarkLists: [{ bookmarkId: "tweet-1", listId: "list-inbox", updatedAt: "2026-04-11T08:05:00.000Z" }],
     tags: [{ id: "tag-ai", name: "AI", createdAt: "2026-04-11T08:00:00.000Z" }],
     bookmarkTags: [{ id: "tweet-1:tag-ai", bookmarkId: "tweet-1", tagId: "tag-ai", createdAt: "2026-04-11T08:05:00.000Z" }],
-    classificationRules,
     settings: {
       schemaVersion: 3,
       locale: "zh-CN",
       themePreference: "dark",
-      classificationRules,
       savedViews: [
         {
           id: "view-ai",
@@ -145,11 +127,8 @@ test("validateWorkspaceBackupText accepts a valid workspace backup and returns c
   assert.equal(result.payload.settings.savedViews?.[0].name, "AI media")
   assert.deepEqual(result.counts, {
     bookmarks: 1,
-    lists: 1,
-    bookmarkLists: 1,
     tags: 1,
     bookmarkTags: 1,
-    classificationRules: 1,
     latestSyncRun: 1
   })
 })
@@ -172,7 +151,6 @@ test("validateWorkspaceBackupText preserves sync error kind fields and accepts l
           schemaVersion: 3,
           locale: "zh-CN",
           themePreference: "dark",
-          classificationRules: [],
           lastSyncSummary: errorSummary
         },
         latestSyncRun: {
@@ -275,12 +253,9 @@ test("restoreWorkspaceBackup overwrites local data with a validated backup", asy
 
   assert.equal(result.counts.bookmarks, 1)
   assert.equal(result.counts.tags, 1)
-  assert.equal(result.counts.lists, 1)
 
-  const [bookmarks, lists, bookmarkLists, tags, bookmarkTags, settings, latestSyncRun] = await Promise.all([
+  const [bookmarks, tags, bookmarkTags, settings, latestSyncRun] = await Promise.all([
     getAllBookmarks(),
-    getAllLists(),
-    getAllBookmarkLists(),
     getAllTags(),
     getAllBookmarkTags(),
     getSettings(),
@@ -290,17 +265,70 @@ test("restoreWorkspaceBackup overwrites local data with a validated backup", asy
   assert.equal(bookmarks.length, 1)
   assert.equal(bookmarks[0].tweetId, "tweet-1")
   assert.deepEqual(bookmarks[0].rawPayload, { source: "workspace-restore" })
-  assert.equal(lists.length, 1)
-  assert.equal(bookmarkLists.length, 1)
   assert.equal(tags.length, 1)
   assert.equal(bookmarkTags.length, 1)
   assert.equal(settings.locale, "zh-CN")
   assert.equal(settings.themePreference, "dark")
   assert.equal(settings.lastSyncSummary.status, "success")
-  assert.equal(settings.classificationRules.length, 1)
   assert.equal(settings.savedViews.length, 1)
   assert.equal(settings.savedViews[0].name, "AI media")
   assert.equal(latestSyncRun?.id, "sync-1")
+})
+
+test("validateWorkspaceBackupText accepts legacy v1 backups and drops lists/rules fields", async () => {
+  const legacyPayload = {
+    ...createBackupPayload(),
+    exportVersion: 1,
+    lists: [{ id: "list-inbox", name: "Inbox", createdAt: "2026-04-11T08:00:00.000Z" }],
+    bookmarkLists: [{ bookmarkId: "tweet-1", listId: "list-inbox", updatedAt: "2026-04-11T08:05:00.000Z" }],
+    classificationRules: [
+      {
+        id: "rule-1",
+        name: "AI",
+        enabled: true,
+        authorHandles: ["alice"],
+        keywords: ["agent"],
+        requireMedia: false,
+        requireLongform: false,
+        targetTagIds: ["tag-ai"]
+      }
+    ],
+    settings: {
+      schemaVersion: 3,
+      locale: "zh-CN" as const,
+      themePreference: "dark" as const,
+      classificationRules: [
+        {
+          id: "rule-1",
+          name: "AI",
+          enabled: true,
+          authorHandles: ["alice"],
+          keywords: ["agent"],
+          requireMedia: false,
+          requireLongform: false,
+          targetTagIds: ["tag-ai"]
+        }
+      ]
+    }
+  }
+
+  const result = validateWorkspaceBackupText(JSON.stringify(legacyPayload))
+
+  assert.deepEqual(result.counts, {
+    bookmarks: 1,
+    tags: 1,
+    bookmarkTags: 1,
+    latestSyncRun: 1
+  })
+
+  const restoreResult = await restoreWorkspaceBackup(result.payload)
+  assert.equal(restoreResult.counts.bookmarks, 1)
+
+  const settings = getSettings ? await getSettings() : undefined
+  assert.equal((settings as unknown as Record<string, unknown>)?.classificationRules, undefined)
+
+  const bookmarks = await getAllBookmarks()
+  assert.equal(bookmarks[0]?.tweetId, "tweet-1")
 })
 
 test("validateWorkspaceBackupText accepts legacy settings without saved views", () => {

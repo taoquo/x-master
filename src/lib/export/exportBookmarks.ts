@@ -1,22 +1,19 @@
 import type {
-  BookmarkListRecord,
   BookmarkRecord,
   BookmarkTagRecord,
   ExtensionSettings,
-  ListRecord,
   SyncRunRecord,
   SyncSummary,
   TagRecord,
   WorkspaceData
 } from "../types.ts"
 
-export const WORKSPACE_EXPORT_VERSION = 1
+export const WORKSPACE_EXPORT_VERSION = 2
 
 export interface WorkspaceExportSettings {
   schemaVersion: number
   locale: ExtensionSettings["locale"]
   themePreference: ExtensionSettings["themePreference"]
-  classificationRules: ExtensionSettings["classificationRules"]
   savedViews?: ExtensionSettings["savedViews"]
   lastSyncSummary?: SyncSummary
 }
@@ -28,11 +25,8 @@ export interface WorkspaceExportPayload {
   schemaVersion: number
   exportedAt: string
   bookmarks: WorkspaceExportBookmarkRecord[]
-  lists: ListRecord[]
-  bookmarkLists: BookmarkListRecord[]
   tags: TagRecord[]
   bookmarkTags: BookmarkTagRecord[]
-  classificationRules: ExtensionSettings["classificationRules"]
   settings: WorkspaceExportSettings
   summary: SyncSummary
   latestSyncRun: SyncRunRecord | null
@@ -57,16 +51,12 @@ export function createWorkspaceExportPayload({
     schemaVersion: settings.schemaVersion,
     exportedAt,
     bookmarks: workspace.bookmarks.map(toExportBookmark),
-    lists: workspace.lists,
-    bookmarkLists: workspace.bookmarkLists,
     tags: workspace.tags,
     bookmarkTags: workspace.bookmarkTags,
-    classificationRules: settings.classificationRules,
     settings: {
       schemaVersion: settings.schemaVersion,
       locale: settings.locale,
       themePreference: settings.themePreference,
-      classificationRules: settings.classificationRules,
       savedViews: settings.savedViews,
       lastSyncSummary: settings.lastSyncSummary
     },

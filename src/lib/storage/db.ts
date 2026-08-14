@@ -1,12 +1,12 @@
 const DB_NAME = "x-bookmark-manager"
-const DB_VERSION = 5
+const DB_VERSION = 6
 const BOOKMARKS_STORE = "bookmarks"
-const LISTS_STORE = "folders"
-const BOOKMARK_LISTS_STORE = "bookmark-folders"
 const TAGS_STORE = "tags"
 const BOOKMARK_TAGS_STORE = "bookmark-tags"
 const SYNC_RUNS_STORE = "sync-runs"
 const LEGACY_KNOWLEDGE_CARDS_STORE = "knowledge-cards"
+const LEGACY_LISTS_STORE = "folders"
+const LEGACY_BOOKMARK_LISTS_STORE = "bookmark-folders"
 
 type RequestResult<T> = T extends IDBRequest<infer TResult> ? TResult : never
 
@@ -28,16 +28,16 @@ function openBookmarksDb() {
         db.deleteObjectStore(LEGACY_KNOWLEDGE_CARDS_STORE)
       }
 
+      if (db.objectStoreNames.contains(LEGACY_LISTS_STORE)) {
+        db.deleteObjectStore(LEGACY_LISTS_STORE)
+      }
+
+      if (db.objectStoreNames.contains(LEGACY_BOOKMARK_LISTS_STORE)) {
+        db.deleteObjectStore(LEGACY_BOOKMARK_LISTS_STORE)
+      }
+
       if (!db.objectStoreNames.contains(BOOKMARKS_STORE)) {
         db.createObjectStore(BOOKMARKS_STORE, { keyPath: "tweetId" })
-      }
-
-      if (!db.objectStoreNames.contains(LISTS_STORE)) {
-        db.createObjectStore(LISTS_STORE, { keyPath: "id" })
-      }
-
-      if (!db.objectStoreNames.contains(BOOKMARK_LISTS_STORE)) {
-        db.createObjectStore(BOOKMARK_LISTS_STORE, { keyPath: "bookmarkId" })
       }
 
       if (!db.objectStoreNames.contains(TAGS_STORE)) {
@@ -114,7 +114,7 @@ export async function resetBookmarksDb() {
 export async function clearBookmarksDbStores() {
   const db = await getBookmarksDb()
   const transaction = db.transaction(
-    [BOOKMARKS_STORE, LISTS_STORE, BOOKMARK_LISTS_STORE, TAGS_STORE, BOOKMARK_TAGS_STORE, SYNC_RUNS_STORE],
+    [BOOKMARKS_STORE, TAGS_STORE, BOOKMARK_TAGS_STORE, SYNC_RUNS_STORE],
     "readwrite"
   )
 
@@ -127,8 +127,6 @@ export async function clearBookmarksDbStores() {
 
 export {
   BOOKMARKS_STORE,
-  LISTS_STORE,
-  BOOKMARK_LISTS_STORE,
   TAGS_STORE,
   BOOKMARK_TAGS_STORE,
   SYNC_RUNS_STORE,

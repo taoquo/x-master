@@ -1,6 +1,5 @@
 import type { BookmarkRecord, SiteTweetDraft } from "../types.ts"
 import {
-  BOOKMARK_LISTS_STORE,
   BOOKMARKS_STORE,
   BOOKMARK_TAGS_STORE,
   getBookmarksDb,
@@ -93,14 +92,12 @@ export async function upsertBookmarkSnapshot(snapshot: SiteTweetDraft): Promise<
 
 export async function removeBookmarkSnapshot(bookmarkId: string) {
   const db = await getBookmarksDb()
-  const transaction = db.transaction([BOOKMARKS_STORE, BOOKMARK_LISTS_STORE, BOOKMARK_TAGS_STORE], "readwrite")
+  const transaction = db.transaction([BOOKMARKS_STORE, BOOKMARK_TAGS_STORE], "readwrite")
   const bookmarksStore = transaction.objectStore(BOOKMARKS_STORE)
-  const bookmarkListsStore = transaction.objectStore(BOOKMARK_LISTS_STORE)
   const bookmarkTagsStore = transaction.objectStore(BOOKMARK_TAGS_STORE)
   const relatedBookmarkTags = (await requestToPromise(bookmarkTagsStore.index("bookmarkId").getAll(bookmarkId))) as BookmarkTagRecord[]
 
   bookmarksStore.delete(bookmarkId)
-  bookmarkListsStore.delete(bookmarkId)
 
   for (const bookmarkTag of relatedBookmarkTags) {
     bookmarkTagsStore.delete(bookmarkTag.id)

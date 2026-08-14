@@ -7,11 +7,8 @@ export function useWorkspaceData() {
     refreshData: queries.refreshData,
     getWorkspaceData: () => ({
       bookmarks: queries.bookmarks,
-      lists: queries.lists,
-      bookmarkLists: queries.bookmarkLists,
       tags: queries.tags,
       bookmarkTags: queries.bookmarkTags,
-      classificationRules: queries.classificationRules,
       savedViews: queries.savedViews,
       summary: queries.summary,
       latestSyncRun: queries.latestSyncRun,

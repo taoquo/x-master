@@ -7,7 +7,6 @@ import {
   bookmarkIsLongform,
   filterBookmarks,
   filterBookmarksByAuthors,
-  filterBookmarksByList,
   filterBookmarksBySavedTime,
   filterBookmarksByTags,
   filterBookmarksByFlags,
@@ -56,22 +55,14 @@ const bookmarkTags = [
   { id: "3:tag-long", bookmarkId: "3", tagId: "tag-long", createdAt: "2026-03-16T00:00:00.000Z" }
 ]
 
-const bookmarkLists = [
-  { bookmarkId: "1", listId: "list-research", updatedAt: "2026-03-16T00:00:00.000Z" },
-  { bookmarkId: "2", listId: "list-inbox", updatedAt: "2026-03-16T00:00:00.000Z" },
-  { bookmarkId: "3", listId: "list-research", updatedAt: "2026-03-16T00:00:00.000Z" }
-]
-
 test("basic search matches bookmark text and author metadata", () => {
   const filtered = filterBookmarks(bookmarks, "agent")
   assert.deepEqual(filtered.map((bookmark) => bookmark.tweetId), ["1"])
 })
 
-test("list and tag filters narrow bookmarks to one management slice", () => {
-  const byList = filterBookmarksByList(bookmarks, bookmarkLists, "list-research")
-  const byTag = filterBookmarksByTags(byList, bookmarkTags, ["tag-long"], "all")
+test("tag filters narrow bookmarks to one management slice", () => {
+  const byTag = filterBookmarksByTags(bookmarks, bookmarkTags, ["tag-long"], "all")
 
-  assert.deepEqual(byList.map((bookmark) => bookmark.tweetId), ["1", "3"])
   assert.deepEqual(byTag.map((bookmark) => bookmark.tweetId), ["3"])
 })
 
@@ -94,11 +85,9 @@ test("sortBookmarks uses timeline rank before savedAt fallback", () => {
   assert.deepEqual(sortBookmarks(rankedBookmarks, "timeline").map((bookmark) => bookmark.tweetId), ["2", "3", "1"])
 })
 
-test("applyBookmarkFilters combines list, author, tag, and flag filters with sorting", () => {
+test("applyBookmarkFilters combines author, tag, and flag filters with sorting", () => {
   const filtered = applyBookmarkFilters(bookmarks, {
     query: "",
-    bookmarkLists,
-    selectedListId: "list-research",
     bookmarkTags,
     selectedAuthorHandles: ["alice"],
     authorMatchMode: "any",
@@ -139,7 +128,6 @@ test("settings writes used by search-related UI still compile against reduced se
       failedCount: 0,
       lastSyncedAt: "2026-03-16T00:00:00.000Z"
     },
-    classificationRules: []
   })
 
   assert.ok(storedValue)

@@ -12,11 +12,8 @@ import { createEmptyWorkspaceStats } from "../../src/lib/workspace/stats.ts"
 function createWorkspaceData(overrides: Partial<WorkspaceData> = {}): WorkspaceData {
   return {
     bookmarks: [],
-    lists: [],
-    bookmarkLists: [],
     tags: [],
     bookmarkTags: [],
-    classificationRules: [],
     savedViews: [],
     summary: createEmptySyncSummary(),
     latestSyncRun: null,
@@ -31,7 +28,6 @@ function createSettings(overrides: Partial<ExtensionSettings> = {}): ExtensionSe
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: [],
     savedViews: [],
     ...overrides
   }
@@ -53,22 +49,8 @@ test("createWorkspaceExportPayload includes workspace data and strips rawPayload
         updatedAt: "2026-04-11T08:06:00.000Z"
       }
     ],
-    lists: [{ id: "list-inbox", name: "Inbox", createdAt: "2026-04-11T08:00:00.000Z" }],
-    bookmarkLists: [{ bookmarkId: "tweet-1", listId: "list-inbox", updatedAt: "2026-04-11T08:05:00.000Z" }],
     tags: [{ id: "tag-ai", name: "AI", createdAt: "2026-04-11T08:00:00.000Z" }],
     bookmarkTags: [{ id: "tweet-1:tag-ai", bookmarkId: "tweet-1", tagId: "tag-ai", createdAt: "2026-04-11T08:05:00.000Z" }],
-    classificationRules: [
-      {
-        id: "rule-1",
-        name: "AI rule",
-        enabled: true,
-        authorHandles: ["alice"],
-        keywords: ["agent"],
-        requireMedia: false,
-        requireLongform: false,
-        targetTagIds: ["tag-ai"]
-      }
-    ],
     summary: {
       status: "success",
       fetchedCount: 1,
@@ -91,7 +73,6 @@ test("createWorkspaceExportPayload includes workspace data and strips rawPayload
   const settings = createSettings({
     locale: "zh-CN",
     themePreference: "dark",
-    classificationRules: workspace.classificationRules,
     lastSyncSummary: workspace.summary,
     savedViews: [
       {
@@ -144,7 +125,6 @@ test("exportBookmarks serializes an empty workspace backup as JSON", () => {
   assert.equal(parsed.exportedAt, "2026-04-11T09:30:00.000Z")
   assert.deepEqual(parsed.bookmarks, [])
   assert.deepEqual(parsed.tags, [])
-  assert.deepEqual(parsed.settings.classificationRules, [])
 })
 
 test("createWorkspaceExportFilename uses the expected backup naming scheme", () => {

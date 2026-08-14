@@ -6,11 +6,9 @@ import { getAllBookmarks, upsertBookmarks } from "../../src/lib/storage/bookmark
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
 import { createEmptySyncSummary, type ExtensionSettings } from "../../src/lib/types.ts"
 
-test("runBookmarkSync stores fetched bookmarks, assigns inbox, and applies matching rules", async () => {
+test("runBookmarkSync stores fetched bookmarks", async () => {
   const recordedSummaries: Array<{ status: string; errorSummary?: string }> = []
   const recordedSyncRuns: Array<{ id: string; status: string; finishedAt?: string }> = []
-  const recordedInboxAssignments: string[][] = []
-  const recordedTagAssignments: Array<{ bookmarkId: string; tagId: string }> = []
 
   const result = await runBookmarkSync({
     getXCookieHeader: async () => "auth_token=abc; ct0=token123",
@@ -56,38 +54,11 @@ test("runBookmarkSync stores fetched bookmarks, assigns inbox, and applies match
       assert.equal(bookmarks.length, 2)
       return { insertedCount: 2, updatedCount: 0 }
     },
-    assignBookmarksToInboxIfMissing: async (bookmarkIds) => {
-      recordedInboxAssignments.push(bookmarkIds)
-    },
-    getAllTags: async () => [
-      {
-        id: "tag-ai",
-        name: "AI",
-        createdAt: "2026-03-15T00:00:00.000Z"
-      }
-    ],
-    getAllBookmarkTags: async () => [],
-    attachBookmarkTags: async (relations) => {
-      recordedTagAssignments.push(...relations)
-      return relations.length
-    },
     getSettings: async () => ({
       schemaVersion: 3,
       locale: "zh-CN",
       themePreference: "system",
       lastSyncSummary: createEmptySyncSummary(),
-      classificationRules: [
-        {
-          id: "rule-1",
-          name: "AI tag",
-          enabled: true,
-          authorHandles: ["alice"],
-          keywords: ["hello"],
-          requireMedia: false,
-          requireLongform: false,
-          targetTagIds: ["tag-ai"]
-        }
-      ],
       savedViews: []
     }),
     createSyncRun: async (syncRun) => {
@@ -106,8 +77,6 @@ test("runBookmarkSync stores fetched bookmarks, assigns inbox, and applies match
   assert.equal(result.insertedCount, 2)
   assert.equal(result.updatedCount, 0)
   assert.equal(result.failedCount, 0)
-  assert.deepEqual(recordedInboxAssignments, [["123", "124"]])
-  assert.deepEqual(recordedTagAssignments, [{ bookmarkId: "123", tagId: "tag-ai" }])
   assert.deepEqual(recordedSummaries.map((summary) => summary.status), ["running", "success"])
   assert.deepEqual(recordedSyncRuns.map((syncRun) => syncRun.status), ["running", "success"])
   assert.equal(recordedSyncRuns[0]?.id, recordedSyncRuns[1]?.id)
@@ -120,7 +89,6 @@ test("runBookmarkSync default summary persistence updates saved settings", async
     locale: "zh-CN",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: [],
     savedViews: [],
     syncStrategyVersion: 1,
     hasCompletedInitialFullSync: false,
@@ -167,7 +135,6 @@ test("runBookmarkSync does not delete bookmarks that are already stored locally"
       locale: "zh-CN",
       themePreference: "system",
       lastSyncSummary: createEmptySyncSummary(),
-      classificationRules: [],
       savedViews: [],
       syncStrategyVersion: 1,
       hasCompletedInitialFullSync: true,
@@ -195,7 +162,6 @@ test("runBookmarkSync uses buffered incremental mode after initial sync complete
       locale: "zh-CN",
       themePreference: "system",
       lastSyncSummary: createEmptySyncSummary(),
-      classificationRules: [],
       savedViews: [],
       syncStrategyVersion: 1,
       hasCompletedInitialFullSync: true,
@@ -211,7 +177,6 @@ test("runBookmarkSync does not mark initial full sync complete when the first sy
     locale: "zh-CN",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: [],
     savedViews: [],
     syncStrategyVersion: 1,
     hasCompletedInitialFullSync: false,
@@ -346,7 +311,6 @@ test("runBookmarkSync clears stale sync errors when a later sync succeeds", asyn
       errorKind: "network_error",
       errorSummary: "old error"
     },
-    classificationRules: [],
     savedViews: [],
     syncStrategyVersion: 1,
     hasCompletedInitialFullSync: true,

@@ -6,7 +6,6 @@ import { act } from "react"
 import { OptionsApp } from "../../src/options/OptionsApp.tsx"
 import { removeBookmarkSnapshot, upsertBookmarkSnapshot, upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
-import { createList } from "../../src/lib/storage/listsStore.ts"
 import { createEmptySyncSummary } from "../../src/lib/types.ts"
 import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
 import { attachTagToBookmark, createTag } from "../../src/lib/storage/tagsStore.ts"
@@ -72,8 +71,6 @@ function createBackupPayload(overrides: Partial<WorkspaceExportPayload> = {}): W
         savedAt: "2026-04-11T08:05:00.000Z"
       }
     ],
-    lists: [{ id: "list-inbox", name: "Inbox", createdAt: "2026-04-11T08:00:00.000Z" }],
-    bookmarkLists: [{ bookmarkId: "tweet-restored", listId: "list-inbox", updatedAt: "2026-04-11T08:05:00.000Z" }],
     tags: [{ id: "tag-restored", name: "Restored", createdAt: "2026-04-11T08:00:00.000Z" }],
     bookmarkTags: [
       {
@@ -83,12 +80,10 @@ function createBackupPayload(overrides: Partial<WorkspaceExportPayload> = {}): W
         createdAt: "2026-04-11T08:05:00.000Z"
       }
     ],
-    classificationRules: [],
     settings: {
       schemaVersion: 3,
       locale: "en",
       themePreference: "system",
-      classificationRules: [],
       lastSyncSummary: summary
     },
     summary,
@@ -182,7 +177,6 @@ test("OptionsApp renders the Chinese locale shell and keeps demo shell active", 
       failedCount: 0,
       lastSyncedAt: "2026-03-15T03:00:00.000Z"
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -231,7 +225,6 @@ test("OptionsApp uses the shared badge and status surface language", async () =>
       failedCount: 0,
       lastSyncedAt: "2026-03-15T03:00:00.000Z"
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -275,7 +268,6 @@ test("OptionsApp renders an export action and downloads a workspace backup", asy
       failedCount: 0,
       lastSyncedAt: "2026-04-11T08:05:00.000Z"
     },
-    classificationRules: []
   })
 
   let capturedJson = ""
@@ -332,7 +324,6 @@ test("OptionsApp surfaces export failures in the shared command error area", asy
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -369,7 +360,6 @@ test("OptionsApp renders compact data safety controls in the sidebar footer", as
     locale: "zh-CN",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container } = render(React.createElement(OptionsApp))
@@ -409,7 +399,6 @@ test("OptionsApp validates a selected backup during import and shows backup coun
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -466,7 +455,6 @@ test("OptionsApp surfaces import validation failures without changing local data
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -512,7 +500,6 @@ test("OptionsApp restores a confirmed backup and reloads the page", async () => 
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -562,7 +549,6 @@ test("OptionsApp does not restore a backup when confirmation is cancelled", asyn
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -620,7 +606,6 @@ test("OptionsApp resets local data only after confirmation", async () => {
       failedCount: 0,
       lastSyncedAt: "2026-04-10T08:05:00.000Z"
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -682,7 +667,6 @@ test("OptionsApp renders the Figma shell with editorial rails", async () => {
       failedCount: 0,
       lastSyncedAt: "2026-04-06T08:12:00.000Z"
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -774,7 +758,6 @@ test("OptionsApp uses demo tag navigation and footer preference toggles", async 
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -1132,7 +1115,6 @@ test("OptionsApp stabilizes list cards with explicit templates and capped tags",
     locale: "en",
     themePreference: "light",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
   await upsertBookmarks([
     {
@@ -1235,7 +1217,6 @@ test("OptionsApp renders the demo inspector and localized copy", async () => {
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -1273,7 +1254,6 @@ test("OptionsApp theme toggle keeps system preference reachable", async () => {
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -1319,7 +1299,6 @@ test("OptionsApp theme toggle flips immediately against resolved dark system the
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp), { prefersDark: true })
@@ -1351,7 +1330,6 @@ test("OptionsApp disables transitions briefly during theme swaps", async () => {
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -1395,7 +1373,6 @@ test("OptionsApp applies shared theme surface hooks to primary shells", async ()
     locale: "en",
     themePreference: "dark",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -1423,7 +1400,6 @@ test("OptionsApp applies shared theme surface hooks to secondary overlays and fe
     locale: "en",
     themePreference: "dark",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -1511,7 +1487,6 @@ test("OptionsApp applies shared theme hooks to chips pills and secondary actions
     locale: "en",
     themePreference: "dark",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -1616,7 +1591,6 @@ test("OptionsApp applies demo multi-tag AND filtering and falls back to all", as
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -1706,7 +1680,6 @@ test("OptionsApp supports adding existing tags in the inspector without legacy b
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -1784,7 +1757,6 @@ test("OptionsApp filters results by selected sidebar tag", async () => {
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -1823,7 +1795,6 @@ test("OptionsApp uses rail layout and shared field/button primitives", async () 
     locale: "en",
     themePreference: "system",
     lastSyncSummary: { status: "idle", fetchedCount: 0, insertedCount: 0, updatedCount: 0, failedCount: 0 },
-    classificationRules: []
   })
 
   const { container } = render(React.createElement(OptionsApp))
@@ -1870,7 +1841,6 @@ test("OptionsApp opens the detail card on card click and clears selection when i
     locale: "en",
     themePreference: "system",
     lastSyncSummary: { status: "idle", fetchedCount: 0, insertedCount: 0, updatedCount: 0, failedCount: 0 },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -1934,7 +1904,6 @@ test("OptionsApp prioritizes detail card hero summary tags and media sections", 
     locale: "en",
     themePreference: "light",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -2040,7 +2009,6 @@ test("OptionsApp preserves bookmark summary whitespace and renders stored avatar
     locale: "en",
     themePreference: "light",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -2090,7 +2058,6 @@ test("OptionsApp opens bookmark details as a centered focus card with timeline a
     locale: "zh-CN",
     themePreference: "light",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -2160,7 +2127,6 @@ test("OptionsApp creates and attaches a new tag from the focused detail card", a
     locale: "zh-CN",
     themePreference: "light",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -2214,7 +2180,6 @@ test("OptionsApp reuses the detail tag entry to attach an existing tag by name",
     locale: "zh-CN",
     themePreference: "light",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -2268,7 +2233,6 @@ test("OptionsApp commits the detail tag input on blur and keeps the input inline
     locale: "zh-CN",
     themePreference: "light",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -2328,7 +2292,6 @@ test("OptionsApp renders detail tag suggestions as a dropdown inside the detail 
     locale: "zh-CN",
     themePreference: "light",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -2394,7 +2357,6 @@ test("OptionsApp closes the centered detail card from backdrop and done action",
     locale: "zh-CN",
     themePreference: "light",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -2507,7 +2469,6 @@ test("OptionsApp keeps copy link available and shows a toast when no source link
     locale: "zh-CN",
     themePreference: "light",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -2992,7 +2953,6 @@ test("OptionsApp renders flat navigation rows and restrained result cards", asyn
     locale: "en",
     themePreference: "system",
     lastSyncSummary: { status: "idle", fetchedCount: 0, insertedCount: 0, updatedCount: 0, failedCount: 0 },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -3052,7 +3012,6 @@ test("OptionsApp exposes sidebar tag create and delete actions like the demo", a
     locale: "zh-CN",
     themePreference: "light",
     lastSyncSummary: { status: "idle", fetchedCount: 0, insertedCount: 0, updatedCount: 0, failedCount: 0 },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -3111,7 +3070,6 @@ test("OptionsApp saves inline tag drafts on blur and cancels them on escape", as
     locale: "zh-CN",
     themePreference: "light",
     lastSyncSummary: { status: "idle", fetchedCount: 0, insertedCount: 0, updatedCount: 0, failedCount: 0 },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -3203,7 +3161,6 @@ test("OptionsApp renames sidebar tags inline", async () => {
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -3367,7 +3324,6 @@ test("OptionsApp keeps saved views hidden while the data model remains available
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: [],
     savedViews: [
       {
         id: "view-ai",
@@ -3414,7 +3370,6 @@ test("OptionsApp renders an explorer sidebar and demo toolbar controls", async (
     }
   ])
 
-  await createList({ name: "Research" })
   await saveSettings({
     schemaVersion: 3,
     locale: "en",
@@ -3426,7 +3381,6 @@ test("OptionsApp renders an explorer sidebar and demo toolbar controls", async (
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container } = render(React.createElement(OptionsApp))
@@ -3496,7 +3450,6 @@ test("OptionsApp keeps sidebar lists and library results in separate scroll regi
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -3580,7 +3533,6 @@ test("OptionsApp renders a single tags summary and preferences inside the left s
       failedCount: 0,
       lastSyncedAt: "2026-03-15T03:00:00.000Z"
     },
-    classificationRules: []
   })
 
   const { container } = render(React.createElement(OptionsApp))
@@ -3608,7 +3560,6 @@ test("OptionsApp truncates the sidebar title instead of overflowing", async () =
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: [],
     syncStrategyVersion: 1,
     hasCompletedInitialFullSync: false,
     incrementalStopBufferPages: 3
@@ -3630,7 +3581,6 @@ test("OptionsApp keeps only the left split handle in modal mode", async () => {
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: [],
     syncStrategyVersion: 1,
     hasCompletedInitialFullSync: false,
     incrementalStopBufferPages: 3
@@ -3651,7 +3601,6 @@ test("OptionsApp persists updated pane widths after dragging a split handle", as
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: [],
     syncStrategyVersion: 1,
     hasCompletedInitialFullSync: false,
     incrementalStopBufferPages: 3,
@@ -3691,7 +3640,6 @@ test("OptionsApp does not expose expandable inline preferences in demo shell", a
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container } = render(React.createElement(OptionsApp))
@@ -3762,7 +3710,6 @@ test("OptionsApp shows a dedicated empty feed state when no bookmarks exist yet"
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container } = render(React.createElement(OptionsApp))
@@ -3844,7 +3791,6 @@ test("OptionsApp shows command errors near the sync controls", async () => {
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -3881,7 +3827,6 @@ test("OptionsApp shows classified sync error guidance instead of raw X API error
           errorKind: "auth_expired",
           errorSummary: "X login expired. Sign in to X again, then sync."
         },
-        classificationRules: []
       })
       throw new Error("X login expired. Sign in to X again, then sync.")
     }
@@ -3899,7 +3844,6 @@ test("OptionsApp shows classified sync error guidance instead of raw X API error
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -3964,7 +3908,6 @@ test("OptionsApp refreshes workspace data when the window regains focus after si
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom } = render(React.createElement(OptionsApp))
@@ -4000,7 +3943,6 @@ test("OptionsApp shows a newly site-bookmarked tweet first under the default rec
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   await upsertBookmarks([
@@ -4058,7 +4000,6 @@ test("OptionsApp removes a bookmark from the results after a site-side unbookmar
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   await upsertBookmarks([

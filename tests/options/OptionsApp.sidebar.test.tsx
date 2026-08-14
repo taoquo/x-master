@@ -41,7 +41,6 @@ test("OptionsApp defaults to expanded tags and collapsed authors, then toggles b
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom, root } = render(React.createElement(OptionsApp))
@@ -104,7 +103,6 @@ test("OptionsApp styles the authors search input and keeps show more without col
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, root, dom } = render(React.createElement(OptionsApp))
@@ -148,7 +146,6 @@ test("OptionsApp keeps the tag create action beside the title and aligns the aut
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom, root } = render(React.createElement(OptionsApp))
@@ -226,7 +223,6 @@ test("OptionsApp restores large result sets in batches after clearing an author 
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom, root } = render(React.createElement(OptionsApp))

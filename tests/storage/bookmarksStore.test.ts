@@ -8,7 +8,6 @@ import {
   upsertBookmarks,
   upsertBookmarkSnapshot
 } from "../../src/lib/storage/bookmarksStore.ts"
-import { getAllBookmarkLists, assignBookmarksToInboxIfMissing } from "../../src/lib/storage/listsStore.ts"
 import { attachTagToBookmark, createTag, getAllBookmarkTags } from "../../src/lib/storage/tagsStore.ts"
 
 test("upsertBookmarks stores bookmarks and getAllBookmarks returns them", async () => {
@@ -278,26 +277,6 @@ test("upsertBookmarkSnapshot stores avatar information for new site bookmarks", 
   assert.equal(bookmarks[0].authorAvatarUrl, "https://example.com/site-avatar.jpg")
 })
 
-test("upsertBookmarkSnapshot can be assigned into inbox for site bookmark sync", async () => {
-  await resetBookmarksDb()
-
-  await upsertBookmarkSnapshot({
-    tweetId: "tweet-123",
-    tweetUrl: "https://x.com/alice/status/123",
-    authorName: "Alice",
-    authorHandle: "alice",
-    text: "Short DOM text",
-    createdAtOnX: "2026-04-01T00:00:00.000Z"
-  })
-  await assignBookmarksToInboxIfMissing(["tweet-123"])
-
-  const bookmarkLists = await getAllBookmarkLists()
-
-  assert.deepEqual(bookmarkLists.map((entry) => ({ bookmarkId: entry.bookmarkId, listId: entry.listId })), [
-    { bookmarkId: "tweet-123", listId: "list-inbox" }
-  ])
-})
-
 test("upsertBookmarkSnapshot assigns a temporary timeline rank so new site bookmarks surface first", async () => {
   await resetBookmarksDb()
 
@@ -314,7 +293,7 @@ test("upsertBookmarkSnapshot assigns a temporary timeline rank so new site bookm
   assert.ok((snapshot.bookmarkTimelineRank ?? 1) < 0)
 })
 
-test("removeBookmarkSnapshot removes the bookmark and all related list and tag mappings", async () => {
+test("removeBookmarkSnapshot removes the bookmark and all related tag mappings", async () => {
   await resetBookmarksDb()
 
   await upsertBookmarkSnapshot({
@@ -325,13 +304,11 @@ test("removeBookmarkSnapshot removes the bookmark and all related list and tag m
     text: "Short DOM text",
     createdAtOnX: "2026-04-01T00:00:00.000Z"
   })
-  await assignBookmarksToInboxIfMissing(["tweet-123"])
   const tag = await createTag({ name: "AI" })
   await attachTagToBookmark({ bookmarkId: "tweet-123", tagId: tag.id })
 
   await removeBookmarkSnapshot("tweet-123")
 
   assert.equal((await getAllBookmarks()).length, 0)
-  assert.equal((await getAllBookmarkLists()).length, 0)
   assert.equal((await getAllBookmarkTags()).length, 0)
 })

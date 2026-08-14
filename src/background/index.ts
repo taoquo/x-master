@@ -1,6 +1,5 @@
 import { runBookmarkSync } from "./syncBookmarks.ts"
 import { removeBookmarkSnapshot, upsertBookmarkSnapshot } from "../lib/storage/bookmarksStore.ts"
-import { assignBookmarksToInboxIfMissing } from "../lib/storage/listsStore.ts"
 import { resetLocalData } from "../lib/storage/resetLocalData.ts"
 import { getSettings } from "../lib/storage/settings.ts"
 import {
@@ -111,7 +110,6 @@ async function syncSiteTweetBookmarkDefault({
 }): Promise<SiteTweetBookmarkSyncResult> {
   if (enabled) {
     const bookmark = await upsertBookmarkSnapshot(tweet)
-    await assignBookmarksToInboxIfMissing([bookmark.tweetId])
 
     return {
       bookmarkId: bookmark.tweetId,

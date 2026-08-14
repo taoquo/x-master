@@ -15,11 +15,8 @@ test("background message handler loads workspace data", async () => {
   const handler = createBackgroundMessageHandler({
     loadWorkspaceData: async () => ({
       bookmarks: [],
-      lists: [],
-      bookmarkLists: [],
       tags: [],
       bookmarkTags: [],
-      classificationRules: [],
       latestSyncRun: null,
       savedViews: [],
       summary: {
@@ -31,9 +28,7 @@ test("background message handler loads workspace data", async () => {
       },
       stats: {
         totalBookmarks: 0,
-        inboxCount: 0,
         unclassifiedCount: 0,
-        listCounts: [],
         tagCounts: [],
         topAuthors: []
       }
@@ -62,11 +57,8 @@ test("background message handler runs sync", async () => {
   const handler = createBackgroundMessageHandler({
     loadWorkspaceData: async () => ({
       bookmarks: [],
-      lists: [],
-      bookmarkLists: [],
       tags: [],
       bookmarkTags: [],
-      classificationRules: [],
       latestSyncRun: null,
       savedViews: [],
       summary: {
@@ -78,9 +70,7 @@ test("background message handler runs sync", async () => {
       },
       stats: {
         totalBookmarks: 0,
-        inboxCount: 0,
         unclassifiedCount: 0,
-        listCounts: [],
         tagCounts: [],
         topAuthors: []
       }
@@ -107,11 +97,8 @@ test("background message handler resets local data", async () => {
   const handler = createBackgroundMessageHandler({
     loadWorkspaceData: async () => ({
       bookmarks: [],
-      lists: [],
-      bookmarkLists: [],
       tags: [],
       bookmarkTags: [],
-      classificationRules: [],
       latestSyncRun: null,
       savedViews: [],
       summary: {
@@ -123,9 +110,7 @@ test("background message handler resets local data", async () => {
       },
       stats: {
         totalBookmarks: 0,
-        inboxCount: 0,
         unclassifiedCount: 0,
-        listCounts: [],
         tagCounts: [],
         topAuthors: []
       }
@@ -150,11 +135,8 @@ test("background message handler prepares site tweet tagging state", async () =>
   const handler = createBackgroundMessageHandler({
     loadWorkspaceData: async () => ({
       bookmarks: [],
-      lists: [],
-      bookmarkLists: [],
       tags: [],
       bookmarkTags: [],
-      classificationRules: [],
       latestSyncRun: null,
       savedViews: [],
       summary: {
@@ -166,9 +148,7 @@ test("background message handler prepares site tweet tagging state", async () =>
       },
       stats: {
         totalBookmarks: 0,
-        inboxCount: 0,
         unclassifiedCount: 0,
-        listCounts: [],
         tagCounts: [],
         topAuthors: []
       }
@@ -227,11 +207,8 @@ test("background message handler routes site tag toggles and site tag creation",
   const handler = createBackgroundMessageHandler({
     loadWorkspaceData: async () => ({
       bookmarks: [],
-      lists: [],
-      bookmarkLists: [],
       tags: [],
       bookmarkTags: [],
-      classificationRules: [],
       latestSyncRun: null,
       savedViews: [],
       summary: {
@@ -243,9 +220,7 @@ test("background message handler routes site tag toggles and site tag creation",
       },
       stats: {
         totalBookmarks: 0,
-        inboxCount: 0,
         unclassifiedCount: 0,
-        listCounts: [],
         tagCounts: [],
         topAuthors: []
       }
@@ -314,11 +289,8 @@ test("background message handler routes site bookmark sync", async () => {
   const handler = createBackgroundMessageHandler({
     loadWorkspaceData: async () => ({
       bookmarks: [],
-      lists: [],
-      bookmarkLists: [],
       tags: [],
       bookmarkTags: [],
-      classificationRules: [],
       latestSyncRun: null,
       savedViews: [],
       summary: {
@@ -330,9 +302,7 @@ test("background message handler routes site bookmark sync", async () => {
       },
       stats: {
         totalBookmarks: 0,
-        inboxCount: 0,
         unclassifiedCount: 0,
-        listCounts: [],
         tagCounts: [],
         topAuthors: []
       }

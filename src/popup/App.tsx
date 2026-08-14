@@ -12,11 +12,8 @@ import { SyncPanel } from "./components/SyncPanel.tsx"
 function createEmptyWorkspaceData(): WorkspaceData {
   return {
     bookmarks: [],
-    lists: [],
-    bookmarkLists: [],
     tags: [],
     bookmarkTags: [],
-    classificationRules: [],
     savedViews: [],
     summary: createEmptySyncSummary(),
     latestSyncRun: null,

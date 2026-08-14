@@ -54,7 +54,6 @@ test("ExtensionUiProvider resolves stored english locale and dark theme", async 
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
 
   const { container } = render(

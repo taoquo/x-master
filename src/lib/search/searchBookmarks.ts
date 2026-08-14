@@ -1,4 +1,4 @@
-import type { BookmarkListRecord, BookmarkRecord, BookmarkTagRecord } from "../types.ts"
+import type { BookmarkRecord, BookmarkTagRecord } from "../types.ts"
 import { getAllBookmarks } from "../storage/bookmarksStore.ts"
 
 export type BookmarkSortOrder = "timeline" | "saved-desc" | "saved-asc" | "created-desc" | "likes-desc"
@@ -7,8 +7,6 @@ export type SavedTimeRange = "all" | "7d" | "30d" | "90d"
 
 export interface BookmarkFilterOptions {
   query: string
-  bookmarkLists: BookmarkListRecord[]
-  selectedListId?: string
   bookmarkTags: BookmarkTagRecord[]
   selectedAuthorHandles: string[]
   authorMatchMode: MultiValueMatchMode
@@ -62,19 +60,6 @@ function matchesMultiValueFilter(values: Set<string>, selectedValues: string[], 
   }
 
   return selectedValues.every((selectedValue) => values.has(selectedValue))
-}
-
-export function filterBookmarksByList(
-  bookmarks: BookmarkRecord[],
-  bookmarkLists: BookmarkListRecord[],
-  selectedListId?: string
-) {
-  if (!selectedListId) {
-    return bookmarks
-  }
-
-  const listIdByBookmarkId = new Map(bookmarkLists.map((bookmarkList) => [bookmarkList.bookmarkId, bookmarkList.listId]))
-  return bookmarks.filter((bookmark) => listIdByBookmarkId.get(bookmark.tweetId) === selectedListId)
 }
 
 export function filterBookmarksByAuthors(
@@ -199,11 +184,7 @@ export function applyBookmarkFilters(bookmarks: BookmarkRecord[], options: Bookm
       filterBookmarksBySavedTime(
         filterBookmarksByTags(
           filterBookmarksByAuthors(
-            filterBookmarksByList(
-              filterBookmarks(bookmarks, options.query),
-              options.bookmarkLists,
-              options.selectedListId
-            ),
+            filterBookmarks(bookmarks, options.query),
             options.selectedAuthorHandles,
             options.authorMatchMode
           ),

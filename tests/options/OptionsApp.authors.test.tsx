@@ -71,7 +71,6 @@ test("OptionsApp filters results by selected sidebar author", async () => {
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom, root } = render(React.createElement(OptionsApp))
@@ -161,7 +160,6 @@ test("OptionsApp intersects selected author and tag scopes and All bookmarks cle
     locale: "en",
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: []
   })
 
   const { container, dom, root } = render(React.createElement(OptionsApp))

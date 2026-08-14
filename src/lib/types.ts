@@ -42,29 +42,6 @@ export interface BookmarkTagRecord {
   createdAt: string
 }
 
-export interface ListRecord {
-  id: string
-  name: string
-  createdAt: string
-}
-
-export interface BookmarkListRecord {
-  bookmarkId: string
-  listId: string
-  updatedAt: string
-}
-
-export interface ClassificationRule {
-  id: string
-  name: string
-  enabled: boolean
-  authorHandles: string[]
-  keywords: string[]
-  requireMedia: boolean
-  requireLongform: boolean
-  targetTagIds: string[]
-}
-
 export interface SavedViewRecord {
   id: string
   name: string
@@ -103,12 +80,6 @@ export interface SyncSummary {
   errorSummary?: string
 }
 
-export interface ListStat {
-  listId: string
-  name: string
-  count: number
-}
-
 export interface TagStat {
   tagId: string
   name: string
@@ -127,9 +98,7 @@ export type ThemePreference = "system" | "light" | "dark"
 
 export interface WorkspaceStats {
   totalBookmarks: number
-  inboxCount: number
   unclassifiedCount: number
-  listCounts: ListStat[]
   tagCounts: TagStat[]
   topAuthors: AuthorStat[]
 }
@@ -139,7 +108,6 @@ export interface ExtensionSettings {
   locale: Locale
   themePreference: ThemePreference
   lastSyncSummary: SyncSummary
-  classificationRules: ClassificationRule[]
   syncStrategyVersion?: number
   hasCompletedInitialFullSync?: boolean
   incrementalStopBufferPages?: number
@@ -150,11 +118,8 @@ export interface ExtensionSettings {
 
 export interface WorkspaceData {
   bookmarks: BookmarkRecord[]
-  lists: ListRecord[]
-  bookmarkLists: BookmarkListRecord[]
   tags: TagRecord[]
   bookmarkTags: BookmarkTagRecord[]
-  classificationRules: ClassificationRule[]
   savedViews: SavedViewRecord[]
   summary: SyncSummary
   latestSyncRun: SyncRunRecord | null

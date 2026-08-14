@@ -7,11 +7,8 @@ import { loadWorkspaceDataFromLocal } from "../../lib/workspace/loadWorkspaceDat
 function createEmptyWorkspaceData(): WorkspaceData {
   return {
     bookmarks: [],
-    lists: [],
-    bookmarkLists: [],
     tags: [],
     bookmarkTags: [],
-    classificationRules: [],
     savedViews: [],
     summary: createEmptySyncSummary(),
     latestSyncRun: null,

@@ -1,9 +1,6 @@
-import { collectRuleTagAssignments } from "../lib/classification/rules.ts"
-import { assignBookmarksToInboxIfMissing } from "../lib/storage/listsStore.ts"
 import { getAllBookmarks, upsertBookmarks } from "../lib/storage/bookmarksStore.ts"
 import { getSettings, saveSettings } from "../lib/storage/settings.ts"
 import { createSyncRun } from "../lib/storage/syncRunsStore.ts"
-import { attachBookmarkTags, getAllBookmarkTags, getAllTags } from "../lib/storage/tagsStore.ts"
 import {
   createEmptySyncSummary,
   type BookmarkRecord,
@@ -33,10 +30,6 @@ interface RunBookmarkSyncOptions {
   fetchBookmarksPage?: typeof fetchBookmarksPage
   syncLimit?: number
   upsertBookmarks?: (bookmarks: BookmarkRecord[]) => Promise<{ insertedCount: number; updatedCount: number }>
-  assignBookmarksToInboxIfMissing?: (bookmarkIds: string[]) => Promise<void>
-  getAllBookmarkTags?: typeof getAllBookmarkTags
-  attachBookmarkTags?: (relations: Array<{ bookmarkId: string; tagId: string }>) => Promise<number>
-  getAllTags?: typeof getAllTags
   createSyncRun?: (syncRun: SyncRunRecord) => Promise<void>
   updateSyncSummary?: (summary: SyncSummary) => Promise<void>
   getSettings?: typeof getSettings
@@ -97,10 +90,6 @@ export async function runBookmarkSync({
   fetchBookmarksPage: loadBookmarksPage = fetchBookmarksPage,
   syncLimit = DEFAULT_SYNC_LIMIT,
   upsertBookmarks: saveBookmarks = upsertBookmarks,
-  assignBookmarksToInboxIfMissing: ensureBookmarkLists = assignBookmarksToInboxIfMissing,
-  getAllBookmarkTags: loadBookmarkTags = getAllBookmarkTags,
-  attachBookmarkTags: saveBookmarkTags = attachBookmarkTags,
-  getAllTags: loadTags = getAllTags,
   createSyncRun: persistSyncRun = createSyncRun,
   updateSyncSummary,
   getSettings: readSettings = getSettings,
@@ -172,19 +161,6 @@ export async function runBookmarkSync({
 
     const normalizedBookmarks = bookmarks as BookmarkRecord[]
     const { insertedCount, updatedCount } = await saveBookmarks(normalizedBookmarks)
-    await ensureBookmarkLists(normalizedBookmarks.map((bookmark) => bookmark.tweetId))
-
-    const [bookmarkTags, tags] = await Promise.all([loadBookmarkTags(), loadTags()])
-    const ruleAssignments = collectRuleTagAssignments({
-      bookmarks: normalizedBookmarks,
-      rules: settings.classificationRules,
-      existingBookmarkTags: bookmarkTags,
-      validTagIds: new Set(tags.map((tag) => tag.id))
-    })
-
-    if (ruleAssignments.length > 0) {
-      await saveBookmarkTags(ruleAssignments)
-    }
 
     if (!hasCompletedInitialFullSync) {
       await writeSettings({

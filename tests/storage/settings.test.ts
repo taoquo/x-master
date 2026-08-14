@@ -1,11 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import {
-  getSettings,
-  removeTagFromClassificationRules,
-  saveClassificationRules,
-  saveSettings
-} from "../../src/lib/storage/settings.ts"
+import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
 import { createEmptySyncSummary } from "../../src/lib/types.ts"
 
 function installChromeStorageMock() {
@@ -35,40 +30,16 @@ test("getSettings returns bookmark-manager defaults", async () => {
 
   const settings = await getSettings()
 
-  assert.equal(settings.schemaVersion, 4)
+  assert.equal(settings.schemaVersion, 5)
   assert.equal(settings.locale, "en")
   assert.equal(settings.themePreference, "system")
   assert.equal(settings.lastSyncSummary.status, "idle")
-  assert.deepEqual(settings.classificationRules, [])
   assert.equal(settings.syncStrategyVersion, 1)
   assert.equal(settings.hasCompletedInitialFullSync, false)
   assert.equal(settings.incrementalStopBufferPages, 3)
   assert.equal(settings.leftSidebarWidth, 280)
   assert.equal(settings.rightSidebarWidth, 360)
   assert.deepEqual(settings.savedViews, [])
-})
-
-test("saveClassificationRules persists deterministic rule settings", async () => {
-  installChromeStorageMock()
-
-  await saveClassificationRules([
-    {
-      id: "rule-1",
-      name: "AI",
-      enabled: true,
-      authorHandles: ["alice"],
-      keywords: ["agent"],
-      requireMedia: false,
-      requireLongform: true,
-      targetTagIds: ["tag-ai"]
-    }
-  ])
-
-  const settings = await getSettings()
-
-  assert.equal(settings.classificationRules.length, 1)
-  assert.equal(settings.classificationRules[0].name, "AI")
-  assert.equal(settings.classificationRules[0].requireLongform, true)
 })
 
 test("getSettings migrates legacy stored fields into the reduced settings shape", async () => {
@@ -95,12 +66,11 @@ test("getSettings migrates legacy stored fields into the reduced settings shape"
 
   const settings = await getSettings()
 
-  assert.equal(settings.schemaVersion, 4)
+  assert.equal(settings.schemaVersion, 5)
   assert.equal(settings.locale, "en")
   assert.equal(settings.themePreference, "system")
   assert.equal(settings.lastSyncSummary.status, "success")
   assert.equal(settings.lastSyncSummary.lastSyncedAt, "2026-03-16T00:00:00.000Z")
-  assert.deepEqual(settings.classificationRules, [])
   assert.equal(settings.syncStrategyVersion, 1)
   assert.equal(settings.hasCompletedInitialFullSync, false)
   assert.equal(settings.incrementalStopBufferPages, 3)
@@ -147,7 +117,6 @@ test("saveSettings persists locale and theme preferences", async () => {
     locale: "en",
     themePreference: "dark",
     lastSyncSummary: createEmptySyncSummary(),
-    classificationRules: [],
     leftSidebarWidth: 320,
     rightSidebarWidth: 420,
     savedViews: [
@@ -243,20 +212,13 @@ test("getSettings normalizes saved views and drops invalid records", async () =>
   })
 })
 
-test("removeTagFromClassificationRules strips deleted tag ids from every rule", async () => {
-  installChromeStorageMock()
-
-  await saveSettings({
-    schemaVersion: 3,
+test("getSettings silently drops legacy classificationRules from stored settings", async () => {
+  const storage = installChromeStorageMock()
+  storage.setStoredValue({
+    schemaVersion: 4,
     locale: "zh-CN",
     themePreference: "system",
-    lastSyncSummary: {
-      status: "idle",
-      fetchedCount: 0,
-      insertedCount: 0,
-      updatedCount: 0,
-      failedCount: 0
-    },
+    lastSyncSummary: createEmptySyncSummary(),
     classificationRules: [
       {
         id: "rule-1",
@@ -266,13 +228,18 @@ test("removeTagFromClassificationRules strips deleted tag ids from every rule", 
         keywords: ["agent"],
         requireMedia: false,
         requireLongform: false,
-        targetTagIds: ["tag-ai", "tag-keep"]
+        targetTagIds: ["tag-ai"]
       }
-    ]
+    ],
+    savedViews: []
   })
 
-  await removeTagFromClassificationRules("tag-ai")
   const settings = await getSettings()
 
-  assert.deepEqual(settings.classificationRules[0].targetTagIds, ["tag-keep"])
+  assert.equal(settings.schemaVersion, 5)
+  assert.equal("classificationRules" in settings, false)
+
+  await saveSettings(settings)
+  const persisted = storage.getStoredValue() as Record<string, unknown>
+  assert.equal("classificationRules" in persisted, false)
 })

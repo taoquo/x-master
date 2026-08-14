@@ -7,10 +7,9 @@ import {
   type WorkspaceRestoreResult
 } from "../../lib/export/workspaceBackup.ts"
 import { resetStoredData, runSync } from "../../lib/runtime/popupClient.ts"
-import { createList, deleteList, moveBookmarkToList, moveBookmarksToList, renameList } from "../../lib/storage/listsStore.ts"
-import { getSettings, removeTagFromClassificationRules, saveClassificationRules, saveSettings } from "../../lib/storage/settings.ts"
+import { getSettings, saveSettings } from "../../lib/storage/settings.ts"
 import { attachTagToBookmark, attachTagToBookmarks, createTag, deleteTag, detachTagFromBookmark, renameTag } from "../../lib/storage/tagsStore.ts"
-import type { ClassificationRule, SavedViewRecord, WorkspaceData } from "../../lib/types.ts"
+import type { SavedViewRecord, WorkspaceData } from "../../lib/types.ts"
 
 function toErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
@@ -28,9 +27,7 @@ export function useWorkspaceCommands({
   const [isValidatingBackup, setIsValidatingBackup] = useState(false)
   const [isRestoringBackup, setIsRestoringBackup] = useState(false)
   const [isResettingData, setIsResettingData] = useState(false)
-  const [isSavingLists, setIsSavingLists] = useState(false)
   const [isSavingTags, setIsSavingTags] = useState(false)
-  const [isSavingRules, setIsSavingRules] = useState(false)
   const [commandError, setCommandError] = useState<string | null>(null)
   const [backupValidationResult, setBackupValidationResult] = useState<WorkspaceBackupValidationResult | null>(null)
   const [restoreResult, setRestoreResult] = useState<WorkspaceRestoreResult | null>(null)
@@ -158,97 +155,6 @@ export function useWorkspaceCommands({
     }
   }
 
-  async function handleCreateList(name: string) {
-    const trimmedName = name.trim()
-    if (!trimmedName) {
-      return
-    }
-
-    setCommandError(null)
-    setIsSavingLists(true)
-
-    try {
-      const list = await createList({ name: trimmedName })
-      await refreshData()
-      return list
-    } catch (error) {
-      setCommandError(toErrorMessage(error, "Failed to create list"))
-      throw error
-    } finally {
-      setIsSavingLists(false)
-    }
-  }
-
-  async function handleRenameList(listId: string, name: string) {
-    const trimmedName = name.trim()
-    if (!trimmedName) {
-      return
-    }
-
-    setCommandError(null)
-    setIsSavingLists(true)
-
-    try {
-      const list = await renameList({ listId, name: trimmedName })
-      await refreshData()
-      return list
-    } catch (error) {
-      setCommandError(toErrorMessage(error, "Failed to rename list"))
-      throw error
-    } finally {
-      setIsSavingLists(false)
-    }
-  }
-
-  async function handleDeleteList(listId: string) {
-    setCommandError(null)
-    setIsSavingLists(true)
-
-    try {
-      await deleteList(listId)
-      await refreshData()
-    } catch (error) {
-      setCommandError(toErrorMessage(error, "Failed to delete list"))
-      throw error
-    } finally {
-      setIsSavingLists(false)
-    }
-  }
-
-  async function handleMoveBookmarkToList(bookmarkId: string, listId: string) {
-    setCommandError(null)
-    setIsSavingLists(true)
-
-    try {
-      await moveBookmarkToList({ bookmarkId, listId })
-      await refreshData()
-    } catch (error) {
-      setCommandError(toErrorMessage(error, "Failed to move bookmark"))
-      throw error
-    } finally {
-      setIsSavingLists(false)
-    }
-  }
-
-  async function handleMoveBookmarksToList(bookmarkIds: string[], listId: string) {
-    if (!bookmarkIds.length || !listId) {
-      return
-    }
-
-    setCommandError(null)
-    setIsSavingLists(true)
-
-    try {
-      await moveBookmarksToList({ bookmarkIds, listId })
-      await refreshData()
-    } catch (error) {
-      setCommandError(toErrorMessage(error, "Failed to move bookmarks"))
-      throw error
-    } finally {
-      setIsSavingLists(false)
-    }
-  }
-
   async function handleCreateTag(name: string) {
     const trimmedName = name.trim()
     if (!trimmedName) {
@@ -276,7 +182,6 @@ export function useWorkspaceCommands({
 
     try {
       await deleteTag(tagId)
-      await removeTagFromClassificationRules(tagId)
       await refreshData()
     } catch (error) {
       setCommandError(toErrorMessage(error, "Failed to delete tag"))
@@ -360,21 +265,6 @@ export function useWorkspaceCommands({
     }
   }
 
-  async function handleSaveRules(classificationRules: ClassificationRule[]) {
-    setCommandError(null)
-    setIsSavingRules(true)
-
-    try {
-      await saveClassificationRules(classificationRules)
-      await refreshData()
-    } catch (error) {
-      setCommandError(toErrorMessage(error, "Failed to save rules"))
-      throw error
-    } finally {
-      setIsSavingRules(false)
-    }
-  }
-
   async function handleSaveViews(savedViews: SavedViewRecord[]) {
     setCommandError(null)
 
@@ -397,9 +287,7 @@ export function useWorkspaceCommands({
     isValidatingBackup,
     isRestoringBackup,
     isResettingData,
-    isSavingLists,
     isSavingTags,
-    isSavingRules,
     commandError,
     backupValidationResult,
     restoreResult,
@@ -409,18 +297,12 @@ export function useWorkspaceCommands({
     handleValidateBackupFile,
     handleRestoreBackupFile,
     handleResetLocalData,
-    handleCreateList,
-    handleRenameList,
-    handleDeleteList,
-    handleMoveBookmarkToList,
-    handleMoveBookmarksToList,
     handleCreateTag,
     handleDeleteTag,
     handleRenameTag,
     handleAttachTag,
     handleDetachTag,
     handleBulkAttachTag,
-    handleSaveRules,
     handleSaveViews
   }
 }

@@ -13,11 +13,8 @@ function assertNoRuntimeError<T>(response: T | { error: string }): T {
 function createEmptyWorkspaceData(): WorkspaceData {
   return {
     bookmarks: [],
-    lists: [],
-    bookmarkLists: [],
     tags: [],
     bookmarkTags: [],
-    classificationRules: [],
     savedViews: [],
     summary: createEmptySyncSummary(),
     latestSyncRun: null,

@@ -86,7 +86,6 @@ test("mountPopup renders stored english copy and dark theme preference", async (
       updatedCount: 0,
       failedCount: 0
     },
-    classificationRules: []
   })
   const rootElement = dom.window.document.getElementById("root")
   assert.ok(rootElement)
