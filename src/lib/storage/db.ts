@@ -1,10 +1,11 @@
 const DB_NAME = "x-bookmark-manager"
-const DB_VERSION = 7
+const DB_VERSION = 8
 const BOOKMARKS_STORE = "bookmarks"
 const TAGS_STORE = "tags"
 const BOOKMARK_TAGS_STORE = "bookmark-tags"
 const SYNC_RUNS_STORE = "sync-runs"
 const RAW_PAYLOADS_STORE = "raw-payloads"
+const TAG_SUGGESTIONS_STORE = "tag-suggestions"
 const LEGACY_KNOWLEDGE_CARDS_STORE = "knowledge-cards"
 const LEGACY_LISTS_STORE = "folders"
 const LEGACY_BOOKMARK_LISTS_STORE = "bookmark-folders"
@@ -59,6 +60,12 @@ function openBookmarksDb() {
       if (!db.objectStoreNames.contains(RAW_PAYLOADS_STORE)) {
         db.createObjectStore(RAW_PAYLOADS_STORE, { keyPath: "tweetId" })
         migrateRawPayloadsOutOfBookmarks(upgradeTransaction)
+      }
+
+      if (!db.objectStoreNames.contains(TAG_SUGGESTIONS_STORE)) {
+        const tagSuggestionsStore = db.createObjectStore(TAG_SUGGESTIONS_STORE, { keyPath: "id" })
+        tagSuggestionsStore.createIndex("bookmarkId", "bookmarkId", { unique: false })
+        tagSuggestionsStore.createIndex("status", "status", { unique: false })
       }
     }
 
@@ -187,7 +194,7 @@ export async function resetBookmarksDb() {
 export async function clearBookmarksDbStores() {
   const db = await getBookmarksDb()
   const transaction = db.transaction(
-    [BOOKMARKS_STORE, TAGS_STORE, BOOKMARK_TAGS_STORE, SYNC_RUNS_STORE, RAW_PAYLOADS_STORE],
+    [BOOKMARKS_STORE, TAGS_STORE, BOOKMARK_TAGS_STORE, SYNC_RUNS_STORE, RAW_PAYLOADS_STORE, TAG_SUGGESTIONS_STORE],
     "readwrite"
   )
 
@@ -204,6 +211,7 @@ export {
   BOOKMARK_TAGS_STORE,
   SYNC_RUNS_STORE,
   RAW_PAYLOADS_STORE,
+  TAG_SUGGESTIONS_STORE,
   DB_NAME,
   DB_VERSION
 }

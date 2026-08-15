@@ -1,6 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { parseBookmarkEntries } from "../../src/lib/x/parseBookmarks.ts"
+import { extractHashtags } from "../../src/lib/x/parseBookmarks.ts"
 import { normalizeSyncError } from "../../src/lib/x/syncErrors.ts"
 
 const response = {
@@ -332,4 +333,13 @@ test("parseBookmarkEntries prefers playable mp4 variants for video media", () =>
   assert.equal(result.bookmarks[0].media?.[0]?.type, "video")
   assert.equal(result.bookmarks[0].media?.[0]?.url, "https://video.twimg.com/ext_tw_video/vid/1280x720/video-720.mp4")
   assert.equal(result.bookmarks[0].media?.[0]?.posterUrl, "https://pbs.twimg.com/ext_tw_video_thumb/poster.jpg")
+})
+
+test("extractHashtags reads legacy entities and dedupes case-insensitively", () => {
+  assert.deepEqual(extractHashtags(undefined), [])
+  assert.deepEqual(extractHashtags({ entities: {} }), [])
+  assert.deepEqual(
+    extractHashtags({ entities: { hashtags: [{ text: "AI" }, { text: "ai" }, { text: " Rust " }, { text: "" }] } }),
+    ["AI", "Rust"]
+  )
 })

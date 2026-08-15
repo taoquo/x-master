@@ -113,3 +113,20 @@ test("upgrading to DB v7 backfills media posterUrl from legacy rawPayload", asyn
   assert.equal(bookmarks.length, 1)
   assert.equal(bookmarks[0].media?.[0]?.posterUrl, "https://example.com/poster.jpg")
 })
+
+test("upgrading to DB v8 creates the tag-suggestions store with indexes", async () => {
+  await resetBookmarksDb()
+
+  const legacyDb = await openLegacyV5Db()
+  legacyDb.close()
+
+  const db = await getBookmarksDb()
+
+  assert.equal(db.version, DB_VERSION)
+  assert.equal(db.objectStoreNames.contains("tag-suggestions"), true)
+
+  const store = db.transaction("tag-suggestions", "readonly").objectStore("tag-suggestions")
+  assert.equal(store.keyPath, "id")
+  assert.equal(store.indexNames.contains("bookmarkId"), true)
+  assert.equal(store.indexNames.contains("status"), true)
+})

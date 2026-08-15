@@ -36,6 +36,31 @@ function getMediaPayload(item: any) {
   }
 }
 
+export function extractHashtags(legacy: any): string[] {
+  const hashtags = legacy?.entities?.hashtags
+
+  if (!Array.isArray(hashtags)) {
+    return []
+  }
+
+  const seen = new Set<string>()
+  const names: string[] = []
+
+  for (const hashtag of hashtags) {
+    const name = String(hashtag?.text ?? "").trim()
+    const key = name.toLowerCase()
+
+    if (!name || seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    names.push(name)
+  }
+
+  return names
+}
+
 export function parseBookmarkEntries(response: any) {
   const instructions = getTimelineInstructions(response)
   const addEntries = instructions.find((instruction: any) => instruction?.type === "TimelineAddEntries")
@@ -76,6 +101,7 @@ export function parseBookmarkEntries(response: any) {
           createdAtOnX: legacy?.created_at ?? "",
           savedAt: seenAt,
           lastSeenAt: seenAt,
+          hashtags: extractHashtags(legacy),
           media: (legacy?.extended_entities?.media ?? []).map((item: any) => {
             const mediaPayload = getMediaPayload(item)
 

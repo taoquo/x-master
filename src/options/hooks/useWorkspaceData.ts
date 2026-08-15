@@ -11,6 +11,7 @@ export function useWorkspaceData() {
       tags: queries.tags,
       bookmarkTags: queries.bookmarkTags,
       savedViews: queries.savedViews,
+      tagSuggestions: queries.tagSuggestions,
       summary: queries.summary,
       latestSyncRun: queries.latestSyncRun,
       stats: queries.stats

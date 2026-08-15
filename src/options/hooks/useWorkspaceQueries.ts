@@ -15,6 +15,7 @@ function createEmptyWorkspaceData(): WorkspaceData {
     tags: [],
     bookmarkTags: [],
     savedViews: [],
+    tagSuggestions: [],
     summary: createEmptySyncSummary(),
     latestSyncRun: null,
     stats: createEmptyWorkspaceStats()
@@ -60,7 +61,12 @@ export function useWorkspaceQueries() {
         ...previous,
         tags,
         bookmarkTags,
-        stats: buildWorkspaceStats({ bookmarks: previous.bookmarks, tags, bookmarkTags })
+        stats: buildWorkspaceStats({
+          bookmarks: previous.bookmarks,
+          tags,
+          bookmarkTags,
+          tagSuggestions: previous.tagSuggestions
+        })
       }
     })
   }

@@ -4,6 +4,7 @@ import "fake-indexeddb/auto"
 import { runBookmarkSync } from "../../src/background/syncBookmarks.ts"
 import { getAllBookmarks, upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
+import { createDefaultAutoTagSettings } from "../../src/lib/storage/settings.ts"
 import { createEmptySyncSummary, type ExtensionSettings } from "../../src/lib/types.ts"
 
 test("runBookmarkSync stores fetched bookmarks", async () => {
@@ -57,7 +58,8 @@ test("runBookmarkSync stores fetched bookmarks", async () => {
       locale: "zh-CN",
       themePreference: "system",
       lastSyncSummary: createEmptySyncSummary(),
-      savedViews: []
+      savedViews: [],
+      autoTag: createDefaultAutoTagSettings()
     }),
     createSyncRun: async (syncRun) => {
       recordedSyncRuns.push({
@@ -90,7 +92,8 @@ test("runBookmarkSync default summary persistence updates saved settings", async
     savedViews: [],
     syncStrategyVersion: 1,
     hasCompletedInitialFullSync: false,
-    incrementalStopBufferPages: 3
+    incrementalStopBufferPages: 3,
+      autoTag: createDefaultAutoTagSettings(),
   }
 
   await runBookmarkSync({
@@ -135,7 +138,8 @@ test("runBookmarkSync does not delete bookmarks that are already stored locally"
       savedViews: [],
       syncStrategyVersion: 1,
       hasCompletedInitialFullSync: true,
-      incrementalStopBufferPages: 3
+      incrementalStopBufferPages: 3,
+      autoTag: createDefaultAutoTagSettings(),
     }),
     saveSettings: async () => {}
   })
@@ -162,7 +166,8 @@ test("runBookmarkSync uses buffered incremental mode after initial sync complete
       savedViews: [],
       syncStrategyVersion: 1,
       hasCompletedInitialFullSync: true,
-      incrementalStopBufferPages: 3
+      incrementalStopBufferPages: 3,
+      autoTag: createDefaultAutoTagSettings(),
     }),
     saveSettings: async () => {}
   })
@@ -177,7 +182,8 @@ test("runBookmarkSync does not mark initial full sync complete when the first sy
     savedViews: [],
     syncStrategyVersion: 1,
     hasCompletedInitialFullSync: false,
-    incrementalStopBufferPages: 3
+    incrementalStopBufferPages: 3,
+      autoTag: createDefaultAutoTagSettings(),
   }
 
   await assert.rejects(
@@ -311,7 +317,8 @@ test("runBookmarkSync clears stale sync errors when a later sync succeeds", asyn
     savedViews: [],
     syncStrategyVersion: 1,
     hasCompletedInitialFullSync: true,
-    incrementalStopBufferPages: 3
+    incrementalStopBufferPages: 3,
+      autoTag: createDefaultAutoTagSettings(),
   }
 
   await runBookmarkSync({

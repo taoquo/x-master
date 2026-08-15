@@ -8,6 +8,7 @@ import {
 } from "../../src/lib/export/exportBookmarks.ts"
 import { createEmptySyncSummary, type ExtensionSettings, type WorkspaceData } from "../../src/lib/types.ts"
 import { createEmptyWorkspaceStats } from "../../src/lib/workspace/stats.ts"
+import { createDefaultAutoTagSettings } from "../../src/lib/storage/settings.ts"
 
 function createWorkspaceData(overrides: Partial<WorkspaceData> = {}): WorkspaceData {
   return {
@@ -15,11 +16,12 @@ function createWorkspaceData(overrides: Partial<WorkspaceData> = {}): WorkspaceD
     tags: [],
     bookmarkTags: [],
     savedViews: [],
+    tagSuggestions: [],
     summary: createEmptySyncSummary(),
     latestSyncRun: null,
     stats: createEmptyWorkspaceStats(),
     ...overrides
-  }
+  } as WorkspaceData
 }
 
 function createSettings(overrides: Partial<ExtensionSettings> = {}): ExtensionSettings {
@@ -29,8 +31,9 @@ function createSettings(overrides: Partial<ExtensionSettings> = {}): ExtensionSe
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
     savedViews: [],
+    autoTag: createDefaultAutoTagSettings(),
     ...overrides
-  }
+  } as ExtensionSettings
 }
 
 test("createWorkspaceExportPayload includes workspace data and strips rawPayload", () => {

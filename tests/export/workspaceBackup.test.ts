@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import "fake-indexeddb/auto"
 import { getAllBookmarks, upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
-import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
+import { createDefaultAutoTagSettings, getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
 import { createSyncRun, getLatestSyncRun } from "../../src/lib/storage/syncRunsStore.ts"
 import { getAllBookmarkTags, getAllTags } from "../../src/lib/storage/tagsStore.ts"
 import { createEmptySyncSummary, type ExtensionSettings } from "../../src/lib/types.ts"
@@ -40,8 +40,9 @@ function createSettings(overrides: Partial<ExtensionSettings> = {}): ExtensionSe
     themePreference: "system",
     lastSyncSummary: createEmptySyncSummary(),
     savedViews: [],
+    autoTag: createDefaultAutoTagSettings(),
     ...overrides
-  }
+  } as ExtensionSettings
 }
 
 function createBackupPayload(overrides: Partial<WorkspaceExportPayload> = {}): WorkspaceExportPayload {

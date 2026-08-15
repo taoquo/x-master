@@ -1,7 +1,9 @@
 import {
   createEmptySyncSummary,
+  type AutoTagSettings,
   type ExtensionSettings,
   type Locale,
+  type KeywordTagRule,
   type SavedViewRecord,
   type SyncSummary,
   type ThemePreference
@@ -10,7 +12,7 @@ import type { BookmarkSortOrder } from "../search/searchBookmarks.ts"
 import { isSyncErrorKind } from "../x/syncErrors.ts"
 
 const SETTINGS_STORAGE_KEY = "settings"
-const SETTINGS_SCHEMA_VERSION = 5
+const SETTINGS_SCHEMA_VERSION = 6
 const SYNC_STRATEGY_VERSION = 1
 const DEFAULT_LOCALE: Locale = "en"
 const DEFAULT_THEME_PREFERENCE: ThemePreference = "system"
@@ -18,6 +20,10 @@ const DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES = 3
 const DEFAULT_LEFT_SIDEBAR_WIDTH = 280
 const DEFAULT_RIGHT_SIDEBAR_WIDTH = 360
 const SAVED_VIEW_SORT_ORDERS = new Set<BookmarkSortOrder>(["timeline", "saved-desc", "saved-asc", "created-desc", "likes-desc"])
+const DEFAULT_LLM_BASE_URL = "https://api.openai.com/v1"
+const DEFAULT_LLM_MODEL = "gpt-4o-mini"
+const DEFAULT_LLM_BATCH_SIZE = 10
+const DEFAULT_LLM_MAX_BOOKMARKS_PER_RUN = 200
 
 function normalizeLocale(locale: unknown): Locale {
   return locale === "en" || locale === "zh-CN" ? locale : DEFAULT_LOCALE
@@ -86,6 +92,68 @@ function normalizeRange(value: unknown, fallback: number, min: number, max: numb
   return Math.min(max, Math.max(min, normalized))
 }
 
+function normalizeKeywordRules(value: unknown): KeywordTagRule[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((rule) => ({
+      keyword: String((rule as Partial<KeywordTagRule>)?.keyword ?? "").trim(),
+      tagName: String((rule as Partial<KeywordTagRule>)?.tagName ?? "").trim()
+    }))
+    .filter((rule) => rule.keyword.length > 0 && rule.tagName.length > 0)
+}
+
+export function createDefaultAutoTagSettings(): AutoTagSettings {
+  return {
+    enabled: false,
+    runAfterSync: true,
+    heuristics: {
+      useHashtags: true,
+      useAuthors: true,
+      keywordRules: []
+    },
+    llm: {
+      enabled: false,
+      provider: "openai-compatible",
+      baseUrl: DEFAULT_LLM_BASE_URL,
+      model: DEFAULT_LLM_MODEL,
+      batchSize: DEFAULT_LLM_BATCH_SIZE,
+      maxBookmarksPerRun: DEFAULT_LLM_MAX_BOOKMARKS_PER_RUN,
+      tagVocabularyMode: "closed"
+    }
+  }
+}
+
+function normalizeAutoTagSettings(value: unknown): AutoTagSettings {
+  const defaults = createDefaultAutoTagSettings()
+  const record = (value ?? {}) as Partial<AutoTagSettings>
+  const heuristics = (record.heuristics ?? {}) as Partial<AutoTagSettings["heuristics"]>
+  const llm = (record.llm ?? {}) as Partial<AutoTagSettings["llm"]>
+  const baseUrl = String(llm.baseUrl ?? "").trim()
+  const model = String(llm.model ?? "").trim()
+
+  return {
+    enabled: Boolean(record.enabled),
+    runAfterSync: record.runAfterSync === undefined ? defaults.runAfterSync : Boolean(record.runAfterSync),
+    heuristics: {
+      useHashtags: heuristics.useHashtags === undefined ? defaults.heuristics.useHashtags : Boolean(heuristics.useHashtags),
+      useAuthors: heuristics.useAuthors === undefined ? defaults.heuristics.useAuthors : Boolean(heuristics.useAuthors),
+      keywordRules: normalizeKeywordRules(heuristics.keywordRules)
+    },
+    llm: {
+      enabled: Boolean(llm.enabled),
+      provider: "openai-compatible",
+      baseUrl: baseUrl || defaults.llm.baseUrl,
+      model: model || defaults.llm.model,
+      batchSize: normalizeRange(llm.batchSize, defaults.llm.batchSize, 1, 50),
+      maxBookmarksPerRun: normalizeRange(llm.maxBookmarksPerRun, defaults.llm.maxBookmarksPerRun, 1, 2000),
+      tagVocabularyMode: llm.tagVocabularyMode === "open" ? "open" : "closed"
+    }
+  }
+}
+
 function normalizeSyncSummary(summary: Partial<SyncSummary> | undefined): SyncSummary {
   const defaults = createEmptySyncSummary()
   const errorKind = isSyncErrorKind(summary?.errorKind) ? summary.errorKind : undefined
@@ -116,7 +184,9 @@ function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): Ex
     ),
     leftSidebarWidth: normalizeRange(settings?.leftSidebarWidth, DEFAULT_LEFT_SIDEBAR_WIDTH, 260, 420),
     rightSidebarWidth: normalizeRange(settings?.rightSidebarWidth, DEFAULT_RIGHT_SIDEBAR_WIDTH, 320, 520),
-    savedViews: normalizeSavedViews(settings?.savedViews)
+    savedViews: normalizeSavedViews(settings?.savedViews),
+    hashtagBackfillDone: Boolean(settings?.hashtagBackfillDone),
+    autoTag: normalizeAutoTagSettings(settings?.autoTag)
   }
 }
 
@@ -131,7 +201,9 @@ export function createDefaultSettings(): ExtensionSettings {
     incrementalStopBufferPages: DEFAULT_INCREMENTAL_STOP_BUFFER_PAGES,
     leftSidebarWidth: DEFAULT_LEFT_SIDEBAR_WIDTH,
     rightSidebarWidth: DEFAULT_RIGHT_SIDEBAR_WIDTH,
-    savedViews: []
+    savedViews: [],
+    hashtagBackfillDone: false,
+    autoTag: createDefaultAutoTagSettings()
   }
 }
 

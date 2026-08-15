@@ -13,6 +13,7 @@ export interface BookmarkRecord {
   savedAt: string
   lastSeenAt?: string
   bookmarkTimelineRank?: number
+  hashtags?: string[]
   media?: Array<{ type: string; url: string; posterUrl?: string; altText?: string }>
   metrics?: { likes: number; retweets: number; replies: number }
   updatedAt?: string
@@ -44,6 +45,21 @@ export interface BookmarkTagRecord {
   bookmarkId: string
   tagId: string
   createdAt: string
+}
+
+export type TagSuggestionSource = "hashtag" | "author" | "keyword" | "llm"
+
+export type TagSuggestionStatus = "pending" | "accepted" | "rejected"
+
+export interface TagSuggestionRecord {
+  id: string
+  bookmarkId: string
+  tagName: string
+  source: TagSuggestionSource
+  confidence: number
+  status: TagSuggestionStatus
+  createdAt: string
+  resolvedAt?: string
 }
 
 export interface SavedViewRecord {
@@ -103,8 +119,37 @@ export type ThemePreference = "system" | "light" | "dark"
 export interface WorkspaceStats {
   totalBookmarks: number
   unclassifiedCount: number
+  pendingSuggestionCount: number
   tagCounts: TagStat[]
   topAuthors: AuthorStat[]
+}
+
+export interface KeywordTagRule {
+  keyword: string
+  tagName: string
+}
+
+export type TagVocabularyMode = "closed" | "open"
+
+export interface AutoTagLlmSettings {
+  enabled: boolean
+  provider: "openai-compatible"
+  baseUrl: string
+  model: string
+  batchSize: number
+  maxBookmarksPerRun: number
+  tagVocabularyMode: TagVocabularyMode
+}
+
+export interface AutoTagSettings {
+  enabled: boolean
+  runAfterSync: boolean
+  heuristics: {
+    useHashtags: boolean
+    useAuthors: boolean
+    keywordRules: KeywordTagRule[]
+  }
+  llm: AutoTagLlmSettings
 }
 
 export interface ExtensionSettings {
@@ -114,16 +159,19 @@ export interface ExtensionSettings {
   lastSyncSummary: SyncSummary
   syncStrategyVersion?: number
   hasCompletedInitialFullSync?: boolean
+  hashtagBackfillDone?: boolean
   incrementalStopBufferPages?: number
   leftSidebarWidth?: number
   rightSidebarWidth?: number
   savedViews: SavedViewRecord[]
+  autoTag: AutoTagSettings
 }
 
 export interface WorkspaceData {
   bookmarks: BookmarkRecord[]
   tags: TagRecord[]
   bookmarkTags: BookmarkTagRecord[]
+  tagSuggestions: TagSuggestionRecord[]
   savedViews: SavedViewRecord[]
   summary: SyncSummary
   latestSyncRun: SyncRunRecord | null

@@ -19,6 +19,7 @@ test("background message handler loads workspace data", async () => {
       bookmarkTags: [],
       latestSyncRun: null,
       savedViews: [],
+      tagSuggestions: [],
       summary: {
         status: "idle",
         fetchedCount: 0,
@@ -29,6 +30,7 @@ test("background message handler loads workspace data", async () => {
       stats: {
         totalBookmarks: 0,
         unclassifiedCount: 0,
+        pendingSuggestionCount: 0,
         tagCounts: [],
         topAuthors: []
       }
@@ -67,6 +69,7 @@ test("background message handler starts sync in the background", async () => {
       bookmarkTags: [],
       latestSyncRun: null,
       savedViews: [],
+      tagSuggestions: [],
       summary: {
         status: "idle",
         fetchedCount: 0,
@@ -77,6 +80,7 @@ test("background message handler starts sync in the background", async () => {
       stats: {
         totalBookmarks: 0,
         unclassifiedCount: 0,
+        pendingSuggestionCount: 0,
         tagCounts: [],
         topAuthors: []
       }
@@ -126,6 +130,7 @@ test("background message handler resets local data", async () => {
       bookmarkTags: [],
       latestSyncRun: null,
       savedViews: [],
+      tagSuggestions: [],
       summary: {
         status: "idle",
         fetchedCount: 0,
@@ -136,6 +141,7 @@ test("background message handler resets local data", async () => {
       stats: {
         totalBookmarks: 0,
         unclassifiedCount: 0,
+        pendingSuggestionCount: 0,
         tagCounts: [],
         topAuthors: []
       }
@@ -164,6 +170,7 @@ test("background message handler prepares site tweet tagging state", async () =>
       bookmarkTags: [],
       latestSyncRun: null,
       savedViews: [],
+      tagSuggestions: [],
       summary: {
         status: "idle",
         fetchedCount: 0,
@@ -174,6 +181,7 @@ test("background message handler prepares site tweet tagging state", async () =>
       stats: {
         totalBookmarks: 0,
         unclassifiedCount: 0,
+        pendingSuggestionCount: 0,
         tagCounts: [],
         topAuthors: []
       }
@@ -236,6 +244,7 @@ test("background message handler routes site tag toggles and site tag creation",
       bookmarkTags: [],
       latestSyncRun: null,
       savedViews: [],
+      tagSuggestions: [],
       summary: {
         status: "idle",
         fetchedCount: 0,
@@ -246,6 +255,7 @@ test("background message handler routes site tag toggles and site tag creation",
       stats: {
         totalBookmarks: 0,
         unclassifiedCount: 0,
+        pendingSuggestionCount: 0,
         tagCounts: [],
         topAuthors: []
       }
@@ -318,6 +328,7 @@ test("background message handler routes site bookmark sync", async () => {
       bookmarkTags: [],
       latestSyncRun: null,
       savedViews: [],
+      tagSuggestions: [],
       summary: {
         status: "idle",
         fetchedCount: 0,
@@ -328,6 +339,7 @@ test("background message handler routes site bookmark sync", async () => {
       stats: {
         totalBookmarks: 0,
         unclassifiedCount: 0,
+        pendingSuggestionCount: 0,
         tagCounts: [],
         topAuthors: []
       }

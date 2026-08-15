@@ -3,6 +3,7 @@ import type {
   BookmarkRecord,
   BookmarkTagRecord,
   TagRecord,
+  TagSuggestionRecord,
   WorkspaceStats
 } from "../types.ts"
 
@@ -10,6 +11,7 @@ export function createEmptyWorkspaceStats(): WorkspaceStats {
   return {
     totalBookmarks: 0,
     unclassifiedCount: 0,
+    pendingSuggestionCount: 0,
     tagCounts: [],
     topAuthors: []
   }
@@ -19,11 +21,13 @@ export function buildWorkspaceStats({
   bookmarks,
   tags,
   bookmarkTags,
+  tagSuggestions = [],
   topAuthorLimit = 5
 }: {
   bookmarks: BookmarkRecord[]
   tags: TagRecord[]
   bookmarkTags: BookmarkTagRecord[]
+  tagSuggestions?: TagSuggestionRecord[]
   topAuthorLimit?: number
 }): WorkspaceStats {
   const tagCountById = new Map<string, number>()
@@ -65,6 +69,7 @@ export function buildWorkspaceStats({
   return {
     totalBookmarks: bookmarks.length,
     unclassifiedCount: bookmarks.filter((bookmark) => !bookmarkIdsWithTags.has(bookmark.tweetId)).length,
+    pendingSuggestionCount: tagSuggestions.filter((suggestion) => suggestion.status === "pending").length,
     tagCounts,
     topAuthors
   }

@@ -30,7 +30,7 @@ test("getSettings returns bookmark-manager defaults", async () => {
 
   const settings = await getSettings()
 
-  assert.equal(settings.schemaVersion, 5)
+  assert.equal(settings.schemaVersion, 6)
   assert.equal(settings.locale, "en")
   assert.equal(settings.themePreference, "system")
   assert.equal(settings.lastSyncSummary.status, "idle")
@@ -66,7 +66,7 @@ test("getSettings migrates legacy stored fields into the reduced settings shape"
 
   const settings = await getSettings()
 
-  assert.equal(settings.schemaVersion, 5)
+  assert.equal(settings.schemaVersion, 6)
   assert.equal(settings.locale, "en")
   assert.equal(settings.themePreference, "system")
   assert.equal(settings.lastSyncSummary.status, "success")
@@ -236,10 +236,73 @@ test("getSettings silently drops legacy classificationRules from stored settings
 
   const settings = await getSettings()
 
-  assert.equal(settings.schemaVersion, 5)
+  assert.equal(settings.schemaVersion, 6)
   assert.equal("classificationRules" in settings, false)
 
   await saveSettings(settings)
   const persisted = storage.getStoredValue() as Record<string, unknown>
   assert.equal("classificationRules" in persisted, false)
+})
+
+test("getSettings applies autoTag defaults and normalizes invalid values", async () => {
+  const storage = installChromeStorageMock()
+  storage.setStoredValue({
+    schemaVersion: 5,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    savedViews: []
+  })
+
+  const settings = await getSettings()
+
+  assert.equal(settings.schemaVersion, 6)
+  assert.equal(settings.autoTag.enabled, false)
+  assert.equal(settings.autoTag.runAfterSync, true)
+  assert.equal(settings.autoTag.heuristics.useHashtags, true)
+  assert.equal(settings.autoTag.heuristics.useAuthors, true)
+  assert.deepEqual(settings.autoTag.heuristics.keywordRules, [])
+  assert.equal(settings.autoTag.llm.enabled, false)
+  assert.equal(settings.autoTag.llm.provider, "openai-compatible")
+  assert.equal(settings.autoTag.llm.baseUrl, "https://api.openai.com/v1")
+  assert.equal(settings.autoTag.llm.tagVocabularyMode, "closed")
+  assert.equal(settings.hashtagBackfillDone, false)
+
+  storage.setStoredValue({
+    schemaVersion: 6,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary(),
+    savedViews: [],
+    hashtagBackfillDone: true,
+    autoTag: {
+      enabled: true,
+      heuristics: {
+        keywordRules: [
+          { keyword: " rust ", tagName: " Rust " },
+          { keyword: "", tagName: "Empty" },
+          { keyword: "orphan", tagName: "" }
+        ]
+      },
+      llm: {
+        enabled: true,
+        baseUrl: "  https://proxy.example.com/v1  ",
+        model: "  ",
+        batchSize: 999,
+        maxBookmarksPerRun: 0,
+        tagVocabularyMode: "open"
+      }
+    }
+  })
+
+  const customized = await getSettings()
+
+  assert.equal(customized.autoTag.enabled, true)
+  assert.equal(customized.hashtagBackfillDone, true)
+  assert.deepEqual(customized.autoTag.heuristics.keywordRules, [{ keyword: "rust", tagName: "Rust" }])
+  assert.equal(customized.autoTag.llm.baseUrl, "https://proxy.example.com/v1")
+  assert.equal(customized.autoTag.llm.model, "gpt-4o-mini")
+  assert.equal(customized.autoTag.llm.batchSize, 50)
+  assert.equal(customized.autoTag.llm.maxBookmarksPerRun, 200)
+  assert.equal(customized.autoTag.llm.tagVocabularyMode, "open")
 })
