@@ -112,6 +112,8 @@ export function WorkspaceSidebar({
   lastSyncLabel,
   activeTagIds,
   activeAuthorHandles,
+  showPendingSuggestionsOnly,
+  onTogglePendingSuggestions,
   authorItems,
   authorSearchQuery,
   authorsExpanded,
@@ -143,6 +145,8 @@ export function WorkspaceSidebar({
   lastSyncLabel: string
   activeTagIds: string[]
   activeAuthorHandles: string[]
+  showPendingSuggestionsOnly: boolean
+  onTogglePendingSuggestions: () => void
   authorItems: AuthorSidebarItem[]
   authorSearchQuery: string
   authorsExpanded: boolean
@@ -447,6 +451,30 @@ export function WorkspaceSidebar({
                   </span>
                   <span className="options-nav-count">{workspace.stats.totalBookmarks}</span>
                 </div>
+
+                {workspace.stats.pendingSuggestionCount ? (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    data-testid="sidebar-pending-suggestions"
+                    onClick={onTogglePendingSuggestions}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        onTogglePendingSuggestions()
+                      }
+                    }}
+                    className={cn(
+                      "options-nav-row options-nav-row-suggestions w-full text-left",
+                      showPendingSuggestionsOnly && "options-nav-row-active"
+                    )}>
+                    <span className="options-nav-row-main">
+                      <AppIcon name="tag" size={14} className="options-nav-row-icon" />
+                      <span>{copy.pendingSuggestionsTitle}</span>
+                    </span>
+                    <span className="options-nav-count">{workspace.stats.pendingSuggestionCount}</span>
+                  </div>
+                ) : null}
 
                 {isCreatingTagInline ? (
                   <div data-testid="sidebar-create-tag-row" className="options-nav-row options-nav-row-draft">

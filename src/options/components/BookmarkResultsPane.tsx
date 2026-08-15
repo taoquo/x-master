@@ -1,5 +1,5 @@
 import React from "react"
-import type { BookmarkRecord, Locale, TagRecord } from "../../lib/types.ts"
+import type { BookmarkRecord, Locale, TagRecord, TagSuggestionRecord } from "../../lib/types.ts"
 import type { BookmarkSortOrder } from "../../lib/search/searchBookmarks.ts"
 import { AppIcon } from "../../ui/icons.tsx"
 import type { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
@@ -104,6 +104,11 @@ export function BookmarkResultsPane({
   renderedBookmarks,
   activeRefinementChips,
   tagNamesByBookmarkId,
+  pendingSuggestionsByBookmarkId,
+  visiblePendingSuggestionCount,
+  onAcceptSuggestion,
+  onRejectSuggestion,
+  onAcceptVisibleSuggestions,
   selectedBulkBookmarkIds,
   bulkTagId,
   onBulkTagIdChange,
@@ -139,6 +144,11 @@ export function BookmarkResultsPane({
   renderedBookmarks: BookmarkRecord[]
   activeRefinementChips: Array<{ key: string; label: string }>
   tagNamesByBookmarkId: Map<string, string[]>
+  pendingSuggestionsByBookmarkId: Map<string, TagSuggestionRecord[]>
+  visiblePendingSuggestionCount: number
+  onAcceptSuggestion: (suggestionId: string) => void
+  onRejectSuggestion: (suggestionId: string) => void
+  onAcceptVisibleSuggestions: () => void
   selectedBulkBookmarkIds: Set<string>
   bulkTagId: string
   onBulkTagIdChange: (tagId: string) => void
@@ -203,6 +213,28 @@ export function BookmarkResultsPane({
               onApplyTag={onApplyBulkTag}
             />
 
+            {visiblePendingSuggestionCount ? (
+              <div data-testid="suggestions-actions-bar" className="options-bulk-actions-bar options-theme-panel">
+                <div className="options-bulk-actions-meta">
+                  <AppIcon name="tag" size={14} />
+                  <span>
+                    {visiblePendingSuggestionCount} {copy.pendingSuggestionsTitle}
+                  </span>
+                </div>
+                <div className="options-bulk-actions-controls">
+                  <button
+                    type="button"
+                    data-testid="suggestions-accept-all"
+                    className="options-secondary-button"
+                    disabled={workspace.isSavingTags}
+                    onClick={onAcceptVisibleSuggestions}>
+                    <AppIcon name="check" size={14} />
+                    {copy.acceptAllSuggestions}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             {isLoading ? (
               <FeedLoadingState copy={copy} />
             ) : showLoadErrorState ? (
@@ -243,6 +275,7 @@ export function BookmarkResultsPane({
                       bookmark={bookmark}
                       index={index}
                       currentTagNames={currentTagNames}
+                      pendingSuggestions={pendingSuggestionsByBookmarkId.get(bookmark.tweetId) ?? []}
                       selected={isSelected}
                       bulkSelected={selectedBulkBookmarkIds.has(bookmark.tweetId)}
                       viewMode={viewMode}
@@ -250,6 +283,8 @@ export function BookmarkResultsPane({
                       copy={copy}
                       onSelect={() => setSelectedBookmarkId(bookmark.tweetId)}
                       onBulkToggle={() => onBulkToggleBookmark(bookmark.tweetId)}
+                      onAcceptSuggestion={onAcceptSuggestion}
+                      onRejectSuggestion={onRejectSuggestion}
                     />
                   )
                 })}

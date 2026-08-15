@@ -1,5 +1,5 @@
 import React, { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
-import type { SavedViewRecord } from "../lib/types.ts"
+import type { SavedViewRecord, TagSuggestionRecord } from "../lib/types.ts"
 import {
   filterBookmarks,
   filterBookmarksByAuthors,
@@ -49,6 +49,7 @@ function OptionsScreen() {
   const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | undefined>(undefined)
   const [selectedBulkBookmarkIds, setSelectedBulkBookmarkIds] = useState<Set<string>>(() => new Set())
   const [bulkTagId, setBulkTagId] = useState("")
+  const [showPendingSuggestionsOnly, setShowPendingSuggestionsOnly] = useState(false)
   const [currentViewName, setCurrentViewName] = useState("")
   const [renderLimit, setRenderLimit] = useState(INITIAL_RESULTS_RENDER_LIMIT)
   const resizeStateRef = useRef<null | { side: "left" | "right"; startX: number; startWidth: number }>(null)
@@ -126,6 +127,21 @@ function OptionsScreen() {
 
   const tagsById = useMemo(() => new Map(workspace.tags.map((tag) => [tag.id, tag])), [workspace.tags])
   const authorItems = useMemo(() => buildAuthorSidebarItems(workspace.bookmarks), [workspace.bookmarks])
+  const pendingSuggestionsByBookmarkId = useMemo(() => {
+    const map = new Map<string, TagSuggestionRecord[]>()
+
+    for (const suggestion of workspace.tagSuggestions) {
+      if (suggestion.status !== "pending") {
+        continue
+      }
+
+      const suggestions = map.get(suggestion.bookmarkId) ?? []
+      suggestions.push(suggestion)
+      map.set(suggestion.bookmarkId, suggestions)
+    }
+
+    return map
+  }, [workspace.tagSuggestions])
   const bookmarkTagIdsByBookmarkId = useMemo(() => {
     const map = new Map<string, Set<string>>()
 
@@ -144,10 +160,13 @@ function OptionsScreen() {
         : workspace.bookmarks.filter((bookmark) =>
             activeTagIds.every((tagId) => bookmarkTagIdsByBookmarkId.get(bookmark.tweetId)?.has(tagId))
           )
+      const suggestionScopedBookmarks = showPendingSuggestionsOnly
+        ? scopedBookmarks.filter((bookmark) => pendingSuggestionsByBookmarkId.has(bookmark.tweetId))
+        : scopedBookmarks
 
       return sortBookmarks(
         filterBookmarksByFlags(
-          filterBookmarks(filterBookmarksByAuthors(scopedBookmarks, activeAuthorHandles), deferredQuery),
+          filterBookmarks(filterBookmarksByAuthors(suggestionScopedBookmarks, activeAuthorHandles), deferredQuery),
           {
             onlyWithMedia,
             onlyLongform
@@ -164,6 +183,8 @@ function OptionsScreen() {
       activeAuthorHandles,
       activeTagIds,
       bookmarkTagIdsByBookmarkId,
+      pendingSuggestionsByBookmarkId,
+      showPendingSuggestionsOnly,
       workspace.bookmarks
     ]
   )
@@ -299,6 +320,7 @@ function OptionsScreen() {
     if (tagId === "all") {
       setActiveTagIds(["all"])
       setActiveAuthorHandles([])
+      setShowPendingSuggestionsOnly(false)
       return
     }
 
@@ -358,6 +380,31 @@ function OptionsScreen() {
 
     await workspace.handleBulkAttachTag([...selectedBulkBookmarkIds], bulkTagId)
     handleClearBulkSelection()
+  }
+
+  const visiblePendingSuggestionIds = useMemo(() => {
+    const ids: string[] = []
+
+    for (const bookmark of visibleBookmarks) {
+      const suggestions = pendingSuggestionsByBookmarkId.get(bookmark.tweetId)
+      if (!suggestions) {
+        continue
+      }
+
+      for (const suggestion of suggestions) {
+        ids.push(suggestion.id)
+      }
+    }
+
+    return ids
+  }, [pendingSuggestionsByBookmarkId, visibleBookmarks])
+
+  async function handleAcceptVisibleSuggestions() {
+    if (!visiblePendingSuggestionIds.length) {
+      return
+    }
+
+    await workspace.handleAcceptSuggestionsBulk(visiblePendingSuggestionIds)
   }
 
   function getCurrentViewSnapshot(): ViewStateSnapshot {
@@ -443,6 +490,8 @@ function OptionsScreen() {
                 lastSyncLabel={lastSyncLabel}
                 activeTagIds={activeTagIds}
                 activeAuthorHandles={activeAuthorHandles}
+                showPendingSuggestionsOnly={showPendingSuggestionsOnly}
+                onTogglePendingSuggestions={() => setShowPendingSuggestionsOnly((current) => !current)}
                 authorItems={authorItems}
                 authorSearchQuery={authorSearchQuery}
                 authorsExpanded={authorsExpanded}
@@ -517,6 +566,11 @@ function OptionsScreen() {
                 renderedBookmarks={renderedBookmarks}
                 activeRefinementChips={activeRefinementChips}
                 tagNamesByBookmarkId={tagNamesByBookmarkId}
+                pendingSuggestionsByBookmarkId={pendingSuggestionsByBookmarkId}
+                visiblePendingSuggestionCount={visiblePendingSuggestionIds.length}
+                onAcceptSuggestion={(suggestionId) => void workspace.handleAcceptSuggestion(suggestionId)}
+                onRejectSuggestion={(suggestionId) => void workspace.handleRejectSuggestion(suggestionId)}
+                onAcceptVisibleSuggestions={() => void handleAcceptVisibleSuggestions()}
                 selectedBulkBookmarkIds={selectedBulkBookmarkIds}
                 bulkTagId={bulkTagId}
                 onBulkTagIdChange={setBulkTagId}

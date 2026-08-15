@@ -1,5 +1,5 @@
 import React from "react"
-import type { BookmarkRecord, Locale } from "../../lib/types.ts"
+import type { BookmarkRecord, Locale, TagSuggestionRecord } from "../../lib/types.ts"
 import { AppIcon } from "../../ui/icons.tsx"
 import type { OptionsCopy } from "../i18n/copy.ts"
 import {
@@ -72,17 +72,21 @@ export function BookmarkCard({
   bookmark,
   index,
   currentTagNames,
+  pendingSuggestions,
   selected,
   bulkSelected,
   viewMode,
   locale,
   copy,
   onSelect,
-  onBulkToggle
+  onBulkToggle,
+  onAcceptSuggestion,
+  onRejectSuggestion
 }: {
   bookmark: BookmarkRecord
   index: number
   currentTagNames: string[]
+  pendingSuggestions: TagSuggestionRecord[]
   selected: boolean
   bulkSelected: boolean
   viewMode: "grid" | "list"
@@ -90,6 +94,8 @@ export function BookmarkCard({
   copy: OptionsCopy
   onSelect: () => void
   onBulkToggle: () => void
+  onAcceptSuggestion: (suggestionId: string) => void
+  onRejectSuggestion: (suggestionId: string) => void
 }) {
   const authorInitials = bookmark.authorName
     .split(/\s+/)
@@ -100,7 +106,7 @@ export function BookmarkCard({
   const showsInlineMedia = viewMode === "list" && !!bookmark.media?.length
   const hasTopMediaPreview = !showsInlineMedia && !!bookmark.media?.length
   const mediaPreview = <PreviewMedia bookmark={bookmark} index={index} className={showsInlineMedia ? "options-card-media-inline" : undefined} />
-  const hasTags = currentTagNames.length > 0
+  const hasTags = currentTagNames.length > 0 || pendingSuggestions.length > 0
   const visibleTagNames = getVisibleCardTagNames(currentTagNames, viewMode)
   const listCopyDensityClass = getListCopyDensityClass(bookmark.text, !!bookmark.media?.length, hasTags)
   const listCardTemplateClass = viewMode === "list" ? getListCardTemplateClass(!!bookmark.media?.length, hasTags, listCopyDensityClass) : undefined
@@ -176,11 +182,41 @@ export function BookmarkCard({
                   </p>
                 </div>
 
-                {visibleTagNames.length ? (
+                {visibleTagNames.length || pendingSuggestions.length ? (
                   <div className="options-card-tags">
                     {visibleTagNames.map((tagName) => (
                       <span key={tagName} className="options-card-tag">
                         {tagName}
+                      </span>
+                    ))}
+                    {pendingSuggestions.map((suggestion) => (
+                      <span
+                        key={suggestion.id}
+                        data-testid="suggestion-chip"
+                        data-suggestion-id={suggestion.id}
+                        className="options-card-tag options-card-tag-suggestion">
+                        <button
+                          type="button"
+                          data-testid="suggestion-accept"
+                          aria-label={`${copy.acceptSuggestionLabel} ${suggestion.tagName}`}
+                          className="options-card-tag-suggestion-accept"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onAcceptSuggestion(suggestion.id)
+                          }}>
+                          {suggestion.tagName}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="suggestion-reject"
+                          aria-label={`${copy.rejectSuggestionLabel} ${suggestion.tagName}`}
+                          className="options-card-tag-suggestion-reject"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onRejectSuggestion(suggestion.id)
+                          }}>
+                          <AppIcon name="close" size={10} />
+                        </button>
                       </span>
                     ))}
                   </div>

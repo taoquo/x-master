@@ -9,6 +9,11 @@ import {
 import { resetStoredData } from "../../lib/runtime/popupClient.ts"
 import { runSyncAndWait } from "../../lib/runtime/syncStatus.ts"
 import { subscribeSyncProgress, type SyncProgress } from "../../lib/runtime/syncProgress.ts"
+import {
+  acceptTagSuggestion,
+  acceptTagSuggestionsBulk,
+  rejectTagSuggestion
+} from "../../lib/autotag/suggestionActions.ts"
 import { getSettings, saveSettings } from "../../lib/storage/settings.ts"
 import { attachTagToBookmark, attachTagToBookmarks, createTag, deleteTag, detachTagFromBookmark, renameTag } from "../../lib/storage/tagsStore.ts"
 import type { BookmarkTagRecord, SavedViewRecord, TagRecord, WorkspaceData } from "../../lib/types.ts"
@@ -36,10 +41,10 @@ export function useWorkspaceCommands({
   getWorkspaceData,
   applyWorkspacePatch
 }: {
-  refreshData: () => Promise<void>
+  refreshData: (options?: { background?: boolean }) => Promise<void>
   getWorkspaceData: () => WorkspaceData
   applyWorkspacePatch: (
-    mutate: (current: Pick<WorkspaceData, "tags" | "bookmarkTags">) => WorkspaceTagPatch
+    mutate: (current: Pick<WorkspaceData, "tags" | "bookmarkTags" | "tagSuggestions">) => WorkspaceTagPatch
   ) => void
 }) {
   const [isSyncing, setIsSyncing] = useState(false)
@@ -303,6 +308,66 @@ export function useWorkspaceCommands({
     }
   }
 
+  async function handleAcceptSuggestion(suggestionId: string) {
+    setCommandError(null)
+    setIsSavingTags(true)
+
+    try {
+      const accepted = await acceptTagSuggestion(suggestionId)
+      if (accepted) {
+        applyWorkspacePatch(({ tagSuggestions }) => ({
+          tagSuggestions: tagSuggestions.map((suggestion) =>
+            suggestion.id === suggestionId ? accepted : suggestion
+          )
+        }))
+      }
+      // Accepting may create a tag and attach it; reload those in the background.
+      await refreshData({ background: true })
+    } catch (error) {
+      setCommandError(toErrorMessage(error, "Failed to accept suggestion"))
+      throw error
+    } finally {
+      setIsSavingTags(false)
+    }
+  }
+
+  async function handleRejectSuggestion(suggestionId: string) {
+    setCommandError(null)
+
+    try {
+      const rejected = await rejectTagSuggestion(suggestionId)
+      if (rejected) {
+        applyWorkspacePatch(({ tagSuggestions }) => ({
+          tagSuggestions: tagSuggestions.map((suggestion) =>
+            suggestion.id === suggestionId ? rejected : suggestion
+          )
+        }))
+      }
+    } catch (error) {
+      setCommandError(toErrorMessage(error, "Failed to reject suggestion"))
+      throw error
+    }
+  }
+
+  async function handleAcceptSuggestionsBulk(suggestionIds: string[]) {
+    if (!suggestionIds.length) {
+      return
+    }
+
+    setCommandError(null)
+    setIsSavingTags(true)
+
+    try {
+      await acceptTagSuggestionsBulk(suggestionIds)
+      await refreshData({ background: true })
+    } catch (error) {
+      setCommandError(toErrorMessage(error, "Failed to accept suggestions"))
+      throw error
+    } finally {
+      setIsSavingTags(false)
+    }
+  }
+
   async function handleSaveViews(savedViews: SavedViewRecord[]) {
     setCommandError(null)
 
@@ -342,6 +407,9 @@ export function useWorkspaceCommands({
     handleAttachTag,
     handleDetachTag,
     handleBulkAttachTag,
+    handleAcceptSuggestion,
+    handleRejectSuggestion,
+    handleAcceptSuggestionsBulk,
     handleSaveViews
   }
 }

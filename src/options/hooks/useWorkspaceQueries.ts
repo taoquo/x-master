@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import type { BookmarkTagRecord, TagRecord, WorkspaceData } from "../../lib/types.ts"
+import type { BookmarkTagRecord, TagRecord, TagSuggestionRecord, WorkspaceData } from "../../lib/types.ts"
 import { createEmptySyncSummary } from "../../lib/types.ts"
 import { buildWorkspaceStats, createEmptyWorkspaceStats } from "../../lib/workspace/stats.ts"
 import { loadWorkspaceDataFromLocal } from "../../lib/workspace/loadWorkspaceData.ts"
@@ -7,6 +7,7 @@ import { loadWorkspaceDataFromLocal } from "../../lib/workspace/loadWorkspaceDat
 export type WorkspaceTagPatch = {
   tags?: TagRecord[]
   bookmarkTags?: BookmarkTagRecord[]
+  tagSuggestions?: TagSuggestionRecord[]
 }
 
 function createEmptyWorkspaceData(): WorkspaceData {
@@ -50,22 +51,28 @@ export function useWorkspaceQueries() {
   }
 
   function applyWorkspacePatch(
-    mutate: (current: Pick<WorkspaceData, "tags" | "bookmarkTags">) => WorkspaceTagPatch
+    mutate: (current: Pick<WorkspaceData, "tags" | "bookmarkTags" | "tagSuggestions">) => WorkspaceTagPatch
   ) {
     setData((previous) => {
-      const patch = mutate({ tags: previous.tags, bookmarkTags: previous.bookmarkTags })
+      const patch = mutate({
+        tags: previous.tags,
+        bookmarkTags: previous.bookmarkTags,
+        tagSuggestions: previous.tagSuggestions
+      })
       const tags = patch.tags ?? previous.tags
       const bookmarkTags = patch.bookmarkTags ?? previous.bookmarkTags
+      const tagSuggestions = patch.tagSuggestions ?? previous.tagSuggestions
 
       return {
         ...previous,
         tags,
         bookmarkTags,
+        tagSuggestions,
         stats: buildWorkspaceStats({
           bookmarks: previous.bookmarks,
           tags,
           bookmarkTags,
-          tagSuggestions: previous.tagSuggestions
+          tagSuggestions
         })
       }
     })
