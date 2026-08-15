@@ -6,6 +6,7 @@ import {
   type AuthorSidebarItem
 } from "../authorSidebar.ts"
 import type { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
+import type { useDataSafetyActions } from "../hooks/useDataSafetyActions.ts"
 import { formatSyncProgressLabel } from "../../lib/runtime/syncProgress.ts"
 import { StatusBadge } from "../../ui/components.tsx"
 import { BrandLogo } from "../../ui/branding.tsx"
@@ -136,7 +137,8 @@ export function WorkspaceSidebar({
   onDeleteSavedView,
   setLocale,
   setThemePreference,
-  onOpenSettings
+  onOpenSettings,
+  dataSafety
 }: {
   workspace: ReturnType<typeof useWorkspaceData>
   locale: Locale
@@ -171,6 +173,7 @@ export function WorkspaceSidebar({
   setLocale: (locale: Locale) => Promise<void>
   setThemePreference: (themePreference: "system" | "light" | "dark") => Promise<void>
   onOpenSettings: () => void
+  dataSafety: ReturnType<typeof useDataSafetyActions>
 }) {
   const tagCountById = workspace.bookmarkTags.reduce((map, bookmarkTag) => {
     map.set(bookmarkTag.tagId, (map.get(bookmarkTag.tagId) ?? 0) + 1)
@@ -184,7 +187,6 @@ export function WorkspaceSidebar({
   const [isSubmittingDraftTag, setIsSubmittingDraftTag] = useState(false)
   const draftTagInputRef = useRef<HTMLInputElement | null>(null)
   const renameTagInputRef = useRef<HTMLInputElement | null>(null)
-  const restoreInputRef = useRef<HTMLInputElement | null>(null)
   const draftTagBlurIntentRef = useRef<"idle" | "submit" | "cancel">("idle")
   const renameTagBlurIntentRef = useRef<"idle" | "submit" | "cancel">("idle")
   const { items: visibleAuthorItems, shouldShowToggle: shouldShowAuthorToggle } = getVisibleAuthorSidebarItems({
@@ -227,56 +229,6 @@ export function WorkspaceSidebar({
     setRenamingTagId(null)
     setRenamingTagName("")
     setIsSubmittingRenameTag(false)
-  }
-
-  function resetFileInput(input: HTMLInputElement | null) {
-    if (input) {
-      input.value = ""
-    }
-  }
-
-  function reloadOptionsPage() {
-    if (typeof location !== "undefined" && typeof location.reload === "function") {
-      location.reload()
-      return
-    }
-
-    if (typeof window !== "undefined" && typeof window.location?.reload === "function") {
-      window.location.reload()
-    }
-  }
-
-  async function handleRestoreFile(file: File | undefined, input: HTMLInputElement | null) {
-    if (!file) {
-      return
-    }
-
-    try {
-      await workspace.handleValidateBackupFile(file)
-      const shouldRestore = typeof window.confirm === "function" ? window.confirm(copy.restoreBackupConfirm) : true
-      if (shouldRestore) {
-        await workspace.handleRestoreBackupFile(file)
-        reloadOptionsPage()
-      }
-    } catch {
-      // The shared command error area renders the failure.
-    } finally {
-      resetFileInput(input)
-    }
-  }
-
-  async function handleResetLocalData() {
-    const shouldReset = typeof window.confirm === "function" ? window.confirm(copy.resetLocalDataConfirm) : true
-    if (!shouldReset) {
-      return
-    }
-
-    try {
-      await workspace.handleResetLocalData()
-      reloadOptionsPage()
-    } catch {
-      // The shared command error area renders the failure.
-    }
   }
 
   async function submitInlineTagDraft(nextName?: string) {
@@ -749,6 +701,7 @@ export function WorkspaceSidebar({
                 type="button"
                 data-testid="footer-locale-toggle"
                 aria-label={copy.languageLabel}
+                title={copy.languageLabel}
                 onClick={() => void setLocale(locale === "zh-CN" ? "en" : "zh-CN")}
                 className="options-footer-chip">
                 {locale === "zh-CN" ? "中" : "EN"}
@@ -758,6 +711,7 @@ export function WorkspaceSidebar({
                 data-testid="footer-theme-toggle"
                 onClick={() => void setThemePreference(getNextThemePreference(themePreference, resolvedTheme))}
                 className="options-footer-icon-button"
+                title={copy.themeLabel}
                 aria-label={copy.themeLabel}>
                 <AppIcon name={resolvedTheme === "dark" ? "moon" : "sun"} size={14} />
               </button>
@@ -766,6 +720,7 @@ export function WorkspaceSidebar({
                 data-testid="footer-settings-toggle"
                 onClick={onOpenSettings}
                 className="options-footer-icon-button"
+                title={copy.openSettings}
                 aria-label={copy.openSettings}>
                 <AppIcon name="settings" size={14} />
               </button>
@@ -780,36 +735,39 @@ export function WorkspaceSidebar({
                 onClick={() => void workspace.handleExportWorkspace()}
                 disabled={workspace.isExporting}
                 className="options-footer-icon-button"
+                title={workspace.isExporting ? copy.exporting : copy.exportData}
                 aria-label={copy.exportData}>
                 <AppIcon name="export" size={14} />
               </button>
               <button
                 type="button"
                 data-testid="data-safety-restore-backup"
-                onClick={() => restoreInputRef.current?.click()}
+                onClick={dataSafety.openRestorePicker}
                 disabled={workspace.isValidatingBackup || workspace.isRestoringBackup}
                 className="options-footer-icon-button"
+                title={copy.restoreBackup}
                 aria-label={copy.restoreBackup}>
                 <AppIcon name="import" size={14} />
               </button>
               <button
                 type="button"
                 data-testid="data-safety-reset-local"
-                onClick={() => void handleResetLocalData()}
+                onClick={() => void dataSafety.handleResetLocalData()}
                 disabled={workspace.isResettingData}
                 className="options-footer-icon-button options-footer-icon-button-danger"
+                title={workspace.isResettingData ? copy.resettingData : copy.resetLocalData}
                 aria-label={workspace.isResettingData ? copy.resettingData : copy.resetLocalData}>
                 <AppIcon name="trash" size={14} />
               </button>
             </div>
           </div>
           <input
-            ref={restoreInputRef}
+            ref={dataSafety.restoreInputRef}
             data-testid="data-safety-restore-input"
             type="file"
             accept="application/json,.json"
             className="sr-only"
-            onChange={(event) => void handleRestoreFile(event.currentTarget.files?.[0], event.currentTarget)}
+            onChange={(event) => void dataSafety.handleRestoreFile(event.currentTarget.files?.[0], event.currentTarget)}
           />
         </div>
       </section>

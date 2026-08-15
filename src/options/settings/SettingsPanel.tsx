@@ -6,6 +6,7 @@ import { AUTOTAG_RUN_MESSAGE, LLM_TEST_CONNECTION_MESSAGE } from "../../lib/runt
 import { AppIcon } from "../../ui/icons.tsx"
 import type { OptionsCopy } from "../i18n/copy.ts"
 import type { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
+import type { useDataSafetyActions } from "../hooks/useDataSafetyActions.ts"
 import { InlineMessage } from "../components/common.tsx"
 import { cn } from "../utils.ts"
 
@@ -44,6 +45,7 @@ export function SettingsPanel({
   themePreference,
   setLocale,
   setThemePreference,
+  dataSafety,
   onClose
 }: {
   workspace: ReturnType<typeof useWorkspaceData>
@@ -52,6 +54,7 @@ export function SettingsPanel({
   themePreference: ThemePreference
   setLocale: (locale: Locale) => Promise<void>
   setThemePreference: (themePreference: ThemePreference) => Promise<void>
+  dataSafety: ReturnType<typeof useDataSafetyActions>
   onClose: () => void
 }) {
   const [activeSection, setActiveSection] = useState<SettingsSection>("general")
@@ -470,7 +473,7 @@ export function SettingsPanel({
                     />
                   </label>
 
-                  <div className="options-settings-field">
+                  <div className="options-settings-field options-settings-field-wide">
                     <span className="options-settings-field-label">{copy.settingsLlmApiKey}</span>
                     <span className="options-meta-copy">{copy.settingsLlmApiKeyHint}</span>
                     <div className="options-settings-inline-field">
@@ -501,10 +504,10 @@ export function SettingsPanel({
                           {copy.settingsLlmApiKeyClear}
                         </button>
                       ) : null}
-                      <span data-testid="settings-llm-api-key-status" className="options-settings-field-status">
-                        {hasStoredApiKey ? copy.settingsLlmApiKeyStored : copy.settingsLlmApiKeyMissing}
-                      </span>
                     </div>
+                    <span data-testid="settings-llm-api-key-status" className="options-settings-field-status">
+                      {hasStoredApiKey ? copy.settingsLlmApiKeyStored : copy.settingsLlmApiKeyMissing}
+                    </span>
                   </div>
 
                   <label className="options-settings-field">
@@ -574,15 +577,51 @@ export function SettingsPanel({
 
               {activeSection === "data-safety" ? (
                 <div data-testid="settings-section-data-safety" className="options-settings-section">
-                  <p className="options-meta-copy">{copy.settingsDataSafetyHint}</p>
-                  <button
-                    type="button"
-                    data-testid="settings-export-data"
-                    className="chip-button"
-                    disabled={workspace.isExporting}
-                    onClick={() => void workspace.handleExportWorkspace()}>
-                    {workspace.isExporting ? copy.exporting : copy.exportData}
-                  </button>
+                  <p className="options-settings-section-intro">{copy.settingsDataSafetyHint}</p>
+                  <div className="options-settings-action-list">
+                    <div className="options-settings-action-row">
+                      <span className="options-settings-action-copy">
+                        <span className="options-settings-action-title">{copy.exportData}</span>
+                        <span className="options-meta-copy">{copy.settingsExportDataHint}</span>
+                      </span>
+                      <button
+                        type="button"
+                        data-testid="settings-export-data"
+                        className="chip-button"
+                        disabled={workspace.isExporting}
+                        onClick={() => void workspace.handleExportWorkspace()}>
+                        {workspace.isExporting ? copy.exporting : copy.exportData}
+                      </button>
+                    </div>
+                    <div className="options-settings-action-row">
+                      <span className="options-settings-action-copy">
+                        <span className="options-settings-action-title">{copy.restoreBackup}</span>
+                        <span className="options-meta-copy">{copy.settingsRestoreDataHint}</span>
+                      </span>
+                      <button
+                        type="button"
+                        data-testid="settings-restore-backup"
+                        className="chip-button"
+                        disabled={workspace.isValidatingBackup || workspace.isRestoringBackup}
+                        onClick={dataSafety.openRestorePicker}>
+                        {workspace.isRestoringBackup ? copy.restoringBackup : copy.restoreBackup}
+                      </button>
+                    </div>
+                    <div className="options-settings-action-row options-settings-action-row-danger">
+                      <span className="options-settings-action-copy">
+                        <span className="options-settings-action-title">{copy.resetLocalData}</span>
+                        <span className="options-meta-copy">{copy.settingsResetDataHint}</span>
+                      </span>
+                      <button
+                        type="button"
+                        data-testid="settings-reset-local"
+                        className="chip-button chip-button-danger"
+                        disabled={workspace.isResettingData}
+                        onClick={() => void dataSafety.handleResetLocalData()}>
+                        {workspace.isResettingData ? copy.resettingData : copy.resetLocalData}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ) : null}
             </div>

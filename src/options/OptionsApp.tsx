@@ -10,6 +10,7 @@ import {
 import { buildAuthorSidebarItems, formatAuthorLabel } from "./authorSidebar.ts"
 import { BookmarkInspector } from "./components/BookmarkInspector.tsx"
 import { useWorkspaceData } from "./hooks/useWorkspaceData.ts"
+import { useDataSafetyActions } from "./hooks/useDataSafetyActions.ts"
 import { getSettings, updateSettings } from "../lib/storage/settings.ts"
 import { ExtensionUiProvider, useExtensionUi } from "../ui/provider.tsx"
 import { getOptionsCopy } from "./i18n/copy.ts"
@@ -32,6 +33,7 @@ function OptionsScreen() {
   const workspace = useWorkspaceData()
   const { locale, themePreference, resolvedTheme, setLocale, setThemePreference } = useExtensionUi()
   const copy = getOptionsCopy(locale)
+  const dataSafety = useDataSafetyActions({ workspace, copy })
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(280)
   const [_rightSidebarWidth, setRightSidebarWidth] = useState(360)
   const [activeTagIds, setActiveTagIds] = useState<string[]>(["all"])
@@ -514,6 +516,7 @@ function OptionsScreen() {
                 setLocale={setLocale}
                 setThemePreference={setThemePreference}
                 onOpenSettings={() => setIsSettingsOpen(true)}
+                dataSafety={dataSafety}
               />
 
               <div
@@ -631,6 +634,7 @@ function OptionsScreen() {
                   themePreference={themePreference}
                   setLocale={setLocale}
                   setThemePreference={setThemePreference}
+                  dataSafety={dataSafety}
                   onClose={() => setIsSettingsOpen(false)}
                 />
               ) : null}

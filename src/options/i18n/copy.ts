@@ -187,7 +187,10 @@ export function getOptionsCopy(locale: Locale) {
       settingsLlmTestFailure: "连接失败",
       settingsLlmTestMissingKey: "请先填写并保存 API Key。",
       settingsLlmPermissionDenied: "未授予该域名的访问权限，LLM 功能不可用。",
-      settingsDataSafetyHint: "导出、恢复与重置操作位于侧边栏底部。"
+      settingsDataSafetyHint: "备份与恢复全部在本地完成，不会上传任何数据。侧边栏底部保留了同样的快捷入口。",
+      settingsExportDataHint: "把全部书签、标签与保存的视图导出为 JSON 文件。",
+      settingsRestoreDataHint: "从备份 JSON 恢复，会覆盖当前的本地数据。",
+      settingsResetDataHint: "清空全部本地书签、标签与设置，操作不可撤销。"
     }
   }
 
@@ -376,7 +379,10 @@ export function getOptionsCopy(locale: Locale) {
     settingsLlmTestFailure: "Connection failed",
     settingsLlmTestMissingKey: "Enter and save an API key first.",
     settingsLlmPermissionDenied: "Host permission was not granted; LLM tagging is unavailable.",
-    settingsDataSafetyHint: "Export, restore, and reset live at the bottom of the sidebar."
+    settingsDataSafetyHint: "Backups stay on this device; nothing is uploaded. The sidebar footer keeps the same shortcuts.",
+    settingsExportDataHint: "Export every bookmark, tag, and saved view as a JSON file.",
+    settingsRestoreDataHint: "Restore from a backup JSON file; this overwrites current local data.",
+    settingsResetDataHint: "Clear all local bookmarks, tags, and settings. This cannot be undone."
   }
 }
 

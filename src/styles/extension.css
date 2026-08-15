@@ -417,7 +417,9 @@
   .chip-button {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 0.45rem;
+    flex: 0 0 auto;
     min-height: 32px;
     border-radius: 9999px;
     border: 1px solid var(--button-secondary-border);
@@ -425,6 +427,7 @@
     padding: 0.375rem 0.75rem;
     font-size: 12px;
     font-weight: 400;
+    white-space: nowrap;
     color: var(--text-secondary);
     transition:
       transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
@@ -440,6 +443,27 @@
 
   .chip-button:active {
     transform: translateY(1px) scale(0.985);
+  }
+
+  .chip-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .chip-button:disabled:hover {
+    transform: none;
+    background: var(--button-secondary-bg);
+    color: var(--text-secondary);
+  }
+
+  .chip-button-danger {
+    border-color: color-mix(in srgb, var(--accent-primary) 34%, var(--button-secondary-border));
+    color: var(--accent-primary);
+  }
+
+  .chip-button-danger:hover {
+    background: color-mix(in srgb, var(--accent-primary) 12%, var(--button-secondary-bg));
+    color: var(--accent-primary);
   }
 
   .chip-button-active {
@@ -2538,6 +2562,17 @@
     gap: 18px;
   }
 
+  .options-settings-section > .chip-button {
+    align-self: flex-start;
+  }
+
+  .options-settings-section-intro {
+    max-width: 520px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text-tertiary);
+  }
+
   .options-settings-group-title {
     font-size: 11px;
     font-weight: 600;
@@ -2557,8 +2592,13 @@
     flex-direction: column;
     gap: 6px;
     max-width: 420px;
+    width: 100%;
     font-size: 13px;
     color: var(--text-secondary);
+  }
+
+  .options-settings-field-wide {
+    max-width: 520px;
   }
 
   .options-settings-field-label {
@@ -2577,6 +2617,7 @@
 
   .options-settings-field select {
     appearance: none;
+    max-width: 240px;
     padding-right: 30px;
     background-image: linear-gradient(45deg, transparent 50%, var(--text-tertiary) 50%),
       linear-gradient(135deg, var(--text-tertiary) 50%, transparent 50%);
@@ -2589,7 +2630,7 @@
   }
 
   .options-settings-field input[type="number"] {
-    max-width: 160px;
+    max-width: 120px;
   }
 
   .options-settings-field-status {
@@ -2613,6 +2654,43 @@
   .options-settings-inline-field .options-settings-inline-input {
     flex: 1 1 auto;
     min-width: 0;
+  }
+
+  .options-settings-action-list {
+    display: flex;
+    width: 100%;
+    max-width: 520px;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .options-settings-action-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    border: 1px solid color-mix(in srgb, var(--options-border) 58%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--options-surface) 62%, transparent);
+    padding: 12px 14px;
+  }
+
+  .options-settings-action-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .options-settings-action-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .options-settings-action-row-danger {
+    border-color: color-mix(in srgb, var(--accent-primary) 26%, var(--options-border));
+    background: color-mix(in srgb, var(--accent-primary) 6%, transparent);
   }
 
   .options-settings-toggle-row {
@@ -2931,7 +3009,11 @@
   .options-sidebar-footer-controls {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
+    border: 1px solid color-mix(in srgb, var(--options-border) 46%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--options-surface) 58%, transparent);
+    padding: 3px;
   }
 
   .options-data-safety-panel {
@@ -2948,8 +3030,8 @@
   .options-footer-divider {
     display: inline-block;
     width: 1px;
-    height: 16px;
-    margin: 0 5px;
+    height: 18px;
+    margin: 0 4px;
     background: color-mix(in srgb, var(--theme-panel-border) 82%, transparent);
   }
 
@@ -2995,8 +3077,24 @@
     color: var(--text-primary);
   }
 
+  .options-footer-icon-button-danger {
+    color: color-mix(in srgb, var(--accent-primary) 62%, var(--text-tertiary));
+  }
+
   .options-footer-icon-button-danger:hover {
+    background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
     color: var(--accent-primary);
+  }
+
+  .options-footer-icon-button:disabled,
+  .options-footer-chip:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .options-footer-icon-button:disabled:hover,
+  .options-footer-chip:disabled:hover {
+    background: transparent;
   }
 
   .options-inspector-field,
@@ -3877,6 +3975,16 @@
   :root[data-theme="dark"] .options-footer-chip:hover,
   :root[data-theme="dark"] .options-footer-icon-button:hover {
     background: var(--theme-interactive-hover-bg);
+  }
+
+  :root[data-theme="dark"] .options-sidebar-footer-controls {
+    background: color-mix(in srgb, var(--theme-panel-bg) 88%, var(--surface-bg));
+    border-color: color-mix(in srgb, var(--theme-panel-border) 78%, transparent);
+  }
+
+  :root[data-theme="dark"] .options-settings-action-row {
+    background: color-mix(in srgb, var(--theme-panel-bg) 88%, var(--surface-bg));
+    border-color: color-mix(in srgb, var(--theme-panel-border) 80%, transparent);
   }
 
   .options-library-row {

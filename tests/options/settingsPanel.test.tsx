@@ -221,3 +221,43 @@ test("test connection reports a friendly hint when no api key exists", async () 
   const section = findByTestId(container, "settings-section-autotag")
   assert.match(section?.textContent ?? "", /Enter and save an API key first/)
 })
+
+test("data safety section exposes labelled export, restore, and reset actions", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  const { container, dom } = render(<OptionsApp />)
+  await settle()
+
+  await click(dom, findByTestId(container, "footer-settings-toggle"))
+  await click(dom, findByTestId(container, "settings-nav-data-safety"))
+
+  const section = findByTestId(container, "settings-section-data-safety")
+  assert.ok(section)
+  assert.ok(findByTestId(container, "settings-export-data"))
+
+  const restoreButton = findByTestId(container, "settings-restore-backup") as HTMLButtonElement | null
+  const resetButton = findByTestId(container, "settings-reset-local") as HTMLButtonElement | null
+  assert.ok(restoreButton)
+  assert.ok(resetButton)
+  assert.match(resetButton.className, /chip-button-danger/)
+  assert.equal(section.querySelectorAll(".options-settings-action-row").length, 3)
+
+  // The restore picker is the shared hidden file input owned by the sidebar.
+  let clickedRestoreInput = false
+  const restoreInput = findByTestId(container, "data-safety-restore-input") as HTMLInputElement
+  restoreInput.addEventListener("click", () => {
+    clickedRestoreInput = true
+  })
+
+  await click(dom, restoreButton)
+  assert.equal(clickedRestoreInput, true)
+
+  const originalConfirm = dom.window.confirm
+  dom.window.confirm = () => false
+  try {
+    await click(dom, resetButton)
+  } finally {
+    dom.window.confirm = originalConfirm
+  }
+})
