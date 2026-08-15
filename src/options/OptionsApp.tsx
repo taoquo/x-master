@@ -10,7 +10,7 @@ import {
 import { buildAuthorSidebarItems, formatAuthorLabel } from "./authorSidebar.ts"
 import { BookmarkInspector } from "./components/BookmarkInspector.tsx"
 import { useWorkspaceData } from "./hooks/useWorkspaceData.ts"
-import { getSettings, saveSettings } from "../lib/storage/settings.ts"
+import { getSettings, updateSettings } from "../lib/storage/settings.ts"
 import { ExtensionUiProvider, useExtensionUi } from "../ui/provider.tsx"
 import { getOptionsCopy } from "./i18n/copy.ts"
 import {
@@ -104,13 +104,10 @@ function OptionsScreen() {
 
       resizeStateRef.current = null
       stopResizeMode()
-      void getSettings().then((settings) =>
-        saveSettings({
-          ...settings,
-          leftSidebarWidth: paneWidthsRef.current.left,
-          rightSidebarWidth: paneWidthsRef.current.right
-        })
-      )
+      void updateSettings({
+        leftSidebarWidth: paneWidthsRef.current.left,
+        rightSidebarWidth: paneWidthsRef.current.right
+      })
     }
 
     window.addEventListener("pointermove", handlePointerMove)

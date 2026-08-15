@@ -9,7 +9,7 @@ import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
 import { createEmptySyncSummary } from "../../src/lib/types.ts"
 import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
 import { attachTagToBookmark, createTag } from "../../src/lib/storage/tagsStore.ts"
-import { cleanupRenders, render, settle } from "../helpers/render.tsx"
+import { cleanupRenders, render, settle, waitForCondition } from "../helpers/render.tsx"
 import { installChromeRuntimeHarness } from "../helpers/runtime.ts"
 import { LOAD_WORKSPACE_DATA_MESSAGE } from "../../src/lib/runtime/messages.ts"
 import { WORKSPACE_EXPORT_VERSION, type WorkspaceExportPayload } from "../../src/lib/export/exportBookmarks.ts"
@@ -516,6 +516,7 @@ test("OptionsApp restores a confirmed backup and reloads the page", async () => 
     })
     await settle()
 
+    await waitForCondition(() => reloadSpy.getReloadCount() === 1)
     assert.equal(reloadSpy.getReloadCount(), 1)
     assert.equal((await getSettings()).locale, "en")
   } finally {
@@ -625,6 +626,7 @@ test("OptionsApp resets local data only after confirmation", async () => {
     })
     await settle()
 
+    await waitForCondition(() => reloadSpy.getReloadCount() === 1)
     assert.equal(reloadSpy.getReloadCount(), 1)
     assert.equal((await getSettings()).locale, "en")
   } finally {
@@ -1317,7 +1319,9 @@ test("OptionsApp disables transitions briefly during theme swaps", async () => {
   assert.equal(dom.window.document.documentElement.dataset.theme, "light")
   assert.equal(dom.window.document.documentElement.dataset.themeSwitching, undefined)
 
-  await act(async () => {
+  // Synchronous act keeps the assertion on the click frame: yielding to the
+  // macrotask queue here would let the queued animation frames clear the flag.
+  act(() => {
     themeToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
   })
 

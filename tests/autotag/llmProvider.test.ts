@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { createOpenAiCompatibleProvider, testLlmConnection } from "../../src/lib/autotag/llmProvider.ts"
+import { createOpenAiCompatibleProvider, resolveApiBaseUrl, testLlmConnection } from "../../src/lib/autotag/llmProvider.ts"
 
 const SETTINGS = { baseUrl: "https://api.example.com/v1/", model: "test-model" }
 
@@ -151,4 +151,58 @@ test("testLlmConnection reports ok and error states", async () => {
     fetchImpl: async () => jsonResponse(401, {})
   })
   assert.deepEqual(failed, { ok: false, error: "HTTP 401" })
+})
+
+test("resolveApiBaseUrl appends the version segment only for bare hosts", () => {
+  assert.equal(resolveApiBaseUrl("https://api.appintheloop.com/"), "https://api.appintheloop.com/v1")
+  assert.equal(resolveApiBaseUrl("https://api.appintheloop.com"), "https://api.appintheloop.com/v1")
+  assert.equal(resolveApiBaseUrl("https://api.example.com/v1/"), "https://api.example.com/v1")
+  assert.equal(resolveApiBaseUrl("https://api.example.com/openai/v1"), "https://api.example.com/openai/v1")
+  assert.equal(resolveApiBaseUrl("  "), "")
+})
+
+test("provider and connection test reach a bare host through the version segment", async () => {
+  const urls: string[] = []
+  await testLlmConnection({
+    settings: { baseUrl: "https://api.appintheloop.com/", model: "claude-sonnet-5" },
+    apiKey: "sk-test",
+    fetchImpl: async (url) => {
+      urls.push(url)
+      return jsonResponse(200, {})
+    }
+  })
+
+  const provider = createOpenAiCompatibleProvider({
+    settings: { baseUrl: "https://api.appintheloop.com/", model: "claude-sonnet-5" },
+    apiKey: "sk-test",
+    fetchImpl: async (url) => {
+      urls.push(url)
+      return chatResponse([{ tweetId: "t1", tags: [{ name: "AI", confidence: 0.6 }] }])
+    }
+  })
+  await provider.suggestTags({
+    bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+    vocabulary: ["AI"],
+    allowNewTags: false
+  })
+
+  assert.deepEqual(urls, [
+    "https://api.appintheloop.com/v1/models",
+    "https://api.appintheloop.com/v1/chat/completions"
+  ])
+})
+
+test("testLlmConnection surfaces the provider error message on failure", async () => {
+  const failed = await testLlmConnection({
+    settings: SETTINGS,
+    apiKey: "sk-test",
+    fetchImpl: async () =>
+      ({
+        ok: false,
+        status: 401,
+        text: async () => JSON.stringify({ error: { message: "Invalid API key provided" } })
+      }) as unknown as Response
+  })
+
+  assert.deepEqual(failed, { ok: false, error: "HTTP 401: Invalid API key provided" })
 })

@@ -14,7 +14,7 @@ import {
   acceptTagSuggestionsBulk,
   rejectTagSuggestion
 } from "../../lib/autotag/suggestionActions.ts"
-import { getSettings, saveSettings } from "../../lib/storage/settings.ts"
+import { getSettings, updateSettings } from "../../lib/storage/settings.ts"
 import { attachTagToBookmark, attachTagToBookmarks, createTag, deleteTag, detachTagFromBookmark, renameTag } from "../../lib/storage/tagsStore.ts"
 import type { BookmarkTagRecord, SavedViewRecord, TagRecord, WorkspaceData } from "../../lib/types.ts"
 import type { WorkspaceTagPatch } from "./useWorkspaceQueries.ts"
@@ -372,11 +372,7 @@ export function useWorkspaceCommands({
     setCommandError(null)
 
     try {
-      const settings = await getSettings()
-      await saveSettings({
-        ...settings,
-        savedViews
-      })
+      await updateSettings({ savedViews })
       await refreshData()
     } catch (error) {
       setCommandError(toErrorMessage(error, "Failed to save view"))

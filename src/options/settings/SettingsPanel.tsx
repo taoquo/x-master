@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react"
 import type { ExtensionSettings, KeywordTagRule, Locale, ThemePreference } from "../../lib/types.ts"
-import { getSettings, saveSettings } from "../../lib/storage/settings.ts"
+import { getSettings, updateSettings } from "../../lib/storage/settings.ts"
 import { getSecrets, saveSecrets } from "../../lib/storage/secrets.ts"
 import { AUTOTAG_RUN_MESSAGE, LLM_TEST_CONNECTION_MESSAGE } from "../../lib/runtime/messages.ts"
 import { AppIcon } from "../../ui/icons.tsx"
@@ -89,9 +89,11 @@ export function SettingsPanel({
     }
   }, [])
 
-  function persistSettings(next: ExtensionSettings) {
-    setSettings(next)
-    void saveSettings(next)
+  // Field-level patch write: the panel holds a snapshot loaded on mount, so a
+  // full overwrite here would revert whatever other surfaces changed since.
+  function persistSettings(patch: Partial<ExtensionSettings>) {
+    setSettings((current) => (current ? { ...current, ...patch } : current))
+    void updateSettings(patch)
   }
 
   function updateAutoTag(patch: Partial<ExtensionSettings["autoTag"]>) {
@@ -99,7 +101,7 @@ export function SettingsPanel({
       return
     }
 
-    persistSettings({ ...settings, autoTag: { ...settings.autoTag, ...patch } })
+    persistSettings({ autoTag: { ...settings.autoTag, ...patch } })
   }
 
   function updateHeuristics(patch: Partial<ExtensionSettings["autoTag"]["heuristics"]>) {
@@ -153,16 +155,19 @@ export function SettingsPanel({
     updateLlm({ enabled: true })
   }
 
-  function saveApiKey() {
-    const apiKey = draftApiKey.trim()
-    if (!apiKey) {
-      return
-    }
+  // Writes the draft key to extension storage. The background worker reads the
+  // key from storage, so an unsaved draft is invisible to it.
+  async function persistDraftApiKey(apiKey: string) {
+    await saveSecrets({ llmApiKey: apiKey })
+    setHasStoredApiKey(true)
+    setDraftApiKey("")
+  }
 
-    void saveSecrets({ llmApiKey: apiKey }).then(() => {
-      setHasStoredApiKey(true)
-      setDraftApiKey("")
-    })
+  async function clearStoredApiKey() {
+    await saveSecrets({})
+    setHasStoredApiKey(false)
+    setDraftApiKey("")
+    setLlmTestState({ status: "idle" })
   }
 
   async function testLlmConnection() {
@@ -170,10 +175,22 @@ export function SettingsPanel({
       return
     }
 
+    const draft = draftApiKey.trim()
+    if (!draft && !hasStoredApiKey) {
+      setLlmTestState({ status: "error", error: copy.settingsLlmTestMissingKey })
+      return
+    }
+
+    // chrome.permissions.request only works inside a user gesture, so it has to
+    // be the first await in this click handler.
     const granted = await ensureHostPermission(settings.autoTag.llm.baseUrl)
     if (!granted) {
       setLlmTestState({ status: "error", error: copy.settingsLlmPermissionDenied })
       return
+    }
+
+    if (draft) {
+      await persistDraftApiKey(draft)
     }
 
     setLlmTestState({ status: "testing" })
@@ -184,7 +201,10 @@ export function SettingsPanel({
     if (result?.ok) {
       setLlmTestState({ status: "ok" })
     } else {
-      setLlmTestState({ status: "error", error: result?.error })
+      setLlmTestState({
+        status: "error",
+        error: result?.error === "missing-api-key" ? copy.settingsLlmTestMissingKey : result?.error
+      })
     }
   }
 
@@ -226,7 +246,7 @@ export function SettingsPanel({
 
     const value = Number(rawValue)
     if (Number.isFinite(value) && value >= 1) {
-      persistSettings({ ...settings, incrementalStopBufferPages: Math.trunc(value) })
+      persistSettings({ incrementalStopBufferPages: Math.trunc(value) })
     }
   }
 
@@ -324,6 +344,7 @@ export function SettingsPanel({
 
               {activeSection === "autotag" && settings ? (
                 <div data-testid="settings-section-autotag" className="options-settings-section">
+                  <h3 className="options-settings-group-title">{copy.settingsGroupAutoTagBasics}</h3>
                   <SettingsToggleRow
                     testId="settings-autotag-enabled"
                     label={copy.settingsAutoTagEnabled}
@@ -397,7 +418,7 @@ export function SettingsPanel({
                       <button
                         type="button"
                         data-testid="settings-keyword-rule-add"
-                        className="options-footer-chip"
+                        className="chip-button"
                         onClick={addKeywordRule}>
                         {copy.settingsAddKeywordRule}
                       </button>
@@ -405,16 +426,19 @@ export function SettingsPanel({
                   </div>
 
                   <div className="options-settings-field">
-                    <button
-                      type="button"
-                      data-testid="settings-autotag-run-now"
-                      className="options-footer-chip"
-                      onClick={runAutoTagNow}>
-                      {copy.settingsRunAutoTagNow}
-                    </button>
+                    <div className="options-settings-actions">
+                      <button
+                        type="button"
+                        data-testid="settings-autotag-run-now"
+                        className="chip-button"
+                        onClick={runAutoTagNow}>
+                        {copy.settingsRunAutoTagNow}
+                      </button>
+                    </div>
                     <InlineMessage message={autoTagRunMessage} tone="info" />
                   </div>
 
+                  <h3 className="options-settings-group-title">{copy.settingsGroupAutoTagLlm}</h3>
                   <SettingsToggleRow
                     testId="settings-llm-enabled"
                     label={copy.settingsLlmEnabled}
@@ -432,6 +456,7 @@ export function SettingsPanel({
                       onInput={(event) => updateLlm({ baseUrl: event.currentTarget.value })}
                       onChange={(event) => updateLlm({ baseUrl: event.currentTarget.value })}
                     />
+                    <span className="options-meta-copy">{copy.settingsLlmBaseUrlHint}</span>
                   </label>
 
                   <label className="options-settings-field">
@@ -448,10 +473,10 @@ export function SettingsPanel({
                   <div className="options-settings-field">
                     <span className="options-settings-field-label">{copy.settingsLlmApiKey}</span>
                     <span className="options-meta-copy">{copy.settingsLlmApiKeyHint}</span>
-                    <div className="options-settings-rule-editor">
+                    <div className="options-settings-inline-field">
                       <input
                         data-testid="settings-llm-api-key"
-                        className="field-shell"
+                        className="field-shell options-settings-inline-input"
                         type="password"
                         placeholder={hasStoredApiKey ? "••••••••" : "sk-..."}
                         aria-label={copy.settingsLlmApiKey}
@@ -462,10 +487,23 @@ export function SettingsPanel({
                       <button
                         type="button"
                         data-testid="settings-llm-api-key-save"
-                        className="options-footer-chip"
-                        onClick={saveApiKey}>
-                        {copy.settingsLlmApiKeySaved}
+                        className="chip-button"
+                        disabled={!draftApiKey.trim()}
+                        onClick={() => void persistDraftApiKey(draftApiKey.trim())}>
+                        {copy.settingsLlmApiKeySave}
                       </button>
+                      {hasStoredApiKey ? (
+                        <button
+                          type="button"
+                          data-testid="settings-llm-api-key-clear"
+                          className="chip-button options-chip-muted"
+                          onClick={() => void clearStoredApiKey()}>
+                          {copy.settingsLlmApiKeyClear}
+                        </button>
+                      ) : null}
+                      <span data-testid="settings-llm-api-key-status" className="options-settings-field-status">
+                        {hasStoredApiKey ? copy.settingsLlmApiKeyStored : copy.settingsLlmApiKeyMissing}
+                      </span>
                     </div>
                   </div>
 
@@ -508,14 +546,16 @@ export function SettingsPanel({
                   </label>
 
                   <div className="options-settings-field">
-                    <button
-                      type="button"
-                      data-testid="settings-llm-test-connection"
-                      className="options-footer-chip"
-                      disabled={llmTestState.status === "testing"}
-                      onClick={() => void testLlmConnection()}>
-                      {llmTestState.status === "testing" ? copy.settingsLlmTesting : copy.settingsLlmTestConnection}
-                    </button>
+                    <div className="options-settings-actions">
+                      <button
+                        type="button"
+                        data-testid="settings-llm-test-connection"
+                        className="chip-button"
+                        disabled={llmTestState.status === "testing"}
+                        onClick={() => void testLlmConnection()}>
+                        {llmTestState.status === "testing" ? copy.settingsLlmTesting : copy.settingsLlmTestConnection}
+                      </button>
+                    </div>
                     <InlineMessage
                       message={
                         llmTestState.status === "ok"
@@ -538,7 +578,7 @@ export function SettingsPanel({
                   <button
                     type="button"
                     data-testid="settings-export-data"
-                    className="options-footer-chip"
+                    className="chip-button"
                     disabled={workspace.isExporting}
                     onClick={() => void workspace.handleExportWorkspace()}>
                     {workspace.isExporting ? copy.exporting : copy.exportData}

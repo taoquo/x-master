@@ -20,11 +20,12 @@ export function render(ui: React.ReactElement, options?: { prefersDark?: boolean
     dom.window.document
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   ;(globalThis as typeof globalThis & { Blob: typeof Blob }).Blob = dom.window.Blob
-  ;(globalThis as typeof globalThis & { URL: typeof URL }).URL = {
-    ...dom.window.URL,
-    createObjectURL: () => "blob:test",
-    revokeObjectURL: () => {}
-  } as unknown as typeof URL
+  // Keep jsdom's URL constructor usable (code under test calls `new URL(...)`)
+  // while stubbing the object-URL helpers jsdom does not implement.
+  const UrlConstructor = dom.window.URL as unknown as typeof URL
+  UrlConstructor.createObjectURL = () => "blob:test"
+  UrlConstructor.revokeObjectURL = () => {}
+  ;(globalThis as typeof globalThis & { URL: typeof URL }).URL = UrlConstructor
   ;(globalThis as typeof globalThis & {
     requestAnimationFrame: (callback: FrameRequestCallback) => number
     cancelAnimationFrame: (handle: number) => void
@@ -91,6 +92,20 @@ export async function settle() {
       await Promise.resolve()
     })
   }
+}
+
+// IndexedDB teardown (restore / reset) can take longer than a fixed number of
+// ticks when the suite runs files in parallel, so poll instead of guessing.
+export async function waitForCondition(predicate: () => boolean, attempts = 40) {
+  for (let index = 0; index < attempts; index += 1) {
+    if (predicate()) {
+      return true
+    }
+
+    await settle()
+  }
+
+  return predicate()
 }
 
 export async function cleanupRender(result: RenderResult) {

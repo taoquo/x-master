@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
+import { getSettings, saveSettings, updateSettings } from "../../src/lib/storage/settings.ts"
 import { createEmptySyncSummary } from "../../src/lib/types.ts"
 
 function installChromeStorageMock() {
@@ -305,4 +305,36 @@ test("getSettings applies autoTag defaults and normalizes invalid values", async
   assert.equal(customized.autoTag.llm.batchSize, 50)
   assert.equal(customized.autoTag.llm.maxBookmarksPerRun, 200)
   assert.equal(customized.autoTag.llm.tagVocabularyMode, "open")
+})
+
+test("updateSettings merges a patch without resetting unrelated fields", async () => {
+  installChromeStorageMock()
+
+  await updateSettings({
+    autoTag: {
+      enabled: true,
+      runAfterSync: true,
+      heuristics: { useHashtags: true, useAuthors: true, keywordRules: [] },
+      llm: {
+        enabled: true,
+        provider: "openai-compatible",
+        baseUrl: "https://api.appintheloop.com/v1",
+        model: "claude-sonnet-5",
+        batchSize: 10,
+        maxBookmarksPerRun: 200,
+        tagVocabularyMode: "open"
+      }
+    }
+  })
+
+  await updateSettings({ locale: "zh-CN" })
+  await updateSettings({ themePreference: "dark" })
+
+  const settings = await getSettings()
+
+  assert.equal(settings.locale, "zh-CN")
+  assert.equal(settings.themePreference, "dark")
+  assert.equal(settings.autoTag.llm.baseUrl, "https://api.appintheloop.com/v1")
+  assert.equal(settings.autoTag.llm.model, "claude-sonnet-5")
+  assert.equal(settings.autoTag.llm.enabled, true)
 })

@@ -274,6 +274,30 @@ test("restoreWorkspaceBackup overwrites local data with a validated backup", asy
   assert.equal(latestSyncRun?.id, "sync-1")
 })
 
+test("restoreWorkspaceBackup keeps local auto-tag settings that backups do not carry", async () => {
+  await resetBookmarksDb()
+  installSettingsHarness()
+
+  const localAutoTag = createDefaultAutoTagSettings()
+  localAutoTag.enabled = true
+  localAutoTag.llm.enabled = true
+  localAutoTag.llm.baseUrl = "https://api.appintheloop.com/v1"
+  localAutoTag.llm.model = "claude-sonnet-5"
+
+  await saveSettings(createSettings({ locale: "en", autoTag: localAutoTag }))
+
+  const validation = validateWorkspaceBackupText(JSON.stringify(createBackupPayload()))
+  await restoreWorkspaceBackup(validation.payload)
+
+  const settings = await getSettings()
+
+  assert.equal(settings.locale, "zh-CN")
+  assert.equal(settings.autoTag.enabled, true)
+  assert.equal(settings.autoTag.llm.enabled, true)
+  assert.equal(settings.autoTag.llm.baseUrl, "https://api.appintheloop.com/v1")
+  assert.equal(settings.autoTag.llm.model, "claude-sonnet-5")
+})
+
 test("validateWorkspaceBackupText accepts legacy v1 backups and drops lists/rules fields", async () => {
   const legacyPayload = {
     ...createBackupPayload(),

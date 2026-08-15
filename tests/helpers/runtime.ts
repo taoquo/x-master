@@ -3,11 +3,13 @@ import { resetLocalData } from "../../src/lib/storage/resetLocalData.ts"
 import { loadWorkspaceDataFromLocal } from "../../src/lib/workspace/loadWorkspaceData.ts"
 
 export function installChromeRuntimeHarness({
-  runSync
+  runSync,
+  testLlmConnection
 }: {
   runSync?: () => Promise<{ fetchedCount: number; insertedCount: number; updatedCount: number; failedCount: number }>
+  testLlmConnection?: () => Promise<{ ok: boolean; error?: string }>
 } = {}) {
-  let storedSettings: unknown
+  let stored: Record<string, unknown> = {}
   let openOptionsPageCallCount = 0
 
   const handler = createBackgroundMessageHandler({
@@ -16,6 +18,7 @@ export function installChromeRuntimeHarness({
       await resetLocalData()
       return { success: true }
     },
+    ...(testLlmConnection ? { testLlmConnection } : {}),
     runSync:
       runSync ??
       (async () => ({
@@ -36,11 +39,15 @@ export function installChromeRuntimeHarness({
     },
     storage: {
       local: {
-        get: async () => ({ settings: storedSettings }),
+        get: async (key?: string) => (key ? { [key]: stored[key] } : { ...stored }),
         set: async (value: Record<string, unknown>) => {
-          storedSettings = value.settings
+          stored = { ...stored, ...value }
         }
       }
+    },
+    permissions: {
+      request: async () => true,
+      contains: async () => true
     },
     tabs: {
       query: async () => [],
@@ -54,6 +61,7 @@ export function installChromeRuntimeHarness({
 
   return {
     getOpenOptionsPageCallCount: () => openOptionsPageCallCount,
-    getStoredSettings: () => storedSettings
+    getStoredSettings: () => stored.settings,
+    getStoredSecrets: () => stored.secrets as { llmApiKey?: string } | undefined
   }
 }

@@ -131,3 +131,93 @@ test("sync buffer pages persist from the sync section", async () => {
   const stored = await getSettings()
   assert.equal(stored.incrementalStopBufferPages, 5)
 })
+
+test("api key save button stores the key and reflects the saved status", async () => {
+  const harness = installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  const { container, dom } = render(<OptionsApp />)
+  await settle()
+
+  await click(dom, findByTestId(container, "footer-settings-toggle"))
+  await click(dom, findByTestId(container, "settings-nav-autotag"))
+
+  assert.equal(findByTestId(container, "settings-llm-api-key-status")?.textContent, "Not set")
+
+  const keyInput = findByTestId(container, "settings-llm-api-key") as HTMLInputElement
+  await act(async () => {
+    setInputValue(keyInput, "sk-live-123", dom.window)
+  })
+  await settle()
+
+  await click(dom, findByTestId(container, "settings-llm-api-key-save"))
+
+  assert.equal(harness.getStoredSecrets()?.llmApiKey, "sk-live-123")
+  assert.equal(findByTestId(container, "settings-llm-api-key-status")?.textContent, "Saved")
+  assert.equal((findByTestId(container, "settings-llm-api-key") as HTMLInputElement).value, "")
+})
+
+test("api key clear button removes the stored key", async () => {
+  const harness = installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  const { container, dom } = render(<OptionsApp />)
+  await settle()
+
+  await click(dom, findByTestId(container, "footer-settings-toggle"))
+  await click(dom, findByTestId(container, "settings-nav-autotag"))
+
+  assert.equal(findByTestId(container, "settings-llm-api-key-clear"), null)
+
+  const keyInput = findByTestId(container, "settings-llm-api-key") as HTMLInputElement
+  await act(async () => {
+    setInputValue(keyInput, "sk-live-123", dom.window)
+  })
+  await settle()
+  await click(dom, findByTestId(container, "settings-llm-api-key-save"))
+
+  await click(dom, findByTestId(container, "settings-llm-api-key-clear"))
+
+  assert.equal(harness.getStoredSecrets()?.llmApiKey, undefined)
+  assert.equal(findByTestId(container, "settings-llm-api-key-status")?.textContent, "Not set")
+  assert.equal(findByTestId(container, "settings-llm-api-key-clear"), null)
+})
+
+test("test connection flushes an unsaved api key draft before pinging the provider", async () => {
+  const harness = installChromeRuntimeHarness({
+    testLlmConnection: async () => ({ ok: true })
+  })
+  await resetBookmarksDb()
+
+  const { container, dom } = render(<OptionsApp />)
+  await settle()
+
+  await click(dom, findByTestId(container, "footer-settings-toggle"))
+  await click(dom, findByTestId(container, "settings-nav-autotag"))
+
+  const keyInput = findByTestId(container, "settings-llm-api-key") as HTMLInputElement
+  await act(async () => {
+    setInputValue(keyInput, "sk-draft-456", dom.window)
+  })
+  await settle()
+
+  await click(dom, findByTestId(container, "settings-llm-test-connection"))
+
+  assert.equal(harness.getStoredSecrets()?.llmApiKey, "sk-draft-456")
+  assert.equal(findByTestId(container, "settings-llm-api-key-status")?.textContent, "Saved")
+})
+
+test("test connection reports a friendly hint when no api key exists", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  const { container, dom } = render(<OptionsApp />)
+  await settle()
+
+  await click(dom, findByTestId(container, "footer-settings-toggle"))
+  await click(dom, findByTestId(container, "settings-nav-autotag"))
+  await click(dom, findByTestId(container, "settings-llm-test-connection"))
+
+  const section = findByTestId(container, "settings-section-autotag")
+  assert.match(section?.textContent ?? "", /Enter and save an API key first/)
+})

@@ -101,8 +101,8 @@ test("runBookmarkSync default summary persistence updates saved settings", async
     fetchAllBookmarks: async () => ({ bookmarks: [], failedCount: 0 }),
     createSyncRun: async () => {},
     getSettings: async () => savedSettings,
-    saveSettings: async (nextSettings) => {
-      savedSettings = nextSettings
+    saveSettings: async (patch) => {
+      savedSettings = { ...savedSettings, ...patch } as ExtensionSettings
     }
   })
 
@@ -195,8 +195,8 @@ test("runBookmarkSync does not mark initial full sync complete when the first sy
         },
         createSyncRun: async () => {},
         getSettings: async () => savedSettings,
-        saveSettings: async (nextSettings) => {
-          savedSettings = nextSettings
+        saveSettings: async (patch) => {
+          savedSettings = { ...savedSettings, ...patch } as ExtensionSettings
         }
       }),
     /同步失败，请重试/
@@ -326,8 +326,8 @@ test("runBookmarkSync clears stale sync errors when a later sync succeeds", asyn
     fetchAllBookmarks: async () => ({ bookmarks: [], failedCount: 0 }),
     createSyncRun: async () => {},
     getSettings: async () => savedSettings,
-    saveSettings: async (nextSettings) => {
-      savedSettings = nextSettings
+    saveSettings: async (patch) => {
+      savedSettings = { ...savedSettings, ...patch } as ExtensionSettings
     }
   })
 

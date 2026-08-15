@@ -16,7 +16,7 @@ import {
   TAGS_STORE,
   transactionDone
 } from "../storage/db.ts"
-import { saveSettings } from "../storage/settings.ts"
+import { updateSettings } from "../storage/settings.ts"
 import { isSyncErrorKind } from "../x/syncErrors.ts"
 import {
   WORKSPACE_EXPORT_VERSION,
@@ -414,7 +414,9 @@ export async function restoreWorkspaceBackup(payload: WorkspaceExportPayload): P
   }
 
   await transactionDone(transaction)
-  await saveSettings({
+  // Backups only carry a subset of settings, so merge instead of overwriting to
+  // keep local-only config (auto-tag, sidebar widths, ...) intact.
+  await updateSettings({
     schemaVersion: validation.payload.settings.schemaVersion,
     locale: validation.payload.settings.locale,
     themePreference: validation.payload.settings.themePreference,

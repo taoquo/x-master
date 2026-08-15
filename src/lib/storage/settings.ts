@@ -229,10 +229,23 @@ export async function saveSettings(settings: Partial<ExtensionSettings>) {
   })
 }
 
+// saveSettings is a full overwrite: every caller that only knows about a few
+// fields would silently reset the rest to defaults. updateSettings reads the
+// current snapshot first so partial writers cannot clobber unrelated settings.
+export async function updateSettings(patch: Partial<ExtensionSettings>): Promise<ExtensionSettings> {
+  const current = await getSettings()
+  const next = normalizeSettings({ ...current, ...patch })
+
+  if (typeof chrome !== "undefined" && chrome.storage?.local?.set) {
+    await chrome.storage.local.set({ [SETTINGS_STORAGE_KEY]: next })
+  }
+
+  return next
+}
+
 export async function saveLastSyncSummary(summary: SyncSummary) {
   const settings = await getSettings()
-  await saveSettings({
-    ...settings,
+  await updateSettings({
     lastSyncSummary: {
       ...settings.lastSyncSummary,
       ...summary

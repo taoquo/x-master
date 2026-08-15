@@ -1,7 +1,7 @@
 import { extractHashtags } from "../x/parseBookmarks.ts"
 import type { BookmarkRecord } from "../types.ts"
 import { BOOKMARKS_STORE, RAW_PAYLOADS_STORE, getBookmarksDb, requestToPromise, transactionDone } from "./db.ts"
-import { getSettings, saveSettings } from "./settings.ts"
+import { getSettings, updateSettings } from "./settings.ts"
 
 // One-time, idempotent backfill: extract hashtags for existing bookmarks from
 // the raw tweet payloads captured during sync. Guarded by a settings flag so
@@ -35,7 +35,7 @@ export async function backfillHashtagsFromRawPayloads() {
   }
 
   await transactionDone(transaction)
-  await saveSettings({ ...settings, hashtagBackfillDone: true })
+  await updateSettings({ hashtagBackfillDone: true })
 
   return { updatedCount, skipped: false }
 }

@@ -1,5 +1,5 @@
 import React from "react"
-import { createDefaultSettings, getSettings, saveSettings } from "../lib/storage/settings.ts"
+import { createDefaultSettings, getSettings, updateSettings } from "../lib/storage/settings.ts"
 import type { Locale, ThemePreference } from "../lib/types.ts"
 import { translate, type MessageKey, type ResolvedTheme } from "./i18n.ts"
 
@@ -134,10 +134,14 @@ export function ExtensionUiProvider({ children }: { children: React.ReactNode })
 
   React.useEffect(() => () => clearThemeSwitchingState(), [clearThemeSwitchingState])
 
-  const persistSettings = React.useCallback(async (nextSettings: typeof settings) => {
-    settingsRef.current = nextSettings
-    setSettings(nextSettings)
-    await saveSettings(nextSettings)
+  // Only the patched fields are written back, so a stale local snapshot can
+  // never overwrite settings owned by other panels (e.g. auto-tag config).
+  const persistSettings = React.useCallback(async (patch: Partial<typeof settings>) => {
+    settingsRef.current = { ...settingsRef.current, ...patch }
+    setSettings(settingsRef.current)
+    const persisted = await updateSettings(patch)
+    settingsRef.current = persisted
+    setSettings(persisted)
   }, [])
 
   const value = React.useMemo<ExtensionUiValue>(
@@ -147,18 +151,12 @@ export function ExtensionUiProvider({ children }: { children: React.ReactNode })
       resolvedTheme,
       t: (key) => translate(settings.locale, key),
       setLocale: async (locale) => {
-        await persistSettings({
-          ...settingsRef.current,
-          locale
-        })
+        await persistSettings({ locale })
       },
       setThemePreference: async (themePreference) => {
         startThemeSwitchingState()
 
-        await persistSettings({
-          ...settingsRef.current,
-          themePreference
-        })
+        await persistSettings({ themePreference })
       }
     }),
     [persistSettings, resolvedTheme, settings.locale, settings.themePreference, startThemeSwitchingState]

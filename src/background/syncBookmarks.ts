@@ -1,6 +1,6 @@
 import { getAllBookmarkIds, upsertBookmarks } from "../lib/storage/bookmarksStore.ts"
 import { upsertRawPayloads } from "../lib/storage/rawPayloadsStore.ts"
-import { getSettings, saveSettings } from "../lib/storage/settings.ts"
+import { getSettings, updateSettings } from "../lib/storage/settings.ts"
 import { createSyncRun } from "../lib/storage/syncRunsStore.ts"
 import {
   createEmptySyncSummary,
@@ -37,10 +37,12 @@ interface RunBookmarkSyncOptions {
   createSyncRun?: (syncRun: SyncRunRecord) => Promise<void>
   updateSyncSummary?: (summary: SyncSummary) => Promise<void>
   getSettings?: typeof getSettings
-  saveSettings?: (settings: ExtensionSettings) => Promise<void>
+  saveSettings?: SaveSettingsPatch
 }
 
-type SaveCompleteSettings = (settings: ExtensionSettings) => Promise<void>
+// Patch semantics: sync only owns a few fields and must not clobber settings
+// changed elsewhere while a long run is in flight.
+type SaveSettingsPatch = (patch: Partial<ExtensionSettings>) => Promise<unknown>
 
 function createSummary(summary: Partial<SyncSummary>): SyncSummary {
   return {
@@ -52,7 +54,7 @@ function createSummary(summary: Partial<SyncSummary>): SyncSummary {
 async function defaultUpdateSyncSummary(
   summary: SyncSummary,
   readSettings: typeof getSettings,
-  writeSettings: SaveCompleteSettings
+  writeSettings: SaveSettingsPatch
 ) {
   const settings = await readSettings()
   const lastSyncSummary: SyncSummary = {
@@ -68,17 +70,14 @@ async function defaultUpdateSyncSummary(
     delete lastSyncSummary.errorSummary
   }
 
-  await writeSettings({
-    ...settings,
-    lastSyncSummary
-  })
+  await writeSettings({ lastSyncSummary })
 }
 
 async function persistSummary(
   summary: SyncSummary,
   updateSyncSummary: RunBookmarkSyncOptions["updateSyncSummary"],
   readSettings: typeof getSettings,
-  writeSettings: SaveCompleteSettings
+  writeSettings: SaveSettingsPatch
 ) {
   if (updateSyncSummary) {
     await updateSyncSummary(summary)
@@ -98,7 +97,7 @@ export async function runBookmarkSync({
   createSyncRun: persistSyncRun = createSyncRun,
   updateSyncSummary,
   getSettings: readSettings = getSettings,
-  saveSettings: writeSettings = saveSettings
+  saveSettings: writeSettings = updateSettings
 }: RunBookmarkSyncOptions = {}): Promise<SyncResult> {
   const startedAt = new Date().toISOString()
   const syncRunId = `sync-${startedAt}`
@@ -180,7 +179,6 @@ export async function runBookmarkSync({
 
     if (!hasCompletedInitialFullSync) {
       await writeSettings({
-        ...settings,
         syncStrategyVersion: SYNC_STRATEGY_VERSION,
         hasCompletedInitialFullSync: true,
         incrementalStopBufferPages

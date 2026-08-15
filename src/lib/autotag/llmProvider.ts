@@ -23,6 +23,53 @@ type FetchLike = (input: string, init: RequestInit) => Promise<Response>
 
 const MAX_TEXT_LENGTH = 500
 const RATE_LIMIT_BACKOFF_MS = 2000
+const MAX_ERROR_DETAIL_LENGTH = 200
+
+// Users routinely paste a bare host ("https://api.example.com/") into the
+// settings panel. OpenAI-compatible servers expose the API under a version
+// segment, so add the conventional "/v1" when the URL carries no path.
+export function resolveApiBaseUrl(baseUrl: string): string {
+  const trimmed = baseUrl.trim().replace(/\/+$/, "")
+  if (!trimmed) {
+    return trimmed
+  }
+
+  try {
+    const url = new URL(trimmed)
+    if (url.pathname === "/" || url.pathname === "") {
+      return `${url.origin}/v1`
+    }
+  } catch {
+    return trimmed
+  }
+
+  return trimmed
+}
+
+async function readErrorDetail(response: Response): Promise<string> {
+  let body = ""
+  try {
+    body = await response.text()
+  } catch {
+    body = ""
+  }
+
+  if (!body) {
+    return `HTTP ${response.status}`
+  }
+
+  let message = body
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string } | string; message?: string }
+    const fromError = typeof parsed.error === "string" ? parsed.error : parsed.error?.message
+    message = fromError ?? parsed.message ?? body
+  } catch {
+    message = body
+  }
+
+  const compact = message.replace(/\s+/g, " ").trim().slice(0, MAX_ERROR_DETAIL_LENGTH)
+  return compact ? `HTTP ${response.status}: ${compact}` : `HTTP ${response.status}`
+}
 
 function buildPrompt(input: { bookmarks: LlmBookmarkInput[]; vocabulary: string[]; allowNewTags: boolean }) {
   const bookmarkLines = input.bookmarks.map((bookmark) => ({
@@ -104,7 +151,7 @@ export function createOpenAiCompatibleProvider(options: {
   sleep?: (ms: number) => Promise<void>
 }): AutoTagLlmProvider {
   const fetchImpl: FetchLike = options.fetchImpl ?? ((input, init) => fetch(input, init))
-  const endpoint = `${options.settings.baseUrl.replace(/\/+$/, "")}/chat/completions`
+  const endpoint = `${resolveApiBaseUrl(options.settings.baseUrl)}/chat/completions`
 
   async function requestOnce(prompt: string): Promise<{ ok: boolean; rateLimited: boolean; content: string }> {
     const response = await fetchImpl(endpoint, {
@@ -179,7 +226,7 @@ export async function testLlmConnection(options: {
   fetchImpl?: FetchLike
 }): Promise<{ ok: boolean; error?: string }> {
   const fetchImpl: FetchLike = options.fetchImpl ?? ((input, init) => fetch(input, init))
-  const endpoint = `${options.settings.baseUrl.replace(/\/+$/, "")}/models`
+  const endpoint = `${resolveApiBaseUrl(options.settings.baseUrl)}/models`
 
   try {
     const response = await fetchImpl(endpoint, {
@@ -188,7 +235,7 @@ export async function testLlmConnection(options: {
     })
 
     if (!response.ok) {
-      return { ok: false, error: `HTTP ${response.status}` }
+      return { ok: false, error: await readErrorDetail(response) }
     }
 
     return { ok: true }
