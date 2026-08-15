@@ -26,6 +26,7 @@ import {
 import { BackgroundScene } from "./components/common.tsx"
 import { WorkspaceSidebar } from "./components/WorkspaceSidebar.tsx"
 import { BookmarkResultsPane } from "./components/BookmarkResultsPane.tsx"
+import { SettingsPanel } from "./settings/SettingsPanel.tsx"
 
 function OptionsScreen() {
   const workspace = useWorkspaceData()
@@ -50,6 +51,7 @@ function OptionsScreen() {
   const [selectedBulkBookmarkIds, setSelectedBulkBookmarkIds] = useState<Set<string>>(() => new Set())
   const [bulkTagId, setBulkTagId] = useState("")
   const [showPendingSuggestionsOnly, setShowPendingSuggestionsOnly] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [currentViewName, setCurrentViewName] = useState("")
   const [renderLimit, setRenderLimit] = useState(INITIAL_RESULTS_RENDER_LIMIT)
   const resizeStateRef = useRef<null | { side: "left" | "right"; startX: number; startWidth: number }>(null)
@@ -514,6 +516,7 @@ function OptionsScreen() {
                 onDeleteSavedView={(savedViewId) => void handleDeleteSavedView(savedViewId)}
                 setLocale={setLocale}
                 setThemePreference={setThemePreference}
+                onOpenSettings={() => setIsSettingsOpen(true)}
               />
 
               <div
@@ -621,6 +624,18 @@ function OptionsScreen() {
                     />
                   </div>
                 </section>
+              ) : null}
+
+              {isSettingsOpen ? (
+                <SettingsPanel
+                  workspace={workspace}
+                  copy={copy}
+                  locale={locale}
+                  themePreference={themePreference}
+                  setLocale={setLocale}
+                  setThemePreference={setThemePreference}
+                  onClose={() => setIsSettingsOpen(false)}
+                />
               ) : null}
             </>
           </div>

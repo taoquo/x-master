@@ -2454,6 +2454,139 @@
     background: color-mix(in srgb, var(--tag-bg) 70%, transparent);
   }
 
+  .options-settings-card {
+    width: min(94vw, 760px);
+  }
+
+  .options-settings-dialog {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    max-height: 86dvh;
+    border-radius: 22px;
+    border: 1px solid color-mix(in srgb, var(--theme-panel-border) 84%, transparent);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-bg) 96%, #fffdf9), color-mix(in srgb, var(--theme-panel-bg) 98%, var(--options-surface))),
+      var(--theme-panel-bg);
+    box-shadow:
+      0 26px 80px -44px rgba(58, 49, 45, 0.44),
+      inset 0 1px 0 color-mix(in srgb, #ffffff 58%, transparent);
+    overflow: hidden;
+  }
+
+  .options-settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px;
+    border-bottom: 1px solid color-mix(in srgb, var(--options-border) 70%, transparent);
+  }
+
+  .options-settings-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .options-settings-body {
+    display: grid;
+    grid-template-columns: 168px minmax(0, 1fr);
+    min-height: 320px;
+    overflow: hidden;
+  }
+
+  .options-settings-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 16px 12px;
+    border-right: 1px solid color-mix(in srgb, var(--options-border) 70%, transparent);
+  }
+
+  .options-settings-nav-item {
+    border: 0;
+    background: transparent;
+    border-radius: 10px;
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .options-settings-nav-item:hover {
+    background: color-mix(in srgb, var(--tag-bg) 70%, transparent);
+  }
+
+  .options-settings-nav-item.is-active {
+    background: color-mix(in srgb, var(--tag-bg) 90%, transparent);
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .options-settings-content {
+    padding: 18px 22px;
+    overflow-y: auto;
+    max-height: calc(86dvh - 64px);
+  }
+
+  .options-settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .options-settings-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .options-settings-field-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .options-settings-field select,
+  .options-settings-field input {
+    max-width: 260px;
+  }
+
+  .options-settings-toggle-row {
+    align-items: flex-start;
+  }
+
+  .options-settings-toggle-row input {
+    margin-top: 2px;
+  }
+
+  .options-settings-rule-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .options-settings-rule-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .options-settings-rule-editor {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .options-settings-rule-editor input {
+    width: 150px;
+  }
+
   .options-chip-muted {
     background: color-mix(in srgb, var(--surface-bg) 74%, var(--tag-bg));
     color: var(--text-secondary);

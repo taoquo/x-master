@@ -135,7 +135,8 @@ export function WorkspaceSidebar({
   onApplySavedView,
   onDeleteSavedView,
   setLocale,
-  setThemePreference
+  setThemePreference,
+  onOpenSettings
 }: {
   workspace: ReturnType<typeof useWorkspaceData>
   locale: Locale
@@ -169,6 +170,7 @@ export function WorkspaceSidebar({
   onDeleteSavedView: (savedViewId: string) => void
   setLocale: (locale: Locale) => Promise<void>
   setThemePreference: (themePreference: "system" | "light" | "dark") => Promise<void>
+  onOpenSettings: () => void
 }) {
   const tagCountById = workspace.bookmarkTags.reduce((map, bookmarkTag) => {
     map.set(bookmarkTag.tagId, (map.get(bookmarkTag.tagId) ?? 0) + 1)
@@ -758,6 +760,14 @@ export function WorkspaceSidebar({
                 className="options-footer-icon-button"
                 aria-label={copy.themeLabel}>
                 <AppIcon name={resolvedTheme === "dark" ? "moon" : "sun"} size={14} />
+              </button>
+              <button
+                type="button"
+                data-testid="footer-settings-toggle"
+                onClick={onOpenSettings}
+                className="options-footer-icon-button"
+                aria-label={copy.openSettings}>
+                <AppIcon name="settings" size={14} />
               </button>
               <span
                 data-testid="footer-data-actions-divider"
