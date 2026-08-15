@@ -4074,6 +4074,183 @@
   :root[data-theme="dark"] .status-error {
     color: #fecaca;
   }
+
+  .options-tag-header-meta {
+    margin-top: 8px;
+  }
+
+  .options-tag-sort-field {
+    display: inline-flex;
+    min-height: 36px;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--theme-panel-border);
+    border-radius: 12px;
+    padding-inline: 10px;
+    color: var(--text-secondary);
+  }
+
+  .options-tag-sort-field svg {
+    opacity: 0.62;
+  }
+
+  .options-tag-sort-field:hover {
+    background: var(--theme-interactive-hover-bg);
+    color: var(--text-primary);
+  }
+
+  .options-tag-sort-select {
+    min-height: 30px;
+    min-width: 132px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    outline: none;
+  }
+
+  .options-tag-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 14px;
+  }
+
+  .options-tag-card {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 10px;
+    border-radius: 16px;
+    padding: 14px;
+  }
+
+  .options-tag-card.is-selected {
+    border-color: color-mix(in srgb, var(--accent-primary) 26%, transparent);
+    background: var(--theme-selected-bg);
+  }
+
+  .options-tag-card-head {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .options-tag-card-check {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+  }
+
+  .options-tag-card-icon {
+    flex: 0 0 auto;
+    color: var(--text-tertiary);
+  }
+
+  .options-tag-card-name {
+    min-width: 0;
+    overflow: hidden;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .options-tag-card-name:hover {
+    color: var(--accent-primary);
+  }
+
+  .options-tag-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .options-tag-card-aliases {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .options-tag-card-footer {
+    display: flex;
+    min-height: 24px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .options-tag-card-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .options-tag-card:hover .options-nav-row-delete,
+  .options-tag-table tr:hover .options-nav-row-delete,
+  .options-tag-card-actions .options-nav-row-delete:focus-visible {
+    opacity: 1;
+  }
+
+  .options-tag-rename-input {
+    border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 38%, transparent);
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .options-tag-table-shell {
+    overflow-x: auto;
+    border-radius: 16px;
+    padding: 4px;
+  }
+
+  .options-tag-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  .options-tag-table th {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--theme-panel-border);
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+  }
+
+  .options-tag-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--theme-panel-border) 60%, transparent);
+    color: var(--text-secondary);
+    vertical-align: middle;
+  }
+
+  .options-tag-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .options-tag-table tbody tr:hover {
+    background: var(--theme-interactive-hover-bg);
+  }
+
+  .options-tag-table tbody tr.is-selected {
+    background: var(--theme-selected-bg);
+  }
+
+  .options-tag-table-select {
+    width: 40px;
+  }
 }
 
 @layer utilities {

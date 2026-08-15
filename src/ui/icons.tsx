@@ -2,7 +2,9 @@ import React from "react"
 import {
   ArrowsClockwise,
   ArrowsDownUp,
+  ArrowsMerge,
   ArrowSquareOut,
+  ArrowUUpLeft,
   BookmarkSimple,
   ChatCircle,
   CaretDown,
@@ -12,6 +14,7 @@ import {
   FunnelSimple,
   Gear,
   GlobeSimple,
+  Graph,
   Hash,
   Export,
   ImageSquare,
@@ -26,6 +29,7 @@ import {
   Sparkle,
   SquaresFour,
   Sun,
+  Table,
   Tag,
   Trash,
   Waveform,
@@ -63,6 +67,10 @@ type AppIconName =
   | "export"
   | "import"
   | "caretDown"
+  | "table"
+  | "merge"
+  | "graph"
+  | "back"
 
 interface AppIconProps {
   name: AppIconName
@@ -139,6 +147,14 @@ export function AppIcon({ name, size = 18, className }: AppIconProps) {
       return <DownloadSimple {...commonProps} />
     case "caretDown":
       return <CaretDown {...commonProps} />
+    case "table":
+      return <Table {...commonProps} />
+    case "merge":
+      return <ArrowsMerge {...commonProps} />
+    case "graph":
+      return <Graph {...commonProps} />
+    case "back":
+      return <ArrowUUpLeft {...commonProps} />
     default:
       return null
   }

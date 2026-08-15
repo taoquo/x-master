@@ -27,6 +27,13 @@ import {
 import { BackgroundScene } from "./components/common.tsx"
 import { WorkspaceSidebar } from "./components/WorkspaceSidebar.tsx"
 import { BookmarkResultsPane } from "./components/BookmarkResultsPane.tsx"
+import { TagResultsPane } from "./components/TagResultsPane.tsx"
+import {
+  buildTagLibraryItems,
+  getVisibleTagLibraryItems,
+  type TagLibraryFilter,
+  type TagLibrarySortOrder
+} from "./tagLibrary.ts"
 import { SettingsPanel } from "./settings/SettingsPanel.tsx"
 
 function OptionsScreen() {
@@ -56,6 +63,14 @@ function OptionsScreen() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [currentViewName, setCurrentViewName] = useState("")
   const [renderLimit, setRenderLimit] = useState(INITIAL_RESULTS_RENDER_LIMIT)
+  const [libraryMode, setLibraryMode] = useState<"bookmarks" | "tags">("bookmarks")
+  const [tagSearchQuery, setTagSearchQuery] = useState("")
+  const [tagLibraryFilter, setTagLibraryFilter] = useState<TagLibraryFilter>("all")
+  const [tagLibrarySortOrder, setTagLibrarySortOrder] = useState<TagLibrarySortOrder>("count-desc")
+  const [tagViewMode, setTagViewMode] = useState<"grid" | "table">("grid")
+  const [tagFilterPopoverOpen, setTagFilterPopoverOpen] = useState(false)
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(() => new Set())
+  const [mergeTargetTagId, setMergeTargetTagId] = useState("")
   const resizeStateRef = useRef<null | { side: "left" | "right"; startX: number; startWidth: number }>(null)
   const paneWidthsRef = useRef({ left: 280, right: 360 })
 
@@ -257,6 +272,35 @@ function OptionsScreen() {
 
     return map
   }, [tagsById, workspace.bookmarkTags, workspace.bookmarks])
+
+  const tagLibraryItems = useMemo(
+    () =>
+      buildTagLibraryItems({
+        tags: workspace.tags,
+        bookmarkTags: workspace.bookmarkTags,
+        tagSuggestions: workspace.tagSuggestions
+      }),
+    [workspace.bookmarkTags, workspace.tagSuggestions, workspace.tags]
+  )
+  const visibleTagLibraryItems = useMemo(
+    () =>
+      getVisibleTagLibraryItems({
+        items: tagLibraryItems,
+        searchQuery: tagSearchQuery,
+        filter: tagLibraryFilter,
+        sortOrder: tagLibrarySortOrder
+      }),
+    [tagLibraryFilter, tagLibrarySortOrder, tagSearchQuery, tagLibraryItems]
+  )
+
+  useEffect(() => {
+    const knownTagIds = new Set(workspace.tags.map((tag) => tag.id))
+    setSelectedTagIds((current) => {
+      const next = new Set([...current].filter((tagId) => knownTagIds.has(tagId)))
+      return next.size === current.size ? current : next
+    })
+    setMergeTargetTagId((current) => (current && !knownTagIds.has(current) ? "" : current))
+  }, [workspace.tags])
 
   const searchId = createFieldId("filters", "search")
   const lastSyncLabel = formatTimestamp(workspace.summary.lastSyncedAt, locale)
@@ -466,6 +510,104 @@ function OptionsScreen() {
     setRenderLimit((current) => Math.min(current + RESULTS_RENDER_INCREMENT, visibleBookmarks.length))
   }
 
+  function clearTagSelection() {
+    setSelectedTagIds(new Set())
+    setMergeTargetTagId("")
+  }
+
+  function openTagManagement() {
+    clearTagSelection()
+    setTagFilterPopoverOpen(false)
+    setLibraryMode("tags")
+  }
+
+  function exitTagManagement() {
+    clearTagSelection()
+    setTagFilterPopoverOpen(false)
+    setLibraryMode("bookmarks")
+  }
+
+  function handleToggleTagSelection(tagId: string) {
+    setSelectedTagIds((current) => {
+      const next = new Set(current)
+      if (next.has(tagId)) {
+        next.delete(tagId)
+      } else {
+        next.add(tagId)
+      }
+      return next
+    })
+  }
+
+  function handleSelectListedTags() {
+    setSelectedTagIds(new Set(visibleTagLibraryItems.map((item) => item.tagId)))
+  }
+
+  async function handleMergeSelectedTags() {
+    if (!mergeTargetTagId) {
+      return
+    }
+
+    const sourceTagIds = [...selectedTagIds].filter((tagId) => tagId !== mergeTargetTagId)
+    if (!sourceTagIds.length) {
+      return
+    }
+
+    const targetName = tagsById.get(mergeTargetTagId)?.name ?? mergeTargetTagId
+    const confirmed =
+      typeof window === "undefined" || typeof window.confirm !== "function"
+        ? true
+        : window.confirm(`${copy.mergeTagsConfirmPrefix} “${targetName}”?`)
+
+    if (!confirmed) {
+      return
+    }
+
+    await workspace.handleMergeTags(sourceTagIds, mergeTargetTagId)
+    clearTagSelection()
+  }
+
+  async function handleDeleteSelectedTags() {
+    const tagIds = [...selectedTagIds]
+    if (!tagIds.length) {
+      return
+    }
+
+    const confirmed =
+      typeof window === "undefined" || typeof window.confirm !== "function"
+        ? true
+        : window.confirm(`${copy.deleteTagsConfirmPrefix}?`)
+
+    if (!confirmed) {
+      return
+    }
+
+    for (const tagId of tagIds) {
+      await workspace.handleDeleteTag(tagId)
+    }
+
+    clearTagSelection()
+  }
+
+  function handleDeleteTagFromLibrary(tagId: string, tagName: string) {
+    const confirmed =
+      typeof window === "undefined" || typeof window.confirm !== "function"
+        ? true
+        : window.confirm(`${copy.deleteTagConfirmPrefix} “${tagName}”?`)
+
+    if (!confirmed) {
+      return
+    }
+
+    void workspace.handleDeleteTag(tagId)
+  }
+
+  function handleViewTagBookmarks(tagId: string) {
+    setActiveTagIds([tagId])
+    setShowPendingSuggestionsOnly(false)
+    exitTagManagement()
+  }
+
   return (
     <>
       <BackgroundScene />
@@ -500,6 +642,9 @@ function OptionsScreen() {
                 isAuthorsCollapsed={isAuthorsCollapsed}
                 onTagToggle={handleTagToggle}
                 onAuthorToggle={handleAuthorToggle}
+                tagSearchQuery={tagSearchQuery}
+                onTagSearchQueryChange={setTagSearchQuery}
+                onManageTags={openTagManagement}
                 onAuthorSearchQueryChange={setAuthorSearchQuery}
                 onToggleTagsCollapsed={() => setIsTagsCollapsed((current) => !current)}
                 onToggleAuthorsCollapsed={() => setIsAuthorsCollapsed((current) => !current)}
@@ -544,47 +689,80 @@ function OptionsScreen() {
                 }}
               />
 
-              <BookmarkResultsPane
-                workspace={workspace}
-                isLoading={coldStartLoading}
-                locale={locale}
-                copy={copy}
-                currentScopeLabel={currentScopeLabel}
-                searchId={searchId}
-                query={query}
-                setQuery={setQuery}
-                sortOrder={sortOrder}
-                setSortOrder={setSortOrder}
-                viewMode={viewMode}
-                setViewMode={setViewMode}
-                filterPopoverOpen={filterPopoverOpen}
-                setFilterPopoverOpen={setFilterPopoverOpen}
-                onlyWithMedia={onlyWithMedia}
-                setOnlyWithMedia={setOnlyWithMedia}
-                onlyLongform={onlyLongform}
-                setOnlyLongform={setOnlyLongform}
-                selectedBookmarkId={selectedBookmarkId}
-                setSelectedBookmarkId={setSelectedBookmarkId}
-                visibleBookmarks={visibleBookmarks}
-                renderedBookmarks={renderedBookmarks}
-                activeRefinementChips={activeRefinementChips}
-                tagNamesByBookmarkId={tagNamesByBookmarkId}
-                pendingSuggestionsByBookmarkId={pendingSuggestionsByBookmarkId}
-                visiblePendingSuggestionCount={visiblePendingSuggestionIds.length}
-                onAcceptSuggestion={(suggestionId) => void workspace.handleAcceptSuggestion(suggestionId)}
-                onRejectSuggestion={(suggestionId) => void workspace.handleRejectSuggestion(suggestionId)}
-                onAcceptVisibleSuggestions={() => void handleAcceptVisibleSuggestions()}
-                selectedBulkBookmarkIds={selectedBulkBookmarkIds}
-                bulkTagId={bulkTagId}
-                onBulkTagIdChange={setBulkTagId}
-                onBulkToggleBookmark={handleBulkToggleBookmark}
-                onSelectFilteredBookmarks={handleSelectFilteredBookmarks}
-                onSelectRenderedBookmarks={handleSelectRenderedBookmarks}
-                onClearBulkSelection={handleClearBulkSelection}
-                onApplyBulkTag={() => void handleApplyBulkTag()}
-                clearRefinement={clearRefinement}
-                onResultsScroll={handleResultsScroll}
-              />
+              {libraryMode === "tags" ? (
+                <TagResultsPane
+                  locale={locale}
+                  copy={copy}
+                  loadError={workspace.loadError}
+                  isSavingTags={workspace.isSavingTags}
+                  tagItems={tagLibraryItems}
+                  visibleTagItems={visibleTagLibraryItems}
+                  searchQuery={tagSearchQuery}
+                  onSearchQueryChange={setTagSearchQuery}
+                  filter={tagLibraryFilter}
+                  onFilterChange={setTagLibraryFilter}
+                  sortOrder={tagLibrarySortOrder}
+                  onSortOrderChange={setTagLibrarySortOrder}
+                  viewMode={tagViewMode}
+                  onViewModeChange={setTagViewMode}
+                  filterPopoverOpen={tagFilterPopoverOpen}
+                  onFilterPopoverOpenChange={setTagFilterPopoverOpen}
+                  selectedTagIds={selectedTagIds}
+                  mergeTargetTagId={mergeTargetTagId}
+                  onToggleTagSelection={handleToggleTagSelection}
+                  onSelectListedTags={handleSelectListedTags}
+                  onClearTagSelection={clearTagSelection}
+                  onMergeTargetChange={setMergeTargetTagId}
+                  onMergeSelectedTags={() => void handleMergeSelectedTags()}
+                  onDeleteSelectedTags={() => void handleDeleteSelectedTags()}
+                  onRenameTag={workspace.handleRenameTag}
+                  onDeleteTag={handleDeleteTagFromLibrary}
+                  onViewTagBookmarks={handleViewTagBookmarks}
+                  onExitTagManagement={exitTagManagement}
+                />
+              ) : (
+                <BookmarkResultsPane
+                  workspace={workspace}
+                  isLoading={coldStartLoading}
+                  locale={locale}
+                  copy={copy}
+                  currentScopeLabel={currentScopeLabel}
+                  searchId={searchId}
+                  query={query}
+                  setQuery={setQuery}
+                  sortOrder={sortOrder}
+                  setSortOrder={setSortOrder}
+                  viewMode={viewMode}
+                  setViewMode={setViewMode}
+                  filterPopoverOpen={filterPopoverOpen}
+                  setFilterPopoverOpen={setFilterPopoverOpen}
+                  onlyWithMedia={onlyWithMedia}
+                  setOnlyWithMedia={setOnlyWithMedia}
+                  onlyLongform={onlyLongform}
+                  setOnlyLongform={setOnlyLongform}
+                  selectedBookmarkId={selectedBookmarkId}
+                  setSelectedBookmarkId={setSelectedBookmarkId}
+                  visibleBookmarks={visibleBookmarks}
+                  renderedBookmarks={renderedBookmarks}
+                  activeRefinementChips={activeRefinementChips}
+                  tagNamesByBookmarkId={tagNamesByBookmarkId}
+                  pendingSuggestionsByBookmarkId={pendingSuggestionsByBookmarkId}
+                  visiblePendingSuggestionCount={visiblePendingSuggestionIds.length}
+                  onAcceptSuggestion={(suggestionId) => void workspace.handleAcceptSuggestion(suggestionId)}
+                  onRejectSuggestion={(suggestionId) => void workspace.handleRejectSuggestion(suggestionId)}
+                  onAcceptVisibleSuggestions={() => void handleAcceptVisibleSuggestions()}
+                  selectedBulkBookmarkIds={selectedBulkBookmarkIds}
+                  bulkTagId={bulkTagId}
+                  onBulkTagIdChange={setBulkTagId}
+                  onBulkToggleBookmark={handleBulkToggleBookmark}
+                  onSelectFilteredBookmarks={handleSelectFilteredBookmarks}
+                  onSelectRenderedBookmarks={handleSelectRenderedBookmarks}
+                  onClearBulkSelection={handleClearBulkSelection}
+                  onApplyBulkTag={() => void handleApplyBulkTag()}
+                  clearRefinement={clearRefinement}
+                  onResultsScroll={handleResultsScroll}
+                />
+              )}
 
               {coldStartLoading ? null : selectedBookmark ? (
                 <section

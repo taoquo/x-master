@@ -22,6 +22,7 @@ import {
 } from "../utils.ts"
 import { FieldBlock, InlineMessage, TextInputField } from "./common.tsx"
 import { DataSafetyPanel } from "./DataSafetyPanel.tsx"
+import { filterSidebarTags } from "../tagLibrary.ts"
 
 export function SavedViewsPanel({
   savedViews,
@@ -122,6 +123,9 @@ export function WorkspaceSidebar({
   isAuthorsCollapsed,
   onTagToggle,
   onAuthorToggle,
+  tagSearchQuery,
+  onTagSearchQueryChange,
+  onManageTags,
   onAuthorSearchQueryChange,
   onToggleTagsCollapsed,
   onToggleAuthorsCollapsed,
@@ -157,6 +161,9 @@ export function WorkspaceSidebar({
   isAuthorsCollapsed: boolean
   onTagToggle: (tagId: string) => void
   onAuthorToggle: (authorHandle: string) => void
+  tagSearchQuery: string
+  onTagSearchQueryChange: (value: string) => void
+  onManageTags: () => void
   onAuthorSearchQueryChange: (value: string) => void
   onToggleTagsCollapsed: () => void
   onToggleAuthorsCollapsed: () => void
@@ -196,6 +203,8 @@ export function WorkspaceSidebar({
   })
   const isAllBookmarksSelected = activeTagIds.includes("all") && activeAuthorHandles.length === 0
   const authorSearchId = createFieldId("authors", "search")
+  const tagSearchId = createFieldId("tags", "sidebar-search")
+  const visibleSidebarTags = filterSidebarTags(workspace.tags, tagSearchQuery)
   const tagSelectionCount = activeTagIds.includes("all") ? 0 : activeTagIds.length
   const authorSelectionCount = activeAuthorHandles.length
 
@@ -363,6 +372,15 @@ export function WorkspaceSidebar({
                   className="options-create-tag-button">
                   <span aria-hidden="true">+</span>
                 </button>
+                <button
+                  type="button"
+                  data-testid="sidebar-manage-tags"
+                  aria-label={copy.manageTagsLabel}
+                  title={copy.manageTagsLabel}
+                  onClick={onManageTags}
+                  className="options-create-tag-button">
+                  <AppIcon name="table" size={12} />
+                </button>
               </div>
               <button
                 type="button"
@@ -383,6 +401,18 @@ export function WorkspaceSidebar({
 
             {!isTagsCollapsed ? (
               <div data-testid="sidebar-tags-content" className="options-sidebar-group-content options-sidebar-group-content-tags">
+              <FieldBlock label={copy.searchTags} htmlFor={tagSearchId} labelClassName="sr-only">
+                <TextInputField
+                  id={tagSearchId}
+                  type="search"
+                  value={tagSearchQuery}
+                  onChange={onTagSearchQueryChange}
+                  placeholder={copy.searchTagsPlaceholder}
+                  dataTestId="sidebar-tags-search"
+                  ariaLabel={copy.searchTags}
+                  className="options-sidebar-search-input w-full"
+                />
+              </FieldBlock>
               <div data-testid="sidebar-list-tree" className="options-sidebar-rows">
                 <div
                   role="button"
@@ -471,7 +501,7 @@ export function WorkspaceSidebar({
                   </div>
                 ) : null}
 
-                {workspace.tags.map((tag) => {
+                {visibleSidebarTags.map((tag) => {
                   const isSelected = activeTagIds.includes(tag.id)
                   const isRenaming = renamingTagId === tag.id
                   return (
