@@ -1,4 +1,10 @@
 import { runBookmarkSync } from "./syncBookmarks.ts"
+import { runAutoTagPipeline } from "../lib/autotag/pipeline.ts"
+import {
+  acceptTagSuggestion,
+  acceptTagSuggestionsBulk,
+  rejectTagSuggestion
+} from "../lib/autotag/suggestionActions.ts"
 import { removeBookmarkSnapshot, upsertBookmarkSnapshot } from "../lib/storage/bookmarksStore.ts"
 import { resetLocalData } from "../lib/storage/resetLocalData.ts"
 import { getSettings, saveLastSyncSummary } from "../lib/storage/settings.ts"
@@ -10,13 +16,17 @@ import {
   getAllTags
 } from "../lib/storage/tagsStore.ts"
 import {
+  AUTOTAG_RUN_MESSAGE,
   LOAD_WORKSPACE_DATA_MESSAGE,
   RESET_LOCAL_DATA_MESSAGE,
   RUN_SYNC_MESSAGE,
   SITE_TWEET_BOOKMARK_SYNC_MESSAGE,
   SITE_TWEET_TAGGING_CREATE_TAG_MESSAGE,
   SITE_TWEET_TAGGING_PREPARE_MESSAGE,
-  SITE_TWEET_TAGGING_SET_TAG_MESSAGE
+  SITE_TWEET_TAGGING_SET_TAG_MESSAGE,
+  SUGGESTIONS_ACCEPT_BULK_MESSAGE,
+  SUGGESTIONS_ACCEPT_MESSAGE,
+  SUGGESTIONS_REJECT_MESSAGE
 } from "../lib/runtime/messages.ts"
 import type {
   Locale,
@@ -24,6 +34,7 @@ import type {
   SiteTweetCreateTagResult,
   SiteTweetDraft,
   SiteTweetTagState,
+  TagSuggestionRecord,
   WorkspaceData
 } from "../lib/types.ts"
 import { loadWorkspaceDataFromLocal } from "../lib/workspace/loadWorkspaceData.ts"
@@ -34,6 +45,11 @@ interface BackgroundDependencies {
   loadWorkspaceData: () => Promise<WorkspaceData>
   resetData: () => Promise<unknown>
   runSync: () => Promise<unknown>
+  runAutoTag?: () => Promise<unknown>
+  shouldAutoTagAfterSync?: () => Promise<boolean>
+  acceptSuggestion?: (suggestionId: string) => Promise<TagSuggestionRecord | null>
+  rejectSuggestion?: (suggestionId: string) => Promise<TagSuggestionRecord | null>
+  acceptSuggestionsBulk?: (suggestionIds: string[]) => Promise<{ acceptedCount: number }>
   syncSiteTweetBookmark?: (input: { tweet: SiteTweetDraft; enabled: boolean }) => Promise<SiteTweetBookmarkSyncResult>
   prepareSiteTweetTagging?: (input: { tweet: SiteTweetDraft }) => Promise<SiteTweetTagState>
   setSiteTweetTag?: (input: { bookmarkId: string; tagId: string; enabled: boolean }) => Promise<SiteTweetTagState>
@@ -44,6 +60,10 @@ type BackgroundMessage =
   | { type: typeof LOAD_WORKSPACE_DATA_MESSAGE }
   | { type: typeof RESET_LOCAL_DATA_MESSAGE }
   | { type: typeof RUN_SYNC_MESSAGE }
+  | { type: typeof AUTOTAG_RUN_MESSAGE }
+  | { type: typeof SUGGESTIONS_ACCEPT_MESSAGE; suggestionId: string }
+  | { type: typeof SUGGESTIONS_REJECT_MESSAGE; suggestionId: string }
+  | { type: typeof SUGGESTIONS_ACCEPT_BULK_MESSAGE; suggestionIds: string[] }
   | { type: typeof SITE_TWEET_BOOKMARK_SYNC_MESSAGE; tweet: SiteTweetDraft; enabled: boolean }
   | { type: typeof SITE_TWEET_TAGGING_PREPARE_MESSAGE; tweet: SiteTweetDraft }
   | { type: typeof SITE_TWEET_TAGGING_SET_TAG_MESSAGE; bookmarkId: string; tagId: string; enabled: boolean }
@@ -53,12 +73,40 @@ export function createBackgroundMessageHandler({
   loadWorkspaceData,
   resetData,
   runSync,
+  runAutoTag = runAutoTagPipeline,
+  shouldAutoTagAfterSync = shouldAutoTagAfterSyncDefault,
+  acceptSuggestion = acceptTagSuggestion,
+  rejectSuggestion = rejectTagSuggestion,
+  acceptSuggestionsBulk = acceptTagSuggestionsBulk,
   syncSiteTweetBookmark = async ({ tweet, enabled }) => syncSiteTweetBookmarkDefault({ tweet, enabled }),
   prepareSiteTweetTagging = async ({ tweet }) => prepareSiteTweetTaggingDefault({ tweet }),
   setSiteTweetTag = async ({ bookmarkId, tagId, enabled }) => setSiteTweetTagDefault({ bookmarkId, tagId, enabled }),
   createSiteTweetTag = async ({ bookmarkId, name }) => createSiteTweetTagDefault({ bookmarkId, name })
 }: BackgroundDependencies) {
   let isSyncRunning = false
+  let isAutoTagRunning = false
+
+  const startAutoTagRun = () => {
+    if (isAutoTagRunning) {
+      return { started: false, alreadyRunning: true }
+    }
+
+    isAutoTagRunning = true
+    // Fire-and-forget like sync: suggestions are persisted by the pipeline and
+    // progress is broadcast, so the message channel is released immediately.
+    void (async () => {
+      try {
+        await runAutoTag()
+      } catch {
+        // Auto-tagging is best-effort; a failed run leaves no partial state
+        // beyond already-persisted suggestions, which are safe to keep.
+      } finally {
+        isAutoTagRunning = false
+      }
+    })()
+
+    return { started: true }
+  }
 
   return async function handleMessage(message: BackgroundMessage | { type: string; [key: string]: unknown }) {
     if (message.type === LOAD_WORKSPACE_DATA_MESSAGE) {
@@ -81,6 +129,10 @@ export function createBackgroundMessageHandler({
       void (async () => {
         try {
           await runSync()
+
+          if (await shouldAutoTagAfterSync()) {
+            startAutoTagRun()
+          }
         } catch (error) {
           await persistSyncErrorFallback(error)
         } finally {
@@ -89,6 +141,22 @@ export function createBackgroundMessageHandler({
       })()
 
       return { started: true }
+    }
+
+    if (message.type === AUTOTAG_RUN_MESSAGE) {
+      return startAutoTagRun()
+    }
+
+    if (message.type === SUGGESTIONS_ACCEPT_MESSAGE) {
+      return acceptSuggestion(message.suggestionId as string)
+    }
+
+    if (message.type === SUGGESTIONS_REJECT_MESSAGE) {
+      return rejectSuggestion(message.suggestionId as string)
+    }
+
+    if (message.type === SUGGESTIONS_ACCEPT_BULK_MESSAGE) {
+      return acceptSuggestionsBulk(message.suggestionIds as string[])
     }
 
     if (message.type === SITE_TWEET_BOOKMARK_SYNC_MESSAGE) {
@@ -118,6 +186,15 @@ export function createBackgroundMessageHandler({
     }
 
     throw new Error(`Unsupported message type: ${message.type}`)
+  }
+}
+
+async function shouldAutoTagAfterSyncDefault() {
+  try {
+    const settings = await getSettings()
+    return settings.autoTag.enabled && settings.autoTag.runAfterSync
+  } catch {
+    return false
   }
 }
 
