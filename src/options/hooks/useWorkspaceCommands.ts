@@ -15,7 +15,9 @@ import {
   rejectTagSuggestion
 } from "../../lib/autotag/suggestionActions.ts"
 import { getSettings, updateSettings } from "../../lib/storage/settings.ts"
-import { attachTagToBookmark, attachTagToBookmarks, createTag, deleteTag, detachTagFromBookmark, renameTag } from "../../lib/storage/tagsStore.ts"
+import { attachTagToBookmark, attachTagToBookmarks, createTag, detachTagFromBookmark, mergeTags, renameTag } from "../../lib/storage/tagsStore.ts"
+import { deleteTagPermanently, unblockTagKey } from "../../lib/tags/tagActions.ts"
+import { isSameTagName } from "../../lib/tags/canonical.ts"
 import type { BookmarkTagRecord, SavedViewRecord, TagRecord, WorkspaceData } from "../../lib/types.ts"
 import type { WorkspaceTagPatch } from "./useWorkspaceQueries.ts"
 
@@ -196,6 +198,8 @@ export function useWorkspaceCommands({
 
     try {
       const tag = await createTag({ name: trimmedName })
+      // A deliberate re-create clears any block left behind by a past deletion.
+      await unblockTagKey(trimmedName)
       applyWorkspacePatch(({ tags }) => ({ tags: sortTagsByName([...tags, tag]) }))
       return tag
     } catch (error) {
@@ -211,13 +215,65 @@ export function useWorkspaceCommands({
     setIsSavingTags(true)
 
     try {
-      await deleteTag(tagId)
-      applyWorkspacePatch(({ tags, bookmarkTags }) => ({
+      const tagName = getWorkspaceData().tags.find((tag) => tag.id === tagId)?.name
+      await deleteTagPermanently({ tagId, tagName })
+      applyWorkspacePatch(({ tags, bookmarkTags, tagSuggestions }) => ({
         tags: tags.filter((tag) => tag.id !== tagId),
-        bookmarkTags: bookmarkTags.filter((relation) => relation.tagId !== tagId)
+        bookmarkTags: bookmarkTags.filter((relation) => relation.tagId !== tagId),
+        tagSuggestions: tagName
+          ? tagSuggestions.map((suggestion) =>
+              suggestion.status === "pending" && isSameTagName(suggestion.tagName, tagName)
+                ? { ...suggestion, status: "rejected" as const, resolvedAt: new Date().toISOString() }
+                : suggestion
+            )
+          : tagSuggestions
       }))
     } catch (error) {
       setCommandError(toErrorMessage(error, "Failed to delete tag"))
+      throw error
+    } finally {
+      setIsSavingTags(false)
+    }
+  }
+
+  async function handleMergeTags(sourceTagIds: string[], targetTagId: string) {
+    if (!sourceTagIds.length || !targetTagId) {
+      return
+    }
+
+    setCommandError(null)
+    setIsSavingTags(true)
+
+    try {
+      const result = await mergeTags({ sourceTagIds, targetTagId })
+      const mergedIds = new Set(result.mergedTagIds)
+      applyWorkspacePatch(({ tags, bookmarkTags }) => {
+        const remappedRelations = new Map<string, BookmarkTagRecord>()
+
+        for (const relation of bookmarkTags) {
+          if (!mergedIds.has(relation.tagId)) {
+            remappedRelations.set(relation.id, relation)
+            continue
+          }
+
+          const id = `${relation.bookmarkId}:${targetTagId}`
+          if (!remappedRelations.has(id)) {
+            remappedRelations.set(id, { ...relation, id, tagId: targetTagId })
+          }
+        }
+
+        return {
+          tags: sortTagsByName(
+            tags
+              .filter((tag) => !mergedIds.has(tag.id))
+              .map((tag) => (tag.id === targetTagId ? result.target : tag))
+          ),
+          bookmarkTags: [...remappedRelations.values()]
+        }
+      })
+      return result
+    } catch (error) {
+      setCommandError(toErrorMessage(error, "Failed to merge tags"))
       throw error
     } finally {
       setIsSavingTags(false)
@@ -399,6 +455,7 @@ export function useWorkspaceCommands({
     handleResetLocalData,
     handleCreateTag,
     handleDeleteTag,
+    handleMergeTags,
     handleRenameTag,
     handleAttachTag,
     handleDetachTag,

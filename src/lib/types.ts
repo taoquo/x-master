@@ -38,6 +38,8 @@ export interface TagRecord {
   id: string
   name: string
   createdAt: string
+  aliases?: string[]
+  updatedAt?: string
 }
 
 export interface BookmarkTagRecord {
@@ -129,7 +131,10 @@ export interface KeywordTagRule {
   tagName: string
 }
 
-export type TagVocabularyMode = "closed" | "open"
+// closed  : never invent a tag, reuse the existing vocabulary only
+// guarded : may invent a few tags per run, within an explicit budget (default)
+// open    : may invent tags freely
+export type TagVocabularyMode = "closed" | "guarded" | "open"
 
 export interface AutoTagLlmSettings {
   enabled: boolean
@@ -150,6 +155,9 @@ export interface AutoTagSettings {
     keywordRules: KeywordTagRule[]
   }
   llm: AutoTagLlmSettings
+  // Canonical keys of tags the user deleted on purpose. Auto-tagging never
+  // suggests them again until the tag is re-created by hand.
+  blockedTagKeys: string[]
 }
 
 export interface ExtensionSettings {

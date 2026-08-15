@@ -6,12 +6,16 @@ import type {
   TagSuggestionRecord
 } from "../types.ts"
 import { createTagSuggestion } from "../storage/suggestionsStore.ts"
+import { canonicalTagKey } from "../tags/canonical.ts"
 
 const HASHTAG_CONFIDENCE = 0.9
 const KEYWORD_CONFIDENCE = 0.7
 const AUTHOR_CONFIDENCE = 0.6
 const AUTHOR_MIN_TAGGED_BOOKMARKS = 3
 const AUTHOR_MIN_TAG_SHARE = 0.6
+// A hashtag only becomes a tag candidate once it shows up in at least this many
+// bookmarks. Single-use hashtags are the main source of long-tail tag noise.
+export const HASHTAG_MIN_BOOKMARKS = 3
 
 export interface AuthorTagAffinity {
   authorHandle: string
@@ -86,9 +90,12 @@ export function computeHeuristicSuggestions(input: {
   bookmarkTags: BookmarkTagRecord[]
   suggestions: TagSuggestionRecord[]
   settings: AutoTagSettings["heuristics"]
+  // Canonical keys the user deleted on purpose; never suggested again.
+  blockedTagKeys?: string[]
 }): TagSuggestionRecord[] {
   const taggedBookmarkIds = new Set(input.bookmarkTags.map((bookmarkTag) => bookmarkTag.bookmarkId))
   const knownSuggestionIds = new Set(input.suggestions.map((suggestion) => suggestion.id))
+  const blockedKeys = new Set(input.blockedTagKeys ?? [])
   const results: TagSuggestionRecord[] = []
 
   const addSuggestion = (
@@ -97,6 +104,10 @@ export function computeHeuristicSuggestions(input: {
     source: TagSuggestionRecord["source"],
     confidence: number
   ) => {
+    if (blockedKeys.has(canonicalTagKey(tagName))) {
+      return
+    }
+
     const suggestion = createTagSuggestion({ bookmarkId, tagName, source, confidence })
     if (!suggestion || knownSuggestionIds.has(suggestion.id)) {
       return
@@ -104,6 +115,31 @@ export function computeHeuristicSuggestions(input: {
 
     knownSuggestionIds.add(suggestion.id)
     results.push(suggestion)
+  }
+
+  // Hashtag frequency across the whole library (existing tags included, so a
+  // hashtag matching an established tag always passes the threshold).
+  const hashtagBookmarkCounts = new Map<string, number>()
+  if (input.settings.useHashtags) {
+    for (const tag of input.tags) {
+      const key = canonicalTagKey(tag.name)
+      if (key) {
+        hashtagBookmarkCounts.set(key, HASHTAG_MIN_BOOKMARKS)
+      }
+    }
+
+    for (const bookmark of input.bookmarks) {
+      const seen = new Set<string>()
+      for (const hashtag of bookmark.hashtags ?? []) {
+        const key = canonicalTagKey(hashtag)
+        if (!key || seen.has(key)) {
+          continue
+        }
+
+        seen.add(key)
+        hashtagBookmarkCounts.set(key, (hashtagBookmarkCounts.get(key) ?? 0) + 1)
+      }
+    }
   }
 
   const affinitiesByAuthor = new Map<string, AuthorTagAffinity[]>()
@@ -130,6 +166,11 @@ export function computeHeuristicSuggestions(input: {
 
     if (input.settings.useHashtags) {
       for (const hashtag of bookmark.hashtags ?? []) {
+        const key = canonicalTagKey(hashtag)
+        if ((hashtagBookmarkCounts.get(key) ?? 0) < HASHTAG_MIN_BOOKMARKS) {
+          continue
+        }
+
         addSuggestion(bookmark.tweetId, hashtag, "hashtag", HASHTAG_CONFIDENCE)
       }
     }

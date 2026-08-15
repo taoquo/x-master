@@ -40,7 +40,8 @@ test("hashtag rule suggests normalized hashtags for untagged bookmarks only", ()
       makeBookmark({ tweetId: "t1", hashtags: ["AI", "#Rust"] }),
       makeBookmark({ tweetId: "t2", hashtags: ["Ignored"] })
     ],
-    tags: [makeTag("tag-1", "Existing")],
+    // Hashtags that already exist as real tags bypass the frequency threshold.
+    tags: [makeTag("tag-1", "Existing"), makeTag("tag-2", "AI"), makeTag("tag-3", "Rust")],
     bookmarkTags: [makeBookmarkTag("t2", "tag-1")],
     suggestions: [],
     settings: makeHeuristicSettings({ useAuthors: false })
@@ -53,6 +54,52 @@ test("hashtag rule suggests normalized hashtags for untagged bookmarks only", ()
       ["t1", "Rust", "hashtag", 0.9]
     ]
   )
+})
+
+test("hashtag rule ignores long-tail hashtags below the frequency threshold", () => {
+  const rare = computeHeuristicSuggestions({
+    bookmarks: [makeBookmark({ tweetId: "t1", hashtags: ["Design"] }), makeBookmark({ tweetId: "t2", hashtags: ["Design"] })],
+    tags: [],
+    bookmarkTags: [],
+    suggestions: [],
+    settings: makeHeuristicSettings({ useAuthors: false })
+  })
+
+  assert.deepEqual(rare, [])
+
+  const frequent = computeHeuristicSuggestions({
+    bookmarks: [
+      makeBookmark({ tweetId: "t1", hashtags: ["Design"] }),
+      makeBookmark({ tweetId: "t2", hashtags: ["design"] }),
+      makeBookmark({ tweetId: "t3", hashtags: ["#Designs"] })
+    ],
+    tags: [],
+    bookmarkTags: [],
+    suggestions: [],
+    settings: makeHeuristicSettings({ useAuthors: false })
+  })
+
+  assert.deepEqual(
+    frequent.map((suggestion) => [suggestion.bookmarkId, suggestion.tagName]),
+    [
+      ["t1", "Design"],
+      ["t2", "design"],
+      ["t3", "Designs"]
+    ]
+  )
+})
+
+test("hashtag rule skips canonical keys the user deleted on purpose", () => {
+  const suggestions = computeHeuristicSuggestions({
+    bookmarks: [makeBookmark({ tweetId: "t1", hashtags: ["AI"] })],
+    tags: [makeTag("tag-1", "AI")],
+    bookmarkTags: [],
+    suggestions: [],
+    settings: makeHeuristicSettings({ useAuthors: false }),
+    blockedTagKeys: ["ai"]
+  })
+
+  assert.deepEqual(suggestions, [])
 })
 
 test("existing suggestions act as a negative cache regardless of status", () => {
@@ -140,7 +187,7 @@ test("keyword rule matches case-insensitive substrings", () => {
 test("rules deduplicate the same bookmark+tag pair within a single run", () => {
   const suggestions = computeHeuristicSuggestions({
     bookmarks: [makeBookmark({ tweetId: "t1", text: "all about ai", hashtags: ["AI"] })],
-    tags: [],
+    tags: [makeTag("tag-ai", "AI")],
     bookmarkTags: [],
     suggestions: [],
     settings: makeHeuristicSettings({

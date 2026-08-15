@@ -62,6 +62,8 @@ test("runAutoTagPipeline persists heuristic suggestions and is idempotent", asyn
   installChromeStorageMock()
   await resetBookmarksDb()
   await enableAutoTag()
+  // An existing tag with the same name lifts the hashtag over the frequency threshold.
+  await createTag({ name: "AI" })
   await upsertBookmarks([makeBookmark("t1", { hashtags: ["AI"] }), makeBookmark("t2")])
 
   const firstRun = await runAutoTagPipeline()
@@ -113,13 +115,19 @@ async function enableAutoTagWithLlm(overrides: Partial<ReturnType<typeof createD
 }
 
 function makeStubProvider(responses: Array<Array<{ tweetId: string; tags: Array<{ name: string; confidence: number }> }>>) {
-  const calls: Array<{ tweetIds: string[]; vocabulary: string[]; allowNewTags: boolean }> = []
+  const calls: Array<{
+    tweetIds: string[]
+    vocabulary: Array<{ name: string; count: number }>
+    allowNewTags: boolean
+    newTagBudget?: number
+  }> = []
   const provider: AutoTagLlmProvider = {
     async suggestTags(input) {
       calls.push({
         tweetIds: input.bookmarks.map((bookmark) => bookmark.tweetId),
-        vocabulary: input.vocabulary,
-        allowNewTags: input.allowNewTags
+        vocabulary: input.vocabulary.map((entry) => ({ ...entry })),
+        allowNewTags: input.allowNewTags,
+        newTagBudget: input.newTagBudget
       })
       return responses[calls.length - 1] ?? []
     }
@@ -143,7 +151,7 @@ test("runAutoTagPipeline skips the LLM step when no API key is stored", async ()
 test("runAutoTagPipeline sends untagged bookmarks to the LLM and persists suggestions", async () => {
   installChromeStorageMock()
   await resetBookmarksDb()
-  await enableAutoTagWithLlm()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed" })
   await saveSecrets({ llmApiKey: "sk-test" })
 
   const tag = await createTag({ name: "AI" })
@@ -165,7 +173,7 @@ test("runAutoTagPipeline sends untagged bookmarks to the LLM and persists sugges
   assert.equal(calls.length, 2)
   assert.deepEqual(calls[0]?.tweetIds, ["t1", "t2"])
   assert.deepEqual(calls[1]?.tweetIds, ["t3"])
-  assert.deepEqual(calls[0]?.vocabulary, ["AI"])
+  assert.deepEqual(calls[0]?.vocabulary, [{ name: "AI", count: 1 }])
   assert.equal(calls[0]?.allowNewTags, false)
   assert.equal(result.llmProcessedCount, 3)
 
@@ -178,9 +186,11 @@ test("runAutoTagPipeline sends untagged bookmarks to the LLM and persists sugges
 test("runAutoTagPipeline skips bookmarks that already have pending suggestions", async () => {
   installChromeStorageMock()
   await resetBookmarksDb()
-  await enableAutoTagWithLlm()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed" })
   await saveSecrets({ llmApiKey: "sk-test" })
   await createTag({ name: "News" })
+  // "AI" already exists as a tag, so the hashtag clears the frequency threshold.
+  await createTag({ name: "AI" })
   await upsertBookmarks([makeBookmark("t1", { hashtags: ["AI"] }), makeBookmark("t2")])
 
   const { provider, calls } = makeStubProvider([[{ tweetId: "t2", tags: [{ name: "News", confidence: 0.6 }] }]])
@@ -203,4 +213,71 @@ test("runAutoTagPipeline honors the open vocabulary mode", async () => {
 
   assert.equal(calls[0]?.allowNewTags, true)
   assert.equal(result.suggestedCount, 1)
+})
+
+test("guarded mode accumulates the vocabulary across batches and caps new tags", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "guarded", batchSize: 1 })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await upsertBookmarks([makeBookmark("t1"), makeBookmark("t2")])
+
+  const { provider, calls } = makeStubProvider([
+    [{ tweetId: "t1", tags: [{ name: "ai agents", confidence: 0.9 }] }],
+    [{ tweetId: "t2", tags: [{ name: "AI Agent", confidence: 0.8 }] }]
+  ])
+
+  const result = await runAutoTagPipeline({ createLlmProvider: () => provider })
+
+  // Batch 1 introduces the tag, batch 2 sees it in the vocabulary.
+  assert.deepEqual(calls[0]?.vocabulary, [])
+  assert.deepEqual(calls[1]?.vocabulary, [{ name: "ai agents", count: 1 }])
+  assert.equal(calls[0]?.newTagBudget, 3)
+
+  const suggestions = (await getAllTagSuggestions()).filter((suggestion) => suggestion.source === "llm")
+  // "AI Agent" collapses onto the spelling already introduced in batch 1.
+  assert.deepEqual(
+    suggestions.map((suggestion) => suggestion.tagName).sort(),
+    ["ai agents", "ai agents"]
+  )
+  assert.equal(result.suggestedCount, 2)
+})
+
+test("guarded mode stops inventing tags once the budget is spent", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "guarded", batchSize: 10 })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await upsertBookmarks([makeBookmark("t1"), makeBookmark("t2"), makeBookmark("t3"), makeBookmark("t4")])
+
+  const { provider } = makeStubProvider([
+    [
+      { tweetId: "t1", tags: [{ name: "one", confidence: 0.9 }] },
+      { tweetId: "t2", tags: [{ name: "two", confidence: 0.9 }] },
+      { tweetId: "t3", tags: [{ name: "three", confidence: 0.9 }] },
+      { tweetId: "t4", tags: [{ name: "four", confidence: 0.9 }] }
+    ]
+  ])
+
+  await runAutoTagPipeline({ createLlmProvider: () => provider })
+
+  const suggestions = (await getAllTagSuggestions()).filter((suggestion) => suggestion.source === "llm")
+  // Budget floor is 3 new tags per run, so the fourth invention is dropped.
+  assert.deepEqual(suggestions.map((suggestion) => suggestion.tagName).sort(), ["one", "three", "two"])
+})
+
+test("blocked tag keys are never suggested again", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "open" })
+  const settings = await getSettings()
+  await saveSettings({ ...settings, autoTag: { ...settings.autoTag, blockedTagKeys: ["aiagent"] } })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await upsertBookmarks([makeBookmark("t1")])
+
+  const { provider } = makeStubProvider([[{ tweetId: "t1", tags: [{ name: "AI Agents", confidence: 0.9 }] }]])
+  const result = await runAutoTagPipeline({ createLlmProvider: () => provider })
+
+  assert.equal(result.suggestedCount, 0)
+  assert.equal((await getAllTagSuggestions()).length, 0)
 })

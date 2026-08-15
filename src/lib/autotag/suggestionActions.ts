@@ -1,11 +1,11 @@
 import { resolveTagSuggestion } from "../storage/suggestionsStore.ts"
 import { attachTagToBookmark, createTag, getAllTags } from "../storage/tagsStore.ts"
+import { findTagByName } from "../tags/canonical.ts"
 import type { TagRecord, TagSuggestionRecord } from "../types.ts"
 
 async function ensureTagByName(tagName: string, knownTags?: TagRecord[]): Promise<TagRecord> {
   const tags = knownTags ?? (await getAllTags())
-  const normalized = tagName.trim().toLowerCase()
-  const existing = tags.find((tag) => tag.name.trim().toLowerCase() === normalized)
+  const existing = findTagByName(tags, tagName)
 
   if (existing) {
     return existing
@@ -15,8 +15,8 @@ async function ensureTagByName(tagName: string, knownTags?: TagRecord[]): Promis
 }
 
 // Accepting a suggestion is the only path where auto-tagging mutates real
-// tags: match an existing tag case-insensitively (create when absent), attach
-// it to the bookmark, and mark the suggestion accepted.
+// tags: resolve the canonical name (including merge aliases), create the tag
+// only when nothing matches, attach it, and mark the suggestion accepted.
 export async function acceptTagSuggestion(suggestionId: string): Promise<TagSuggestionRecord | null> {
   const suggestion = await resolveTagSuggestion(suggestionId, "accepted")
 

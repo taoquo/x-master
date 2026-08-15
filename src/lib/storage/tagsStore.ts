@@ -1,4 +1,5 @@
 import type { BookmarkRecord, BookmarkTagRecord, TagRecord } from "../types.ts"
+import { canonicalTagKey, normalizeTagDisplayName } from "../tags/canonical.ts"
 import {
   BOOKMARKS_STORE,
   BOOKMARK_TAGS_STORE,
@@ -12,8 +13,11 @@ function createBookmarkTagId(bookmarkId: string, tagId: string) {
   return `${bookmarkId}:${tagId}`
 }
 
+// Creating a tag whose canonical key already exists returns the existing tag
+// instead of a near-duplicate. This is the single guard that keeps
+// "AI Agent" / "ai-agents" / "AI_Agent" from becoming three tags.
 export async function createTag({ name }: { name: string }): Promise<TagRecord> {
-  const trimmedName = name.trim()
+  const trimmedName = normalizeTagDisplayName(name)
   if (!trimmedName) {
     throw new Error("Tag name is required")
   }
@@ -21,6 +25,15 @@ export async function createTag({ name }: { name: string }): Promise<TagRecord> 
   const db = await getBookmarksDb()
   const transaction = db.transaction(TAGS_STORE, "readwrite")
   const store = transaction.objectStore(TAGS_STORE)
+  const existingTags = (await requestToPromise(store.getAll())) as TagRecord[]
+  const canonicalKey = canonicalTagKey(trimmedName)
+  const duplicate = existingTags.find((tag) => canonicalTagKey(tag.name) === canonicalKey)
+
+  if (duplicate) {
+    await transactionDone(transaction)
+    return duplicate
+  }
+
   const tag = {
     id: `tag-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     name: trimmedName,
@@ -39,7 +52,7 @@ export async function renameTag({
   tagId: string
   name: string
 }): Promise<TagRecord> {
-  const trimmedName = name.trim()
+  const trimmedName = normalizeTagDisplayName(name)
   if (!trimmedName) {
     throw new Error("Tag name is required")
   }
@@ -55,7 +68,8 @@ export async function renameTag({
 
   const updatedTag: TagRecord = {
     ...existing,
-    name: trimmedName
+    name: trimmedName,
+    updatedAt: new Date().toISOString()
   }
 
   store.put(updatedTag)
@@ -158,6 +172,10 @@ export async function detachTagFromBookmark({
   await transactionDone(transaction)
 }
 
+// Deleting a tag removes the tag definition and detaches it from every
+// bookmark; the bookmarks themselves are untouched. Callers that want the tag
+// to stay gone must also block its canonical key (see settings.blockedTagKeys),
+// otherwise auto-tagging can suggest the same name again later.
 export async function deleteTag(tagId: string) {
   const db = await getBookmarksDb()
   const transaction = db.transaction([TAGS_STORE, BOOKMARK_TAGS_STORE], "readwrite")
@@ -171,6 +189,90 @@ export async function deleteTag(tagId: string) {
 
   tagsStore.delete(tagId)
   await transactionDone(transaction)
+}
+
+// Merges source tags into a target tag inside one transaction: bookmark
+// relations are remapped (the `bookmarkId:tagId` primary key makes the remap
+// idempotent), source names are kept as aliases so future suggestions resolve
+// to the survivor, and the source tags are deleted.
+export async function mergeTags({
+  sourceTagIds,
+  targetTagId
+}: {
+  sourceTagIds: string[]
+  targetTagId: string
+}): Promise<{ target: TagRecord; mergedTagIds: string[]; remappedCount: number }> {
+  const uniqueSourceIds = [...new Set(sourceTagIds)].filter((tagId) => tagId && tagId !== targetTagId)
+
+  const db = await getBookmarksDb()
+  const transaction = db.transaction([TAGS_STORE, BOOKMARK_TAGS_STORE], "readwrite")
+  const tagsStore = transaction.objectStore(TAGS_STORE)
+  const bookmarkTagsStore = transaction.objectStore(BOOKMARK_TAGS_STORE)
+  const target = (await requestToPromise(tagsStore.get(targetTagId))) as TagRecord | undefined
+
+  if (!target) {
+    await transactionDone(transaction)
+    throw new Error("Target tag not found")
+  }
+
+  const aliases = new Set(target.aliases ?? [])
+  const mergedTagIds: string[] = []
+  let remappedCount = 0
+
+  for (const sourceTagId of uniqueSourceIds) {
+    const source = (await requestToPromise(tagsStore.get(sourceTagId))) as TagRecord | undefined
+    if (!source) {
+      continue
+    }
+
+    const relations = (await requestToPromise(
+      bookmarkTagsStore.index("tagId").getAll(sourceTagId)
+    )) as BookmarkTagRecord[]
+
+    for (const relation of relations) {
+      const targetRelationId = createBookmarkTagId(relation.bookmarkId, targetTagId)
+      const existing = await requestToPromise(bookmarkTagsStore.get(targetRelationId))
+
+      if (!existing) {
+        bookmarkTagsStore.put({
+          id: targetRelationId,
+          bookmarkId: relation.bookmarkId,
+          tagId: targetTagId,
+          createdAt: relation.createdAt
+        } satisfies BookmarkTagRecord)
+        remappedCount += 1
+      }
+
+      bookmarkTagsStore.delete(relation.id)
+    }
+
+    if (canonicalTagKey(source.name) !== canonicalTagKey(target.name)) {
+      aliases.add(source.name)
+    }
+
+    for (const alias of source.aliases ?? []) {
+      if (canonicalTagKey(alias) !== canonicalTagKey(target.name)) {
+        aliases.add(alias)
+      }
+    }
+
+    tagsStore.delete(sourceTagId)
+    mergedTagIds.push(sourceTagId)
+  }
+
+  const updatedTarget: TagRecord = {
+    ...target,
+    updatedAt: new Date().toISOString()
+  }
+
+  if (aliases.size) {
+    updatedTarget.aliases = [...aliases]
+  }
+
+  tagsStore.put(updatedTarget)
+  await transactionDone(transaction)
+
+  return { target: updatedTarget, mergedTagIds, remappedCount }
 }
 
 export async function listTagsForBookmark(bookmarkId: string): Promise<TagRecord[]> {

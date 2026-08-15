@@ -265,7 +265,8 @@ test("getSettings applies autoTag defaults and normalizes invalid values", async
   assert.equal(settings.autoTag.llm.enabled, false)
   assert.equal(settings.autoTag.llm.provider, "openai-compatible")
   assert.equal(settings.autoTag.llm.baseUrl, "https://api.openai.com/v1")
-  assert.equal(settings.autoTag.llm.tagVocabularyMode, "closed")
+  assert.equal(settings.autoTag.llm.tagVocabularyMode, "guarded")
+  assert.deepEqual(settings.autoTag.blockedTagKeys, [])
   assert.equal(settings.hashtagBackfillDone, false)
 
   storage.setStoredValue({
@@ -315,6 +316,7 @@ test("updateSettings merges a patch without resetting unrelated fields", async (
       enabled: true,
       runAfterSync: true,
       heuristics: { useHashtags: true, useAuthors: true, keywordRules: [] },
+      blockedTagKeys: [],
       llm: {
         enabled: true,
         provider: "openai-compatible",

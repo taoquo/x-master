@@ -1,6 +1,11 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { createOpenAiCompatibleProvider, resolveApiBaseUrl, testLlmConnection } from "../../src/lib/autotag/llmProvider.ts"
+import {
+  buildPrompt,
+  createOpenAiCompatibleProvider,
+  resolveApiBaseUrl,
+  testLlmConnection
+} from "../../src/lib/autotag/llmProvider.ts"
 
 const SETTINGS = { baseUrl: "https://api.example.com/v1/", model: "test-model" }
 
@@ -34,7 +39,7 @@ test("provider posts batches to chat/completions and parses suggestions", async 
 
   const suggestions = await provider.suggestTags({
     bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
-    vocabulary: ["AI"],
+    vocabulary: [{ name: "AI", count: 4 }],
     allowNewTags: false
   })
 
@@ -61,7 +66,7 @@ test("provider retries once after a failed request", async () => {
 
   const suggestions = await provider.suggestTags({
     bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
-    vocabulary: ["AI"],
+    vocabulary: [{ name: "AI", count: 4 }],
     allowNewTags: false
   })
 
@@ -86,7 +91,7 @@ test("provider backs off on 429 and gives up after the retry", async () => {
 
   const suggestions = await provider.suggestTags({
     bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
-    vocabulary: ["AI"],
+    vocabulary: [{ name: "AI", count: 4 }],
     allowNewTags: false
   })
 
@@ -127,7 +132,7 @@ test("provider returns no suggestions when the response is not valid JSON", asyn
 
   const suggestions = await provider.suggestTags({
     bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
-    vocabulary: ["AI"],
+    vocabulary: [{ name: "AI", count: 4 }],
     allowNewTags: false
   })
 
@@ -182,7 +187,7 @@ test("provider and connection test reach a bare host through the version segment
   })
   await provider.suggestTags({
     bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
-    vocabulary: ["AI"],
+    vocabulary: [{ name: "AI", count: 4 }],
     allowNewTags: false
   })
 
@@ -205,4 +210,85 @@ test("testLlmConnection surfaces the provider error message on failure", async (
   })
 
   assert.deepEqual(failed, { ok: false, error: "HTTP 401: Invalid API key provided" })
+})
+
+test("buildPrompt states the abstraction and naming rules", () => {
+  const prompt = buildPrompt({
+    bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+    vocabulary: [{ name: "AI", count: 4 }],
+    allowNewTags: false
+  })
+
+  assert.match(prompt, /durable subject area/)
+  assert.match(prompt, /applies to dozens of bookmarks/)
+  assert.match(prompt, /Assign 1-2 tags per bookmark/)
+  assert.match(prompt, /English only, lowercase, singular/)
+  assert.match(prompt, /must only use tags from the vocabulary/)
+  assert.match(prompt, /AI \(4\)/)
+})
+
+test("buildPrompt sorts the vocabulary by usage, caps it and states the new tag budget", () => {
+  const vocabulary = Array.from({ length: 250 }, (_, index) => ({
+    name: `tag${String(index).padStart(3, "0")}`,
+    count: index
+  }))
+
+  const prompt = buildPrompt({
+    bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+    vocabulary,
+    allowNewTags: true,
+    newTagBudget: 3
+  })
+
+  const listed = prompt.match(/Existing vocabulary[^\n]*/)?.[0] ?? ""
+  const names = listed.match(/tag\d{3}/g) ?? []
+
+  assert.equal(names.length, 200)
+  assert.equal(names[0], "tag249")
+  assert.equal(names.at(-1), "tag050")
+  assert.match(prompt, /at most 3 new tag\(s\)/)
+
+  const unlimited = buildPrompt({
+    bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+    vocabulary: [],
+    allowNewTags: true
+  })
+  assert.match(unlimited, /Introduce a new tag only when nothing in the vocabulary comes close/)
+  assert.match(unlimited, /\(empty\)/)
+})
+
+test("provider keeps at most two tags per bookmark, highest confidence first", async () => {
+  const provider = createOpenAiCompatibleProvider({
+    settings: SETTINGS,
+    apiKey: "sk-test",
+    fetchImpl: async () =>
+      chatResponse([
+        {
+          tweetId: "t1",
+          tags: [
+            { name: "low", confidence: 0.2 },
+            { name: "high", confidence: 0.95 },
+            { name: "mid", confidence: 0.6 },
+            { name: "  ", confidence: 1 }
+          ]
+        }
+      ])
+  })
+
+  const suggestions = await provider.suggestTags({
+    bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+    vocabulary: [{ name: "AI", count: 4 }],
+    allowNewTags: true,
+    newTagBudget: 2
+  })
+
+  assert.deepEqual(suggestions, [
+    {
+      tweetId: "t1",
+      tags: [
+        { name: "high", confidence: 0.95 },
+        { name: "mid", confidence: 0.6 }
+      ]
+    }
+  ])
 })

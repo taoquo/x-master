@@ -6,9 +6,11 @@ import {
   type KeywordTagRule,
   type SavedViewRecord,
   type SyncSummary,
-  type ThemePreference
+  type ThemePreference,
+  type TagVocabularyMode
 } from "../types.ts"
 import type { BookmarkSortOrder } from "../search/searchBookmarks.ts"
+import { canonicalTagKey } from "../tags/canonical.ts"
 import { isSyncErrorKind } from "../x/syncErrors.ts"
 
 const SETTINGS_STORAGE_KEY = "settings"
@@ -105,6 +107,30 @@ function normalizeKeywordRules(value: unknown): KeywordTagRule[] {
     .filter((rule) => rule.keyword.length > 0 && rule.tagName.length > 0)
 }
 
+const TAG_VOCABULARY_MODES = new Set<TagVocabularyMode>(["closed", "guarded", "open"])
+
+function normalizeTagVocabularyMode(value: unknown, fallback: TagVocabularyMode): TagVocabularyMode {
+  return typeof value === "string" && TAG_VOCABULARY_MODES.has(value as TagVocabularyMode)
+    ? (value as TagVocabularyMode)
+    : fallback
+}
+
+function normalizeBlockedTagKeys(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const keys = new Set<string>()
+  for (const entry of value) {
+    const key = canonicalTagKey(String(entry ?? ""))
+    if (key) {
+      keys.add(key)
+    }
+  }
+
+  return [...keys]
+}
+
 export function createDefaultAutoTagSettings(): AutoTagSettings {
   return {
     enabled: false,
@@ -121,8 +147,9 @@ export function createDefaultAutoTagSettings(): AutoTagSettings {
       model: DEFAULT_LLM_MODEL,
       batchSize: DEFAULT_LLM_BATCH_SIZE,
       maxBookmarksPerRun: DEFAULT_LLM_MAX_BOOKMARKS_PER_RUN,
-      tagVocabularyMode: "closed"
-    }
+      tagVocabularyMode: "guarded"
+    },
+    blockedTagKeys: []
   }
 }
 
@@ -149,8 +176,9 @@ function normalizeAutoTagSettings(value: unknown): AutoTagSettings {
       model: model || defaults.llm.model,
       batchSize: normalizeRange(llm.batchSize, defaults.llm.batchSize, 1, 50),
       maxBookmarksPerRun: normalizeRange(llm.maxBookmarksPerRun, defaults.llm.maxBookmarksPerRun, 1, 2000),
-      tagVocabularyMode: llm.tagVocabularyMode === "open" ? "open" : "closed"
-    }
+      tagVocabularyMode: normalizeTagVocabularyMode(llm.tagVocabularyMode, defaults.llm.tagVocabularyMode)
+    },
+    blockedTagKeys: normalizeBlockedTagKeys(record.blockedTagKeys)
   }
 }
 

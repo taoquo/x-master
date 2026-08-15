@@ -6,6 +6,13 @@ export interface LlmBookmarkInput {
   text: string
 }
 
+// Vocabulary entries carry a usage count so the model can prefer established
+// tags over one-off ones.
+export interface LlmVocabularyEntry {
+  name: string
+  count: number
+}
+
 export interface LlmTagSuggestion {
   tweetId: string
   tags: Array<{ name: string; confidence: number }>
@@ -14,8 +21,11 @@ export interface LlmTagSuggestion {
 export interface AutoTagLlmProvider {
   suggestTags(input: {
     bookmarks: LlmBookmarkInput[]
-    vocabulary: string[]
+    vocabulary: LlmVocabularyEntry[]
     allowNewTags: boolean
+    // Max number of brand new tags the model may introduce for this batch.
+    // Ignored when allowNewTags is false.
+    newTagBudget?: number
   }): Promise<LlmTagSuggestion[]>
 }
 
@@ -24,6 +34,9 @@ type FetchLike = (input: string, init: RequestInit) => Promise<Response>
 const MAX_TEXT_LENGTH = 500
 const RATE_LIMIT_BACKOFF_MS = 2000
 const MAX_ERROR_DETAIL_LENGTH = 200
+// Hard cap enforced on the response: a model that ignores the prompt cannot
+// flood a bookmark with five near-synonyms.
+const MAX_TAGS_PER_BOOKMARK = 2
 
 // Users routinely paste a bare host ("https://api.example.com/") into the
 // settings panel. OpenAI-compatible servers expose the API under a version
@@ -71,22 +84,54 @@ async function readErrorDetail(response: Response): Promise<string> {
   return compact ? `HTTP ${response.status}: ${compact}` : `HTTP ${response.status}`
 }
 
-function buildPrompt(input: { bookmarks: LlmBookmarkInput[]; vocabulary: string[]; allowNewTags: boolean }) {
+const MAX_VOCABULARY_ENTRIES = 200
+
+export function buildPrompt(input: {
+  bookmarks: LlmBookmarkInput[]
+  vocabulary: LlmVocabularyEntry[]
+  allowNewTags: boolean
+  newTagBudget?: number
+}) {
   const bookmarkLines = input.bookmarks.map((bookmark) => ({
     tweetId: bookmark.tweetId,
     author: bookmark.authorHandle,
     text: bookmark.text.slice(0, MAX_TEXT_LENGTH)
   }))
 
+  // Most used tags first, capped so a large library cannot blow up the prompt.
+  const vocabulary = [...input.vocabulary]
+    .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name))
+    .slice(0, MAX_VOCABULARY_ENTRIES)
+    .map((entry) => `${entry.name} (${entry.count})`)
+
+  const budget = Math.max(0, Math.trunc(input.newTagBudget ?? 0))
   const vocabularyInstruction = input.allowNewTags
-    ? "Prefer tags from the existing vocabulary below, but you may introduce new concise tags when nothing fits."
-    : "You must only use tags from the existing vocabulary below. Never invent new tags."
+    ? budget > 0
+      ? `Reuse a tag from the vocabulary whenever it is a reasonable fit. Across this whole batch you may introduce at most ${budget} new tag(s), and only when no existing tag covers the topic.`
+      : "Reuse tags from the vocabulary whenever they are a reasonable fit. Introduce a new tag only when nothing in the vocabulary comes close."
+    : "You must only use tags from the vocabulary below. Never invent new tags. If nothing fits, return no tags for that bookmark."
 
   return [
-    "You assign topical tags to bookmarked tweets.",
+    "You are a librarian assigning topical tags to bookmarked tweets. The tag set is a small, stable taxonomy shared by thousands of bookmarks.",
+    [
+      "Rules for choosing tags:",
+      "- Tag the durable subject area, not the specific event, product launch, person, or company mentioned once.",
+      "- A good tag applies to dozens of bookmarks. If a tag would only ever fit this one bookmark, it is too specific.",
+      "- Prefer the broader concept over a narrow instance (use \"llm\" over \"gpt-4o-mini-benchmark\", \"startup-funding\" over \"seriesb-of-companyx\").",
+      "- Assign 1-2 tags per bookmark. Never pad the list to reach a limit.",
+      "- Skip a bookmark entirely if it has no clear topic."
+    ].join("\n"),
+    [
+      "Naming rules for tags:",
+      "- English only, lowercase, singular.",
+      "- One or two words, words separated by a single space.",
+      "- No leading '#', no emoji, no punctuation, no author handles."
+    ].join("\n"),
     vocabularyInstruction,
-    `Existing vocabulary: ${JSON.stringify(input.vocabulary)}`,
-    "For each bookmark, return up to 3 tags with a confidence between 0 and 1.",
+    `Existing vocabulary, most used first (name and usage count): ${
+      vocabulary.length ? vocabulary.join(", ") : "(empty)"
+    }`,
+    "Return a confidence between 0 and 1 for each tag.",
     'Respond with JSON only: {"results":[{"tweetId":"...","tags":[{"name":"...","confidence":0.8}]}]}',
     `Bookmarks: ${JSON.stringify(bookmarkLines)}`
   ].join("\n\n")
@@ -123,6 +168,8 @@ function parseSuggestions(content: string, validTweetIds: Set<string>): LlmTagSu
         name: tag.name,
         confidence: Number.isFinite(tag.confidence) ? Math.min(1, Math.max(0, tag.confidence)) : 0.5
       }))
+      .sort((left, right) => right.confidence - left.confidence)
+      .slice(0, MAX_TAGS_PER_BOOKMARK)
 
     if (tags.length) {
       suggestions.push({ tweetId, tags })

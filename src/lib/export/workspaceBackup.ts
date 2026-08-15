@@ -243,11 +243,23 @@ function validateBookmark(value: unknown, path: string): WorkspaceExportBookmark
 
 function validateTag(value: unknown, path: string): TagRecord {
   const record = requireObject(value, path)
-  return {
+  const tag: TagRecord = {
     id: requireNonEmptyString(record, "id", path),
     name: requireString(record, "name", path),
     createdAt: requireString(record, "createdAt", path)
   }
+
+  // Optional since v2.1: merge history. Older backups simply have no aliases.
+  if (record.aliases !== undefined) {
+    tag.aliases = requireStringArray(record, "aliases", path)
+  }
+
+  const updatedAt = optionalString(record, "updatedAt", path)
+  if (updatedAt !== undefined) {
+    tag.updatedAt = updatedAt
+  }
+
+  return tag
 }
 
 function validateBookmarkTag(value: unknown, path: string): BookmarkTagRecord {

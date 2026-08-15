@@ -517,9 +517,17 @@ export function SettingsPanel({
                       className="field-shell"
                       value={settings.autoTag.llm.tagVocabularyMode}
                       onChange={(event) =>
-                        updateLlm({ tagVocabularyMode: event.currentTarget.value === "open" ? "open" : "closed" })
+                        updateLlm({
+                          tagVocabularyMode:
+                            event.currentTarget.value === "open"
+                              ? "open"
+                              : event.currentTarget.value === "guarded"
+                                ? "guarded"
+                                : "closed"
+                        })
                       }>
                       <option value="closed">{copy.settingsLlmVocabularyClosed}</option>
+                      <option value="guarded">{copy.settingsLlmVocabularyGuarded}</option>
                       <option value="open">{copy.settingsLlmVocabularyOpen}</option>
                     </select>
                   </label>

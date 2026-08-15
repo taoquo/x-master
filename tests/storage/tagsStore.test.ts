@@ -14,6 +14,7 @@ import {
   getAllTags,
   listBookmarksByTag,
   listTagsForBookmark,
+  mergeTags,
   renameTag
 } from "../../src/lib/storage/tagsStore.ts"
 
@@ -26,6 +27,91 @@ test("createTag stores a tag and getAllTags returns it", async () => {
   assert.equal(created.name, "research")
   assert.equal(tags.length, 1)
   assert.equal(tags[0].name, "research")
+})
+
+test("createTag reuses the existing tag when the canonical key already exists", async () => {
+  await resetBookmarksDb()
+
+  const first = await createTag({ name: "AI Agents" })
+  const second = await createTag({ name: "  #ai-agent " })
+  const other = await createTag({ name: "Rust" })
+
+  assert.equal(second.id, first.id)
+  assert.equal(second.name, "AI Agents")
+  assert.notEqual(other.id, first.id)
+  assert.equal((await getAllTags()).length, 2)
+})
+
+test("mergeTags remaps relations, keeps source names as aliases and deletes the sources", async () => {
+  await resetBookmarksDb()
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-1",
+      tweetUrl: "https://x.com/alice/status/tweet-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "one",
+      createdAtOnX: "2026-01-01T00:00:00.000Z",
+      savedAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+      tweetId: "tweet-2",
+      tweetUrl: "https://x.com/alice/status/tweet-2",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "two",
+      createdAtOnX: "2026-01-01T00:00:00.000Z",
+      savedAt: "2026-01-01T00:00:00.000Z"
+    }
+  ])
+
+  const target = await createTag({ name: "LLM" })
+  const sourceA = await createTag({ name: "Large Language Model" })
+  const sourceB = await createTag({ name: "GPT" })
+
+  await attachTagToBookmark({ bookmarkId: "tweet-1", tagId: target.id })
+  await attachTagToBookmark({ bookmarkId: "tweet-1", tagId: sourceA.id })
+  await attachTagToBookmark({ bookmarkId: "tweet-2", tagId: sourceB.id })
+
+  const result = await mergeTags({ sourceTagIds: [sourceA.id, sourceB.id, target.id, sourceA.id], targetTagId: target.id })
+
+  assert.deepEqual(result.mergedTagIds, [sourceA.id, sourceB.id])
+  // tweet-1 already had the target tag, so only tweet-2 produces a new relation.
+  assert.equal(result.remappedCount, 1)
+  assert.deepEqual(result.target.aliases, ["Large Language Model", "GPT"])
+
+  const tags = await getAllTags()
+  assert.deepEqual(
+    tags.map((tag) => tag.id),
+    [target.id]
+  )
+
+  const bookmarkTags = await getAllBookmarkTags()
+  assert.deepEqual(
+    bookmarkTags.map((relation) => relation.id).sort(),
+    [`tweet-1:${target.id}`, `tweet-2:${target.id}`].sort()
+  )
+
+  assert.equal((await listBookmarksByTag(target.id)).length, 2)
+})
+
+test("mergeTags is idempotent and rejects an unknown target", async () => {
+  await resetBookmarksDb()
+
+  const target = await createTag({ name: "LLM" })
+
+  const noop = await mergeTags({ sourceTagIds: [], targetTagId: target.id })
+  assert.deepEqual(noop.mergedTagIds, [])
+  assert.equal(noop.remappedCount, 0)
+  assert.equal(noop.target.aliases, undefined)
+
+  const missing = await mergeTags({ sourceTagIds: ["tag-missing"], targetTagId: target.id })
+  assert.deepEqual(missing.mergedTagIds, [])
+
+  await assert.rejects(
+    () => mergeTags({ sourceTagIds: [target.id], targetTagId: "tag-unknown" }),
+    /Target tag not found/
+  )
 })
 
 test("attachTagToBookmark stores a unique bookmark-tag relation and list helpers resolve both sides", async () => {
