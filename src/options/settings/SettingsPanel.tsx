@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react"
 import type { ExtensionSettings, KeywordTagRule, Locale, ThemePreference } from "../../lib/types.ts"
 import { getSettings, saveSettings } from "../../lib/storage/settings.ts"
-import { AUTOTAG_RUN_MESSAGE } from "../../lib/runtime/messages.ts"
+import { getSecrets, saveSecrets } from "../../lib/storage/secrets.ts"
+import { AUTOTAG_RUN_MESSAGE, LLM_TEST_CONNECTION_MESSAGE } from "../../lib/runtime/messages.ts"
 import { AppIcon } from "../../ui/icons.tsx"
 import type { OptionsCopy } from "../i18n/copy.ts"
 import type { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
@@ -58,6 +59,11 @@ export function SettingsPanel({
   const [autoTagRunMessage, setAutoTagRunMessage] = useState<string | null>(null)
   const [draftKeyword, setDraftKeyword] = useState("")
   const [draftTagName, setDraftTagName] = useState("")
+  const [hasStoredApiKey, setHasStoredApiKey] = useState(false)
+  const [draftApiKey, setDraftApiKey] = useState("")
+  const [llmTestState, setLlmTestState] = useState<{ status: "idle" | "testing" | "ok" | "error"; error?: string }>({
+    status: "idle"
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -66,6 +72,14 @@ export function SettingsPanel({
       .then((loaded) => {
         if (!cancelled) {
           setSettings(loaded)
+        }
+      })
+      .catch(() => {})
+
+    void getSecrets()
+      .then((secrets) => {
+        if (!cancelled) {
+          setHasStoredApiKey(Boolean(secrets.llmApiKey))
         }
       })
       .catch(() => {})
@@ -94,6 +108,84 @@ export function SettingsPanel({
     }
 
     updateAutoTag({ heuristics: { ...settings.autoTag.heuristics, ...patch } })
+  }
+
+  function updateLlm(patch: Partial<ExtensionSettings["autoTag"]["llm"]>) {
+    if (!settings) {
+      return
+    }
+
+    updateAutoTag({ llm: { ...settings.autoTag.llm, ...patch } })
+  }
+
+  // The LLM endpoint lives outside the default x.com host permission, so we
+  // request the origin on demand when the user turns the feature on.
+  async function ensureHostPermission(baseUrl: string): Promise<boolean> {
+    if (typeof chrome === "undefined" || !chrome.permissions?.request) {
+      return true
+    }
+
+    try {
+      const origin = new URL(baseUrl).origin
+      return await chrome.permissions.request({ origins: [origin + "/*"] })
+    } catch {
+      return false
+    }
+  }
+
+  async function handleLlmEnabledChange(checked: boolean) {
+    if (!settings) {
+      return
+    }
+
+    if (!checked) {
+      updateLlm({ enabled: false })
+      return
+    }
+
+    const granted = await ensureHostPermission(settings.autoTag.llm.baseUrl)
+    if (!granted) {
+      setLlmTestState({ status: "error", error: copy.settingsLlmPermissionDenied })
+      return
+    }
+
+    setLlmTestState({ status: "idle" })
+    updateLlm({ enabled: true })
+  }
+
+  function saveApiKey() {
+    const apiKey = draftApiKey.trim()
+    if (!apiKey) {
+      return
+    }
+
+    void saveSecrets({ llmApiKey: apiKey }).then(() => {
+      setHasStoredApiKey(true)
+      setDraftApiKey("")
+    })
+  }
+
+  async function testLlmConnection() {
+    if (!settings || typeof chrome === "undefined" || !chrome.runtime?.sendMessage) {
+      return
+    }
+
+    const granted = await ensureHostPermission(settings.autoTag.llm.baseUrl)
+    if (!granted) {
+      setLlmTestState({ status: "error", error: copy.settingsLlmPermissionDenied })
+      return
+    }
+
+    setLlmTestState({ status: "testing" })
+    const result = (await chrome.runtime.sendMessage({ type: LLM_TEST_CONNECTION_MESSAGE })) as
+      | { ok: boolean; error?: string }
+      | undefined
+
+    if (result?.ok) {
+      setLlmTestState({ status: "ok" })
+    } else {
+      setLlmTestState({ status: "error", error: result?.error })
+    }
   }
 
   function addKeywordRule() {
@@ -321,6 +413,121 @@ export function SettingsPanel({
                       {copy.settingsRunAutoTagNow}
                     </button>
                     <InlineMessage message={autoTagRunMessage} tone="info" />
+                  </div>
+
+                  <SettingsToggleRow
+                    testId="settings-llm-enabled"
+                    label={copy.settingsLlmEnabled}
+                    hint={copy.settingsLlmEnabledHint}
+                    checked={settings.autoTag.llm.enabled}
+                    onChange={(checked) => void handleLlmEnabledChange(checked)}
+                  />
+
+                  <label className="options-settings-field">
+                    <span className="options-settings-field-label">{copy.settingsLlmBaseUrl}</span>
+                    <input
+                      data-testid="settings-llm-base-url"
+                      className="field-shell"
+                      value={settings.autoTag.llm.baseUrl}
+                      onInput={(event) => updateLlm({ baseUrl: event.currentTarget.value })}
+                      onChange={(event) => updateLlm({ baseUrl: event.currentTarget.value })}
+                    />
+                  </label>
+
+                  <label className="options-settings-field">
+                    <span className="options-settings-field-label">{copy.settingsLlmModel}</span>
+                    <input
+                      data-testid="settings-llm-model"
+                      className="field-shell"
+                      value={settings.autoTag.llm.model}
+                      onInput={(event) => updateLlm({ model: event.currentTarget.value })}
+                      onChange={(event) => updateLlm({ model: event.currentTarget.value })}
+                    />
+                  </label>
+
+                  <div className="options-settings-field">
+                    <span className="options-settings-field-label">{copy.settingsLlmApiKey}</span>
+                    <span className="options-meta-copy">{copy.settingsLlmApiKeyHint}</span>
+                    <div className="options-settings-rule-editor">
+                      <input
+                        data-testid="settings-llm-api-key"
+                        className="field-shell"
+                        type="password"
+                        placeholder={hasStoredApiKey ? "••••••••" : "sk-..."}
+                        aria-label={copy.settingsLlmApiKey}
+                        value={draftApiKey}
+                        onInput={(event) => setDraftApiKey(event.currentTarget.value)}
+                        onChange={(event) => setDraftApiKey(event.currentTarget.value)}
+                      />
+                      <button
+                        type="button"
+                        data-testid="settings-llm-api-key-save"
+                        className="options-footer-chip"
+                        onClick={saveApiKey}>
+                        {copy.settingsLlmApiKeySaved}
+                      </button>
+                    </div>
+                  </div>
+
+                  <label className="options-settings-field">
+                    <span className="options-settings-field-label">{copy.settingsLlmVocabularyMode}</span>
+                    <select
+                      data-testid="settings-llm-vocabulary-mode"
+                      className="field-shell"
+                      value={settings.autoTag.llm.tagVocabularyMode}
+                      onChange={(event) =>
+                        updateLlm({ tagVocabularyMode: event.currentTarget.value === "open" ? "open" : "closed" })
+                      }>
+                      <option value="closed">{copy.settingsLlmVocabularyClosed}</option>
+                      <option value="open">{copy.settingsLlmVocabularyOpen}</option>
+                    </select>
+                  </label>
+
+                  <label className="options-settings-field">
+                    <span className="options-settings-field-label">{copy.settingsLlmMaxPerRun}</span>
+                    <input
+                      data-testid="settings-llm-max-per-run"
+                      type="number"
+                      min={1}
+                      max={2000}
+                      className="field-shell"
+                      value={settings.autoTag.llm.maxBookmarksPerRun}
+                      onInput={(event) => {
+                        const value = Number(event.currentTarget.value)
+                        if (Number.isFinite(value) && value >= 1) {
+                          updateLlm({ maxBookmarksPerRun: Math.trunc(value) })
+                        }
+                      }}
+                      onChange={(event) => {
+                        const value = Number(event.currentTarget.value)
+                        if (Number.isFinite(value) && value >= 1) {
+                          updateLlm({ maxBookmarksPerRun: Math.trunc(value) })
+                        }
+                      }}
+                    />
+                  </label>
+
+                  <div className="options-settings-field">
+                    <button
+                      type="button"
+                      data-testid="settings-llm-test-connection"
+                      className="options-footer-chip"
+                      disabled={llmTestState.status === "testing"}
+                      onClick={() => void testLlmConnection()}>
+                      {llmTestState.status === "testing" ? copy.settingsLlmTesting : copy.settingsLlmTestConnection}
+                    </button>
+                    <InlineMessage
+                      message={
+                        llmTestState.status === "ok"
+                          ? copy.settingsLlmTestSuccess
+                          : llmTestState.status === "error"
+                            ? llmTestState.error
+                              ? `${copy.settingsLlmTestFailure}: ${llmTestState.error}`
+                              : copy.settingsLlmTestFailure
+                            : null
+                      }
+                      tone={llmTestState.status === "ok" ? "info" : "error"}
+                    />
                   </div>
                 </div>
               ) : null}

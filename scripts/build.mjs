@@ -34,6 +34,7 @@ async function writeStaticFiles() {
         version,
         permissions: ["cookies", "storage"],
         host_permissions: ["https://x.com/*"],
+        optional_host_permissions: ["https://*/*"],
         icons: {
           16: "assets/icons/icon-16.png",
           32: "assets/icons/icon-32.png",

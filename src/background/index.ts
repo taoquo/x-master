@@ -1,4 +1,5 @@
 import { runBookmarkSync } from "./syncBookmarks.ts"
+import { testLlmConnection } from "../lib/autotag/llmProvider.ts"
 import { runAutoTagPipeline } from "../lib/autotag/pipeline.ts"
 import {
   acceptTagSuggestion,
@@ -7,6 +8,7 @@ import {
 } from "../lib/autotag/suggestionActions.ts"
 import { removeBookmarkSnapshot, upsertBookmarkSnapshot } from "../lib/storage/bookmarksStore.ts"
 import { resetLocalData } from "../lib/storage/resetLocalData.ts"
+import { getSecrets } from "../lib/storage/secrets.ts"
 import { getSettings, saveLastSyncSummary } from "../lib/storage/settings.ts"
 import {
   attachTagToBookmark,
@@ -17,6 +19,7 @@ import {
 } from "../lib/storage/tagsStore.ts"
 import {
   AUTOTAG_RUN_MESSAGE,
+  LLM_TEST_CONNECTION_MESSAGE,
   LOAD_WORKSPACE_DATA_MESSAGE,
   RESET_LOCAL_DATA_MESSAGE,
   RUN_SYNC_MESSAGE,
@@ -50,6 +53,7 @@ interface BackgroundDependencies {
   acceptSuggestion?: (suggestionId: string) => Promise<TagSuggestionRecord | null>
   rejectSuggestion?: (suggestionId: string) => Promise<TagSuggestionRecord | null>
   acceptSuggestionsBulk?: (suggestionIds: string[]) => Promise<{ acceptedCount: number }>
+  testLlmConnection?: () => Promise<{ ok: boolean; error?: string }>
   syncSiteTweetBookmark?: (input: { tweet: SiteTweetDraft; enabled: boolean }) => Promise<SiteTweetBookmarkSyncResult>
   prepareSiteTweetTagging?: (input: { tweet: SiteTweetDraft }) => Promise<SiteTweetTagState>
   setSiteTweetTag?: (input: { bookmarkId: string; tagId: string; enabled: boolean }) => Promise<SiteTweetTagState>
@@ -64,6 +68,7 @@ type BackgroundMessage =
   | { type: typeof SUGGESTIONS_ACCEPT_MESSAGE; suggestionId: string }
   | { type: typeof SUGGESTIONS_REJECT_MESSAGE; suggestionId: string }
   | { type: typeof SUGGESTIONS_ACCEPT_BULK_MESSAGE; suggestionIds: string[] }
+  | { type: typeof LLM_TEST_CONNECTION_MESSAGE }
   | { type: typeof SITE_TWEET_BOOKMARK_SYNC_MESSAGE; tweet: SiteTweetDraft; enabled: boolean }
   | { type: typeof SITE_TWEET_TAGGING_PREPARE_MESSAGE; tweet: SiteTweetDraft }
   | { type: typeof SITE_TWEET_TAGGING_SET_TAG_MESSAGE; bookmarkId: string; tagId: string; enabled: boolean }
@@ -78,6 +83,7 @@ export function createBackgroundMessageHandler({
   acceptSuggestion = acceptTagSuggestion,
   rejectSuggestion = rejectTagSuggestion,
   acceptSuggestionsBulk = acceptTagSuggestionsBulk,
+  testLlmConnection: testLlmConnectionDep = testLlmConnectionDefault,
   syncSiteTweetBookmark = async ({ tweet, enabled }) => syncSiteTweetBookmarkDefault({ tweet, enabled }),
   prepareSiteTweetTagging = async ({ tweet }) => prepareSiteTweetTaggingDefault({ tweet }),
   setSiteTweetTag = async ({ bookmarkId, tagId, enabled }) => setSiteTweetTagDefault({ bookmarkId, tagId, enabled }),
@@ -159,6 +165,10 @@ export function createBackgroundMessageHandler({
       return acceptSuggestionsBulk(message.suggestionIds as string[])
     }
 
+    if (message.type === LLM_TEST_CONNECTION_MESSAGE) {
+      return testLlmConnectionDep()
+    }
+
     if (message.type === SITE_TWEET_BOOKMARK_SYNC_MESSAGE) {
       return syncSiteTweetBookmark({
         tweet: message.tweet as SiteTweetDraft,
@@ -196,6 +206,18 @@ async function shouldAutoTagAfterSyncDefault() {
   } catch {
     return false
   }
+}
+
+// Default "test connection" wiring for the settings panel: reads the stored
+// key + LLM settings and pings the provider's /models endpoint.
+async function testLlmConnectionDefault(): Promise<{ ok: boolean; error?: string }> {
+  const [settings, secrets] = await Promise.all([getSettings(), getSecrets()])
+
+  if (!secrets.llmApiKey) {
+    return { ok: false, error: "missing-api-key" }
+  }
+
+  return testLlmConnection({ settings: settings.autoTag.llm, apiKey: secrets.llmApiKey })
 }
 
 async function persistSyncErrorFallback(error: unknown) {
