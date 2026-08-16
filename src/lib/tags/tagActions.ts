@@ -1,4 +1,4 @@
-import { getSettings, updateSettings } from "../storage/settings.ts"
+import { updateSettings } from "../storage/settings.ts"
 import { rejectPendingSuggestionsByTagNames } from "../storage/suggestionsStore.ts"
 import { deleteTags, getAllTags } from "../storage/tagsStore.ts"
 import { canonicalTagKey } from "./canonical.ts"
@@ -57,14 +57,12 @@ export async function deleteTagsPermanently(
     return { deletedTagIds, blockedTagKeys: [] }
   }
 
-  const settings = await getSettings()
-  const missingKeys = keys.filter((key) => !settings.autoTag.blockedTagKeys.includes(key))
-
-  if (missingKeys.length) {
-    await updateSettings({
-      autoTag: { ...settings.autoTag, blockedTagKeys: [...settings.autoTag.blockedTagKeys, ...missingKeys] }
-    })
-  }
+  await updateSettings((current) => ({
+    autoTag: {
+      ...current.autoTag,
+      blockedTagKeys: [...new Set([...current.autoTag.blockedTagKeys, ...keys])]
+    }
+  }))
 
   return { deletedTagIds, blockedTagKeys: keys }
 }
@@ -78,15 +76,10 @@ export async function unblockTagKey(tagName: string) {
     return
   }
 
-  const settings = await getSettings()
-  if (!settings.autoTag.blockedTagKeys.includes(key)) {
-    return
-  }
-
-  await updateSettings({
+  await updateSettings((current) => ({
     autoTag: {
-      ...settings.autoTag,
-      blockedTagKeys: settings.autoTag.blockedTagKeys.filter((blocked) => blocked !== key)
+      ...current.autoTag,
+      blockedTagKeys: current.autoTag.blockedTagKeys.filter((blocked) => blocked !== key)
     }
-  })
+  }))
 }

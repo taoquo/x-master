@@ -64,7 +64,8 @@ test("runAutoTagPipeline is a no-op when auto-tagging is disabled", async () => 
     llmBatchCount: 0,
     llmFailedBatchCount: 0,
     newTagBudget: 0,
-    vocabularySize: 0
+    vocabularySize: 0,
+    blockedTagKeyCount: 0
   })
   assert.equal((await getAllTagSuggestions()).length, 0)
 })
@@ -374,4 +375,40 @@ test("a run without an api key is reported as missing-api-key", async () => {
 
   assert.equal(result.outcome, "missing-api-key")
   assert.equal((await getSettings()).lastAutoTagRun?.outcome, "missing-api-key")
+})
+
+// Regression: an empty tag library plus "existing tags only" left the LLM with
+// nothing to pick from, so the step returned before issuing a request and the
+// run was still reported as a successful "0 suggestions" pass.
+test("closed vocabulary with an empty tag library reports empty-vocabulary instead of ok", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed" })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await upsertBookmarks([makeBookmark("t1"), makeBookmark("t2")])
+
+  const { provider, calls } = makeStubProvider([])
+  const result = await runAutoTagPipeline({ createLlmProvider: () => provider })
+
+  assert.equal(calls.length, 0)
+  assert.equal(result.outcome, "empty-vocabulary")
+  assert.equal(result.candidateCount, 2)
+  assert.equal((await getSettings()).lastAutoTagRun?.outcome, "empty-vocabulary")
+})
+
+test("closed vocabulary runs normally once the library has a tag", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed" })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await createTag({ name: "AI" })
+  await upsertBookmarks([makeBookmark("t1")])
+
+  const { provider, calls } = makeStubProvider([[{ tweetId: "t1", tags: [{ name: "AI", confidence: 0.8 }] }]])
+  const result = await runAutoTagPipeline({ createLlmProvider: () => provider })
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0]?.allowNewTags, false)
+  assert.equal(result.outcome, "ok")
+  assert.equal(result.suggestedCount, 1)
 })

@@ -169,6 +169,10 @@ export type AutoTagRunOutcome =
   | "llm-disabled"
   | "missing-api-key"
   | "no-candidates"
+  // The vocabulary is empty and the mode forbids inventing tags, so the LLM
+  // has nothing to choose from. Without its own outcome this ran as "ok" and
+  // reported "done, 0 suggestions" while never issuing a single request.
+  | "empty-vocabulary"
   | "failed"
 
 export interface AutoTagRunSummary {
@@ -182,6 +186,9 @@ export interface AutoTagRunSummary {
   llmFailedBatchCount: number
   newTagBudget: number
   vocabularySize: number
+  // Canonical keys of deliberately deleted tags. Surfaced because a long block
+  // list silently starves both the rules and the LLM.
+  blockedTagKeyCount?: number
   error?: string
 }
 

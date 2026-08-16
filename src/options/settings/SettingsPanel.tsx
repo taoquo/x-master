@@ -43,6 +43,7 @@ function SettingsToggleRow({
 
 function describeAutoTagOutcome(summary: AutoTagRunSummary, copy: OptionsCopy): string {
   if (summary.outcome === "no-candidates") return copy.settingsAutoTagResultNoCandidates
+  if (summary.outcome === "empty-vocabulary") return copy.settingsAutoTagResultEmptyVocabulary
   if (summary.outcome === "llm-disabled") return copy.settingsAutoTagResultLlmDisabled
   if (summary.outcome === "missing-api-key") return copy.settingsAutoTagResultMissingKey
   if (summary.outcome === "failed") {
@@ -533,6 +534,14 @@ export function SettingsPanel({
                         <p className="options-settings-field-label">{copy.settingsAutoTagResultTitle}</p>
                         <p className="options-meta-copy">{describeAutoTagOutcome(autoTagRunSummary, copy)}</p>
                         <p className="options-meta-copy">{describeAutoTagDetail(autoTagRunSummary, copy)}</p>
+                        {autoTagRunSummary.blockedTagKeyCount ? (
+                          <p data-testid="settings-autotag-blocked" className="options-meta-copy">
+                            {copy.settingsAutoTagResultBlocked.replace(
+                              "{blocked}",
+                              String(autoTagRunSummary.blockedTagKeyCount)
+                            )}
+                          </p>
+                        ) : null}
                         {autoTagRunSummary.newTagBudget === 0 &&
                         settings.autoTag.llm.tagVocabularyMode !== "closed" ? (
                           <p data-testid="settings-autotag-vocabulary-full" className="options-meta-copy">

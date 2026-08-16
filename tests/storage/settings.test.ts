@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { getSettings, saveSettings, updateSettings } from "../../src/lib/storage/settings.ts"
 import { createEmptySyncSummary } from "../../src/lib/types.ts"
 
-function installChromeStorageMock() {
+function installChromeStorageMock(options: { writeDelayMs?: number } = {}) {
   let storedValue: unknown
 
   ;(globalThis as typeof globalThis & { chrome: any }).chrome = {
@@ -11,6 +11,9 @@ function installChromeStorageMock() {
       local: {
         get: async () => ({ settings: storedValue }),
         set: async (value: Record<string, unknown>) => {
+          if (options.writeDelayMs) {
+            await new Promise((resolve) => setTimeout(resolve, options.writeDelayMs))
+          }
           storedValue = value.settings
         }
       }
@@ -339,4 +342,42 @@ test("updateSettings merges a patch without resetting unrelated fields", async (
   assert.equal(settings.autoTag.llm.baseUrl, "https://api.appintheloop.com/v1")
   assert.equal(settings.autoTag.llm.model, "claude-sonnet-5")
   assert.equal(settings.autoTag.llm.enabled, true)
+})
+
+// Regression: two concurrent read-modify-write calls used to read the same
+// snapshot, so the slower write reverted the faster one and a setting the panel
+// had already shown as saved silently went back to its previous value.
+test("concurrent updateSettings calls do not clobber each other", async () => {
+  const mock = installChromeStorageMock({ writeDelayMs: 5 })
+  mock.setStoredValue(undefined)
+
+  await Promise.all([
+    updateSettings({ locale: "zh-CN" }),
+    updateSettings({ themePreference: "dark" }),
+    updateSettings({ hashtagBackfillDone: true })
+  ])
+
+  const settings = await getSettings()
+
+  assert.equal(settings.locale, "zh-CN")
+  assert.equal(settings.themePreference, "dark")
+  assert.equal(settings.hashtagBackfillDone, true)
+})
+
+test("updateSettings accepts a function patch that sees the latest snapshot", async () => {
+  const mock = installChromeStorageMock({ writeDelayMs: 5 })
+  mock.setStoredValue(undefined)
+
+  await Promise.all([
+    updateSettings((current) => ({
+      autoTag: { ...current.autoTag, blockedTagKeys: [...current.autoTag.blockedTagKeys, "one"] }
+    })),
+    updateSettings((current) => ({
+      autoTag: { ...current.autoTag, blockedTagKeys: [...current.autoTag.blockedTagKeys, "two"] }
+    }))
+  ])
+
+  const settings = await getSettings()
+
+  assert.deepEqual(settings.autoTag.blockedTagKeys.sort(), ["one", "two"])
 })

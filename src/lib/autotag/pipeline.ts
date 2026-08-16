@@ -26,6 +26,7 @@ export interface AutoTagRunResult {
   llmFailedBatchCount: number
   newTagBudget: number
   vocabularySize: number
+  blockedTagKeyCount: number
   error?: string
 }
 
@@ -69,6 +70,9 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
   batchCount: number
   failedBatchCount: number
   insertedCount: number
+  // Set when the step returned before issuing a single request, so the caller
+  // can tell "nothing left to analyze" apart from "nothing to analyze with".
+  stoppedReason?: "no-candidates" | "empty-vocabulary"
   lastError?: string
 }> {
   const eligible = input.bookmarks.filter(
@@ -92,7 +96,8 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
       candidateCount: eligible.length,
       batchCount: 0,
       failedBatchCount: 0,
-      insertedCount: 0
+      insertedCount: 0,
+      stoppedReason: candidates.length ? "empty-vocabulary" : "no-candidates"
     }
   }
 
@@ -247,6 +252,7 @@ async function finishRun(result: AutoTagRunResult): Promise<AutoTagRunResult> {
         llmFailedBatchCount: result.llmFailedBatchCount,
         newTagBudget: Number.isFinite(result.newTagBudget) ? result.newTagBudget : -1,
         vocabularySize: result.vocabularySize,
+        blockedTagKeyCount: result.blockedTagKeyCount,
         ...(result.error ? { error: result.error } : {})
       }
     })
@@ -273,7 +279,8 @@ export async function runAutoTagPipeline(options?: {
       llmBatchCount: 0,
       llmFailedBatchCount: 0,
       newTagBudget: 0,
-      vocabularySize: 0
+      vocabularySize: 0,
+      blockedTagKeyCount: settings.autoTag.blockedTagKeys.length
     })
   }
 
@@ -375,7 +382,12 @@ export async function runAutoTagPipeline(options?: {
         llmInsertedCount = llmResult.insertedCount
         llmSkippedCount = llmResult.suggestions.length - llmResult.insertedCount
 
-        if (!candidateCount) {
+        // A run that issued zero batches while candidates were waiting is never
+        // "ok": either there was nothing left to analyze, or the vocabulary was
+        // empty in a mode that forbids new tags.
+        if (llmResult.stoppedReason === "empty-vocabulary") {
+          outcome = "empty-vocabulary"
+        } else if (!candidateCount || llmResult.stoppedReason === "no-candidates") {
           outcome = "no-candidates"
         } else if (llmBatchCount > 0 && llmFailedBatchCount === llmBatchCount) {
           outcome = "failed"
@@ -399,6 +411,7 @@ export async function runAutoTagPipeline(options?: {
     llmFailedBatchCount,
     newTagBudget,
     vocabularySize: tags.length,
+    blockedTagKeyCount: settings.autoTag.blockedTagKeys.length,
     ...(runError ? { error: runError } : {})
   })
 }

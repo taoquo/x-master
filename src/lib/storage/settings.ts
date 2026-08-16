@@ -206,6 +206,7 @@ const AUTO_TAG_RUN_OUTCOMES = new Set<AutoTagRunOutcome>([
   "llm-disabled",
   "missing-api-key",
   "no-candidates",
+  "empty-vocabulary",
   "failed"
 ])
 
@@ -240,6 +241,7 @@ function normalizeAutoTagRunSummary(value: unknown): AutoTagRunSummary | undefin
     llmFailedBatchCount: normalizeCount(record.llmFailedBatchCount),
     newTagBudget: normalizeCount(record.newTagBudget),
     vocabularySize: normalizeCount(record.vocabularySize),
+    blockedTagKeyCount: normalizeCount(record.blockedTagKeyCount),
     ...(error ? { error } : {})
   }
 }
@@ -306,18 +308,36 @@ export async function saveSettings(settings: Partial<ExtensionSettings>) {
   })
 }
 
+// Serializes every read-modify-write. Two concurrent updateSettings calls used
+// to read the same snapshot and the slower write silently reverted the faster
+// one, which is how a saved tag-vocabulary mode could reappear as its previous
+// value while the panel still showed the new one.
+let settingsWriteQueue: Promise<unknown> = Promise.resolve()
+
 // saveSettings is a full overwrite: every caller that only knows about a few
 // fields would silently reset the rest to defaults. updateSettings reads the
 // current snapshot first so partial writers cannot clobber unrelated settings.
-export async function updateSettings(patch: Partial<ExtensionSettings>): Promise<ExtensionSettings> {
-  const current = await getSettings()
-  const next = normalizeSettings({ ...current, ...patch })
+// The patch may also be a function, which is the only safe way to edit a nested
+// object: a plain patch built from a React snapshot reverts every sibling field
+// that changed while the component was awaiting something.
+export async function updateSettings(
+  patch: Partial<ExtensionSettings> | ((current: ExtensionSettings) => Partial<ExtensionSettings>)
+): Promise<ExtensionSettings> {
+  const run = settingsWriteQueue.then(async () => {
+    const current = await getSettings()
+    const next = normalizeSettings({ ...current, ...(typeof patch === "function" ? patch(current) : patch) })
 
-  if (typeof chrome !== "undefined" && chrome.storage?.local?.set) {
-    await chrome.storage.local.set({ [SETTINGS_STORAGE_KEY]: next })
-  }
+    if (typeof chrome !== "undefined" && chrome.storage?.local?.set) {
+      await chrome.storage.local.set({ [SETTINGS_STORAGE_KEY]: next })
+    }
 
-  return next
+    return next
+  })
+
+  // A rejected write must not wedge the queue for every later caller.
+  settingsWriteQueue = run.catch(() => undefined)
+
+  return run
 }
 
 export async function saveLastSyncSummary(summary: SyncSummary) {
