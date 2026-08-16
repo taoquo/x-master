@@ -12,6 +12,7 @@ import type { OptionsCopy } from "../i18n/copy.ts"
 import {
   countOrphanTags,
   countUnparentedTags,
+  getRemovableOrphanTagIds,
   getRootTagCandidates,
   hasParentCandidates,
   type TagLibraryFilter,
@@ -159,6 +160,9 @@ export function TagResultsPane({
   // Every row offers the same root tags as parents, so build the list once
   // instead of sorting the whole library again for each rendered tag.
   const rootCandidates = useMemo(() => getRootTagCandidates(tagItems), [tagItems])
+  // The cleanup action can only remove empty tags that are not themes, so the
+  // badge counts exactly what the click would delete.
+  const removableOrphanCount = useMemo(() => getRemovableOrphanTagIds(tagItems).length, [tagItems])
   // Same idea for the merge dropdown: a huge library only materialises its
   // options once the control is actually touched.
   const mergeTargetOptions = useMemo(() => {
@@ -493,11 +497,13 @@ export function TagResultsPane({
                       type="button"
                       data-testid="tag-cleanup-orphans"
                       className="options-toolbar-action"
-                      disabled={isSavingTags || !orphanCount}
+                      disabled={isSavingTags || !removableOrphanCount}
                       onClick={onCleanupOrphanTags}>
                       <AppIcon name="trash" size={14} />
                       <span>{copy.cleanupOrphanTagsLabel}</span>
-                      {orphanCount ? <span className="options-toolbar-badge">{orphanCount}</span> : null}
+                      {removableOrphanCount ? (
+                        <span className="options-toolbar-badge">{removableOrphanCount}</span>
+                      ) : null}
                     </button>
 
                     <div className="relative">
