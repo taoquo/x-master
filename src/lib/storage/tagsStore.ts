@@ -293,33 +293,55 @@ export async function detachTagFromBookmark({
 // to stay gone must also block its canonical key (see settings.blockedTagKeys),
 // otherwise auto-tagging can suggest the same name again later.
 export async function deleteTag(tagId: string) {
+  await deleteTags([tagId])
+}
+
+// Batch version of deleteTag. Bulk deletion in the tag manager used to call
+// deleteTag once per tag, which meant one transaction plus one full tags scan
+// each time; deleting 20 tags now costs a single transaction.
+export async function deleteTags(tagIds: string[]): Promise<{ deletedTagIds: string[] }> {
+  const uniqueTagIds = [...new Set(tagIds.filter(Boolean))]
+  if (!uniqueTagIds.length) {
+    return { deletedTagIds: [] }
+  }
+
+  const deletedIds = new Set(uniqueTagIds)
   const db = await getBookmarksDb()
   const transaction = db.transaction([TAGS_STORE, BOOKMARK_TAGS_STORE], "readwrite")
   const tagsStore = transaction.objectStore(TAGS_STORE)
   const bookmarkTagsStore = transaction.objectStore(BOOKMARK_TAGS_STORE)
-  // Both reads are issued before the first await so the transaction cannot
+  // Every read is issued before the first await so the transaction cannot
   // auto-commit between them.
-  const relatedRequest = bookmarkTagsStore.index("tagId").getAll(tagId)
+  const relationRequests = uniqueTagIds.map((tagId) => bookmarkTagsStore.index("tagId").getAll(tagId))
   const allTagsRequest = tagsStore.getAll()
-  const relatedBookmarkTags = (await requestToPromise(relatedRequest)) as BookmarkTagRecord[]
+  const relationGroups = (await Promise.all(
+    relationRequests.map((request) => requestToPromise(request))
+  )) as BookmarkTagRecord[][]
   const allTags = (await requestToPromise(allTagsRequest)) as TagRecord[]
 
-  for (const bookmarkTag of relatedBookmarkTags) {
-    bookmarkTagsStore.delete(bookmarkTag.id)
+  for (const relations of relationGroups) {
+    for (const bookmarkTag of relations) {
+      bookmarkTagsStore.delete(bookmarkTag.id)
+    }
   }
 
   // Children would otherwise point at a tag that no longer exists.
+  const updatedAt = new Date().toISOString()
   for (const child of allTags) {
-    if (child.id === tagId || child.parentId !== tagId) {
+    if (deletedIds.has(child.id) || !child.parentId || !deletedIds.has(child.parentId)) {
       continue
     }
 
     const { parentId: _droppedParentId, ...rest } = child
-    tagsStore.put({ ...rest, updatedAt: new Date().toISOString() } satisfies TagRecord)
+    tagsStore.put({ ...rest, updatedAt } satisfies TagRecord)
   }
 
-  tagsStore.delete(tagId)
+  for (const tagId of uniqueTagIds) {
+    tagsStore.delete(tagId)
+  }
+
   await transactionDone(transaction)
+  return { deletedTagIds: uniqueTagIds }
 }
 
 // Merges source tags into a target tag inside one transaction: bookmark

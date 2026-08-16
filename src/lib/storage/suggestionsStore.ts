@@ -109,8 +109,14 @@ export async function removeSuggestionsForBookmark(bookmarkId: string) {
 // "rejected" so the tag cannot be resurrected by accepting a stale suggestion,
 // and the rejected records keep acting as a negative cache for the rule engine.
 export async function rejectPendingSuggestionsByTagName(tagName: string) {
-  const key = canonicalTagKey(tagName)
-  if (!key) {
+  return rejectPendingSuggestionsByTagNames([tagName])
+}
+
+// Batch version: bulk tag deletion would otherwise scan the whole suggestions
+// store once per deleted tag.
+export async function rejectPendingSuggestionsByTagNames(tagNames: string[]) {
+  const keys = new Set(tagNames.map((tagName) => canonicalTagKey(tagName)).filter(Boolean))
+  if (!keys.size) {
     return { rejectedCount: 0 }
   }
 
@@ -122,7 +128,7 @@ export async function rejectPendingSuggestionsByTagName(tagName: string) {
   let rejectedCount = 0
 
   for (const suggestion of suggestions) {
-    if (suggestion.status !== "pending" || canonicalTagKey(suggestion.tagName) !== key) {
+    if (suggestion.status !== "pending" || !keys.has(canonicalTagKey(suggestion.tagName))) {
       continue
     }
 

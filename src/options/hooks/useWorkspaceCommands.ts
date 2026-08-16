@@ -25,7 +25,7 @@ import {
   setTagParent,
   updateTagAliases
 } from "../../lib/storage/tagsStore.ts"
-import { deleteTagPermanently, unblockTagKey } from "../../lib/tags/tagActions.ts"
+import { deleteTagsPermanently, unblockTagKey } from "../../lib/tags/tagActions.ts"
 import { isSameTagName } from "../../lib/tags/canonical.ts"
 import type { BookmarkTagRecord, SavedViewRecord, TagRecord, WorkspaceData } from "../../lib/types.ts"
 import type { WorkspaceTagPatch } from "./useWorkspaceQueries.ts"
@@ -220,18 +220,33 @@ export function useWorkspaceCommands({
   }
 
   async function handleDeleteTag(tagId: string) {
+    await handleDeleteTags([tagId])
+  }
+
+  // Deleting many tags goes through one storage batch and one state patch, so
+  // the tag manager re-renders once instead of once per tag.
+  async function handleDeleteTags(tagIds: string[]) {
+    const uniqueTagIds = [...new Set(tagIds.filter(Boolean))]
+    if (!uniqueTagIds.length) {
+      return
+    }
+
     setCommandError(null)
     setIsSavingTags(true)
 
     try {
-      const tagName = getWorkspaceData().tags.find((tag) => tag.id === tagId)?.name
-      await deleteTagPermanently({ tagId, tagName })
+      const nameById = new Map(getWorkspaceData().tags.map((tag) => [tag.id, tag.name]))
+      const deletedNames = uniqueTagIds.map((tagId) => nameById.get(tagId)).filter(Boolean) as string[]
+      await deleteTagsPermanently(uniqueTagIds.map((tagId) => ({ tagId, tagName: nameById.get(tagId) })))
+
+      const deletedIds = new Set(uniqueTagIds)
       applyWorkspacePatch(({ tags, bookmarkTags, tagSuggestions }) => ({
-        tags: tags.filter((tag) => tag.id !== tagId),
-        bookmarkTags: bookmarkTags.filter((relation) => relation.tagId !== tagId),
-        tagSuggestions: tagName
+        tags: tags.filter((tag) => !deletedIds.has(tag.id)),
+        bookmarkTags: bookmarkTags.filter((relation) => !deletedIds.has(relation.tagId)),
+        tagSuggestions: deletedNames.length
           ? tagSuggestions.map((suggestion) =>
-              suggestion.status === "pending" && isSameTagName(suggestion.tagName, tagName)
+              suggestion.status === "pending" &&
+              deletedNames.some((deletedName) => isSameTagName(suggestion.tagName, deletedName))
                 ? { ...suggestion, status: "rejected" as const, resolvedAt: new Date().toISOString() }
                 : suggestion
             )
@@ -508,6 +523,7 @@ export function useWorkspaceCommands({
     handleResetLocalData,
     handleCreateTag,
     handleDeleteTag,
+    handleDeleteTags,
     handleMergeTags,
     handleRenameTag,
     handleSetTagParent,

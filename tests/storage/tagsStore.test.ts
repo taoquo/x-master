@@ -9,6 +9,7 @@ import {
   attachTagToBookmarks,
   createTag,
   deleteTag,
+  deleteTags,
   detachTagFromBookmark,
   getAllBookmarkTags,
   getAllTags,
@@ -237,6 +238,52 @@ test("deleteTag removes the tag and all of its bookmark relations", async () => 
 
   assert.equal(tags.length, 0)
   assert.equal(bookmarkTags.length, 0)
+})
+
+test("deleteTags removes every listed tag, its relations and unparents survivors", async () => {
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-1",
+      tweetUrl: "https://x.com/alice/status/tweet-1",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "taggable",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T00:01:00.000Z",
+    }
+  ])
+
+  const theme = await createTag({ name: "ai" })
+  const child = await createTag({ name: "ai agents" })
+  const doomed = await createTag({ name: "misc" })
+  const survivor = await createTag({ name: "rust" })
+  await setTagParent({ tagId: child.id, parentId: theme.id })
+  await attachTagToBookmark({ bookmarkId: "tweet-1", tagId: doomed.id })
+  await attachTagToBookmark({ bookmarkId: "tweet-1", tagId: survivor.id })
+
+  const result = await deleteTags([theme.id, doomed.id, "tag-unknown", ""])
+
+  assert.deepEqual(result.deletedTagIds.sort(), [doomed.id, theme.id, "tag-unknown"].sort())
+
+  const tags = await getAllTags()
+  assert.deepEqual(tags.map((tag) => tag.id).sort(), [child.id, survivor.id].sort())
+  // The surviving child no longer points at the deleted theme.
+  assert.equal(tags.find((tag) => tag.id === child.id)?.parentId, undefined)
+
+  const bookmarkTags = await getAllBookmarkTags()
+  assert.deepEqual(bookmarkTags.map((relation) => relation.tagId), [survivor.id])
+})
+
+test("deleteTags is a no-op for an empty list", async () => {
+  await resetBookmarksDb()
+
+  const tag = await createTag({ name: "keep" })
+  const result = await deleteTags([])
+
+  assert.deepEqual(result.deletedTagIds, [])
+  assert.deepEqual((await getAllTags()).map((item) => item.id), [tag.id])
 })
 
 test("setTagParent assigns and clears a parent tag", async () => {

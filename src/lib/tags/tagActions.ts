@@ -1,6 +1,6 @@
 import { getSettings, updateSettings } from "../storage/settings.ts"
-import { rejectPendingSuggestionsByTagName } from "../storage/suggestionsStore.ts"
-import { deleteTag, getAllTags } from "../storage/tagsStore.ts"
+import { rejectPendingSuggestionsByTagNames } from "../storage/suggestionsStore.ts"
+import { deleteTags, getAllTags } from "../storage/tagsStore.ts"
 import { canonicalTagKey } from "./canonical.ts"
 
 // Deleting a tag has to do three things, otherwise the tag comes back:
@@ -17,31 +17,56 @@ export async function deleteTagPermanently({
   tagId: string
   tagName?: string
 }): Promise<{ blockedTagKey: string | null }> {
-  const resolvedName = tagName ?? (await getAllTags()).find((tag) => tag.id === tagId)?.name
+  const { blockedTagKeys } = await deleteTagsPermanently([{ tagId, tagName }])
+  return { blockedTagKey: blockedTagKeys[0] ?? null }
+}
 
-  await deleteTag(tagId)
-
-  if (!resolvedName) {
-    return { blockedTagKey: null }
+// Batch form of deleteTagPermanently: one tags transaction, one suggestions
+// scan and one settings write no matter how many tags the user selected. The
+// tag manager's bulk delete used to run the single-tag path in a loop, which
+// cost three round trips per tag.
+export async function deleteTagsPermanently(
+  targets: Array<{ tagId: string; tagName?: string }>
+): Promise<{ deletedTagIds: string[]; blockedTagKeys: string[] }> {
+  const uniqueTargets = new Map(targets.filter((target) => target.tagId).map((target) => [target.tagId, target]))
+  if (!uniqueTargets.size) {
+    return { deletedTagIds: [], blockedTagKeys: [] }
   }
 
-  await rejectPendingSuggestionsByTagName(resolvedName)
+  const needsLookup = [...uniqueTargets.values()].some((target) => !target.tagName)
+  const nameById = needsLookup ? new Map((await getAllTags()).map((tag) => [tag.id, tag.name])) : new Map<string, string>()
+  const resolvedNames: string[] = []
 
-  const key = canonicalTagKey(resolvedName)
-  if (!key) {
-    return { blockedTagKey: null }
+  for (const target of uniqueTargets.values()) {
+    const name = target.tagName ?? nameById.get(target.tagId)
+    if (name) {
+      resolvedNames.push(name)
+    }
+  }
+
+  const { deletedTagIds } = await deleteTags([...uniqueTargets.keys()])
+
+  if (!resolvedNames.length) {
+    return { deletedTagIds, blockedTagKeys: [] }
+  }
+
+  await rejectPendingSuggestionsByTagNames(resolvedNames)
+
+  const keys = [...new Set(resolvedNames.map((name) => canonicalTagKey(name)).filter(Boolean))]
+  if (!keys.length) {
+    return { deletedTagIds, blockedTagKeys: [] }
   }
 
   const settings = await getSettings()
-  if (settings.autoTag.blockedTagKeys.includes(key)) {
-    return { blockedTagKey: key }
+  const missingKeys = keys.filter((key) => !settings.autoTag.blockedTagKeys.includes(key))
+
+  if (missingKeys.length) {
+    await updateSettings({
+      autoTag: { ...settings.autoTag, blockedTagKeys: [...settings.autoTag.blockedTagKeys, ...missingKeys] }
+    })
   }
 
-  await updateSettings({
-    autoTag: { ...settings.autoTag, blockedTagKeys: [...settings.autoTag.blockedTagKeys, key] }
-  })
-
-  return { blockedTagKey: key }
+  return { deletedTagIds, blockedTagKeys: keys }
 }
 
 // Removes a canonical key from the block list. Called whenever the user

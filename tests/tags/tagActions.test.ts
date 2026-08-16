@@ -9,7 +9,7 @@ import {
   insertNewTagSuggestions
 } from "../../src/lib/storage/suggestionsStore.ts"
 import { createTag, getAllTags } from "../../src/lib/storage/tagsStore.ts"
-import { deleteTagPermanently, unblockTagKey } from "../../src/lib/tags/tagActions.ts"
+import { deleteTagPermanently, deleteTagsPermanently, unblockTagKey } from "../../src/lib/tags/tagActions.ts"
 
 function installChromeStorageMock() {
   let stored: Record<string, unknown> = {}
@@ -66,6 +66,44 @@ test("deleteTagPermanently is idempotent and tolerates a missing tag", async () 
   const unknown = await deleteTagPermanently({ tagId: "tag-unknown" })
   assert.equal(unknown.blockedTagKey, null)
   assert.deepEqual((await getSettings()).autoTag.blockedTagKeys, ["llm"])
+})
+
+test("deleteTagsPermanently blocks every deleted name in a single pass", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+
+  const agents = await createTag({ name: "AI Agents" })
+  const rust = await createTag({ name: "Rust" })
+  const keeper = await createTag({ name: "Design" })
+  await seedSuggestion("tweet-1", "ai-agent")
+  await seedSuggestion("tweet-2", "rust")
+  await seedSuggestion("tweet-3", "design")
+
+  const result = await deleteTagsPermanently([{ tagId: agents.id }, { tagId: rust.id, tagName: "Rust" }])
+
+  assert.deepEqual(result.deletedTagIds.sort(), [agents.id, rust.id].sort())
+  assert.deepEqual(result.blockedTagKeys.sort(), ["aiagent", "rust"])
+  assert.deepEqual((await getAllTags()).map((tag) => tag.id), [keeper.id])
+
+  const statusByBookmark = new Map(
+    (await getAllTagSuggestions()).map((suggestion) => [suggestion.bookmarkId, suggestion.status])
+  )
+  assert.equal(statusByBookmark.get("tweet-1"), "rejected")
+  assert.equal(statusByBookmark.get("tweet-2"), "rejected")
+  assert.equal(statusByBookmark.get("tweet-3"), "pending")
+
+  assert.deepEqual((await getSettings()).autoTag.blockedTagKeys.sort(), ["aiagent", "rust"])
+})
+
+test("deleteTagsPermanently ignores an empty target list", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+
+  const tag = await createTag({ name: "Keep" })
+  const result = await deleteTagsPermanently([])
+
+  assert.deepEqual(result, { deletedTagIds: [], blockedTagKeys: [] })
+  assert.deepEqual((await getAllTags()).map((item) => item.id), [tag.id])
 })
 
 test("unblockTagKey lets a deleted name come back", async () => {

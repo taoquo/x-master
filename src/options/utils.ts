@@ -98,11 +98,31 @@ export function truncateText(value: string, maxLength = 120) {
   return `${value.slice(0, maxLength - 1)}...`
 }
 
-export function getTagNamesForBookmark(bookmarkId: string, bookmarkTags: BookmarkTagRecord[], tagsById: Map<string, TagRecord>) {
-  return bookmarkTags
-    .filter((bookmarkTag) => bookmarkTag.bookmarkId === bookmarkId)
-    .map((bookmarkTag) => tagsById.get(bookmarkTag.tagId))
-    .filter(Boolean) as TagRecord[]
+// One pass over the relations instead of one filter per bookmark: the previous
+// per-bookmark lookup was O(bookmarks x relations) and dominated every render
+// once a workspace grew past a few thousand bookmarks.
+export function buildTagNamesByBookmarkId(
+  bookmarkTags: BookmarkTagRecord[],
+  tagsById: Map<string, TagRecord>
+): Map<string, string[]> {
+  const map = new Map<string, string[]>()
+
+  for (const bookmarkTag of bookmarkTags) {
+    const tag = tagsById.get(bookmarkTag.tagId)
+    if (!tag) {
+      continue
+    }
+
+    const names = map.get(bookmarkTag.bookmarkId)
+    if (names) {
+      names.push(tag.name)
+      continue
+    }
+
+    map.set(bookmarkTag.bookmarkId, [tag.name])
+  }
+
+  return map
 }
 
 export function getNextThemePreference(

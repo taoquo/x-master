@@ -18,7 +18,7 @@ import {
   createFieldId,
   DEFAULT_SAVED_VIEW_NAME,
   formatTimestamp,
-  getTagNamesForBookmark,
+  buildTagNamesByBookmarkId,
   haveSameItems,
   INITIAL_RESULTS_RENDER_LIMIT,
   RESULTS_RENDER_INCREMENT,
@@ -282,16 +282,10 @@ function OptionsScreen() {
     workspace.bookmarks.find((bookmark) => bookmark.tweetId === selectedBookmarkId) ??
     null
 
-  const tagNamesByBookmarkId = useMemo(() => {
-    const map = new Map<string, string[]>()
-
-    for (const bookmark of workspace.bookmarks) {
-      const tags = getTagNamesForBookmark(bookmark.tweetId, workspace.bookmarkTags, tagsById).map((tag) => tag.name)
-      map.set(bookmark.tweetId, tags)
-    }
-
-    return map
-  }, [tagsById, workspace.bookmarkTags, workspace.bookmarks])
+  const tagNamesByBookmarkId = useMemo(
+    () => buildTagNamesByBookmarkId(workspace.bookmarkTags, tagsById),
+    [tagsById, workspace.bookmarkTags]
+  )
 
   const tagLibraryItems = useMemo(
     () =>
@@ -631,11 +625,8 @@ function OptionsScreen() {
       return
     }
 
-    for (const tagId of tagIds) {
-      await workspace.handleDeleteTag(tagId)
-    }
-
     clearTagSelection()
+    await workspace.handleDeleteTags(tagIds)
   }
 
   function handleDeleteTagFromLibrary(tagId: string, tagName: string) {
