@@ -86,6 +86,122 @@ export async function getAllTags(): Promise<TagRecord[]> {
   return (tags as TagRecord[]).sort((left, right) => left.name.localeCompare(right.name))
 }
 
+// The taxonomy is deliberately capped at two levels (theme -> tag). A flat-ish
+// tree keeps the sidebar, the tag library and the future relation graph
+// readable, and it makes parent cycles structurally impossible.
+export async function setTagParent({
+  tagId,
+  parentId
+}: {
+  tagId: string
+  parentId?: string
+}): Promise<TagRecord> {
+  const db = await getBookmarksDb()
+  const transaction = db.transaction(TAGS_STORE, "readwrite")
+  const store = transaction.objectStore(TAGS_STORE)
+  const allTags = (await requestToPromise(store.getAll())) as TagRecord[]
+  const existing = allTags.find((tag) => tag.id === tagId)
+
+  if (!existing) {
+    await transactionDone(transaction)
+    throw new Error("Tag not found")
+  }
+
+  const nextParentId = parentId?.trim() ? parentId.trim() : undefined
+
+  if (nextParentId === tagId) {
+    await transactionDone(transaction)
+    throw new Error("A tag cannot be its own parent")
+  }
+
+  if (nextParentId) {
+    const parent = allTags.find((tag) => tag.id === nextParentId)
+
+    if (!parent) {
+      await transactionDone(transaction)
+      throw new Error("Parent tag not found")
+    }
+
+    if (parent.parentId) {
+      await transactionDone(transaction)
+      throw new Error("Tag hierarchy is limited to two levels")
+    }
+
+    if (allTags.some((tag) => tag.parentId === tagId)) {
+      await transactionDone(transaction)
+      throw new Error("Tag hierarchy is limited to two levels")
+    }
+  }
+
+  const { parentId: _previousParentId, ...rest } = existing
+  const updatedTag: TagRecord = { ...rest, updatedAt: new Date().toISOString() }
+
+  if (nextParentId) {
+    updatedTag.parentId = nextParentId
+  }
+
+  store.put(updatedTag)
+  await transactionDone(transaction)
+  return updatedTag
+}
+
+// Aliases are the manual counterpart of a merge: they let a tag absorb wording
+// variants without creating records. Anything that would collide with the tag
+// itself or with another tag is dropped instead of throwing, so a paste-heavy
+// edit still saves the useful part.
+export async function updateTagAliases({
+  tagId,
+  aliases
+}: {
+  tagId: string
+  aliases: string[]
+}): Promise<TagRecord> {
+  const db = await getBookmarksDb()
+  const transaction = db.transaction(TAGS_STORE, "readwrite")
+  const store = transaction.objectStore(TAGS_STORE)
+  const allTags = (await requestToPromise(store.getAll())) as TagRecord[]
+  const existing = allTags.find((tag) => tag.id === tagId)
+
+  if (!existing) {
+    await transactionDone(transaction)
+    throw new Error("Tag not found")
+  }
+
+  const blockedKeys = new Set(
+    allTags.filter((tag) => tag.id !== tagId).map((tag) => canonicalTagKey(tag.name))
+  )
+  blockedKeys.add(canonicalTagKey(existing.name))
+
+  const nextAliases: string[] = []
+  const seenKeys = new Set<string>()
+
+  for (const alias of aliases) {
+    const normalized = normalizeTagDisplayName(alias)
+    if (!normalized) {
+      continue
+    }
+
+    const key = canonicalTagKey(normalized)
+    if (!key || blockedKeys.has(key) || seenKeys.has(key)) {
+      continue
+    }
+
+    seenKeys.add(key)
+    nextAliases.push(normalized)
+  }
+
+  const { aliases: _previousAliases, ...rest } = existing
+  const updatedTag: TagRecord = { ...rest, updatedAt: new Date().toISOString() }
+
+  if (nextAliases.length) {
+    updatedTag.aliases = nextAliases
+  }
+
+  store.put(updatedTag)
+  await transactionDone(transaction)
+  return updatedTag
+}
+
 export async function getAllBookmarkTags(): Promise<BookmarkTagRecord[]> {
   const db = await getBookmarksDb()
   const transaction = db.transaction(BOOKMARK_TAGS_STORE, "readonly")
@@ -181,10 +297,25 @@ export async function deleteTag(tagId: string) {
   const transaction = db.transaction([TAGS_STORE, BOOKMARK_TAGS_STORE], "readwrite")
   const tagsStore = transaction.objectStore(TAGS_STORE)
   const bookmarkTagsStore = transaction.objectStore(BOOKMARK_TAGS_STORE)
-  const relatedBookmarkTags = (await requestToPromise(bookmarkTagsStore.index("tagId").getAll(tagId))) as BookmarkTagRecord[]
+  // Both reads are issued before the first await so the transaction cannot
+  // auto-commit between them.
+  const relatedRequest = bookmarkTagsStore.index("tagId").getAll(tagId)
+  const allTagsRequest = tagsStore.getAll()
+  const relatedBookmarkTags = (await requestToPromise(relatedRequest)) as BookmarkTagRecord[]
+  const allTags = (await requestToPromise(allTagsRequest)) as TagRecord[]
 
   for (const bookmarkTag of relatedBookmarkTags) {
     bookmarkTagsStore.delete(bookmarkTag.id)
+  }
+
+  // Children would otherwise point at a tag that no longer exists.
+  for (const child of allTags) {
+    if (child.id === tagId || child.parentId !== tagId) {
+      continue
+    }
+
+    const { parentId: _droppedParentId, ...rest } = child
+    tagsStore.put({ ...rest, updatedAt: new Date().toISOString() } satisfies TagRecord)
   }
 
   tagsStore.delete(tagId)
@@ -208,7 +339,12 @@ export async function mergeTags({
   const transaction = db.transaction([TAGS_STORE, BOOKMARK_TAGS_STORE], "readwrite")
   const tagsStore = transaction.objectStore(TAGS_STORE)
   const bookmarkTagsStore = transaction.objectStore(BOOKMARK_TAGS_STORE)
-  const target = (await requestToPromise(tagsStore.get(targetTagId))) as TagRecord | undefined
+  // Both reads are issued before the first await so the transaction cannot
+  // auto-commit between them.
+  const targetRequest = tagsStore.get(targetTagId)
+  const allTagsRequest = tagsStore.getAll()
+  const target = (await requestToPromise(targetRequest)) as TagRecord | undefined
+  const allTags = (await requestToPromise(allTagsRequest)) as TagRecord[]
 
   if (!target) {
     await transactionDone(transaction)
@@ -260,9 +396,40 @@ export async function mergeTags({
     mergedTagIds.push(sourceTagId)
   }
 
+  // Children of a merged tag follow the survivor, unless the survivor is itself
+  // a child — the taxonomy stays two levels deep, so they become roots instead.
+  if (mergedTagIds.length) {
+    const mergedIdSet = new Set(mergedTagIds)
+
+    for (const child of allTags) {
+      if (!child.parentId || !mergedIdSet.has(child.parentId)) {
+        continue
+      }
+
+      // A merged source was just deleted; re-putting it would resurrect it.
+      if (child.id === targetTagId || mergedIdSet.has(child.id)) {
+        continue
+      }
+
+      const { parentId: _droppedParentId, ...rest } = child
+      const reparented: TagRecord = { ...rest, updatedAt: new Date().toISOString() }
+
+      if (!target.parentId) {
+        reparented.parentId = targetTagId
+      }
+
+      tagsStore.put(reparented)
+    }
+  }
+
   const updatedTarget: TagRecord = {
     ...target,
     updatedAt: new Date().toISOString()
+  }
+
+  // The survivor may itself have been parented under one of the merged tags.
+  if (updatedTarget.parentId && mergedTagIds.includes(updatedTarget.parentId)) {
+    delete updatedTarget.parentId
   }
 
   if (aliases.size) {

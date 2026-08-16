@@ -39,6 +39,7 @@ export interface TagRecord {
   name: string
   createdAt: string
   aliases?: string[]
+  parentId?: string
   updatedAt?: string
 }
 

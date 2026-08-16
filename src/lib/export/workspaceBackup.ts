@@ -254,6 +254,12 @@ function validateTag(value: unknown, path: string): TagRecord {
     tag.aliases = requireStringArray(record, "aliases", path)
   }
 
+  // Optional since v2.2: two-level taxonomy. Older backups have no parentId.
+  const parentId = optionalString(record, "parentId", path)
+  if (parentId !== undefined) {
+    tag.parentId = parentId
+  }
+
   const updatedAt = optionalString(record, "updatedAt", path)
   if (updatedAt !== undefined) {
     tag.updatedAt = updatedAt

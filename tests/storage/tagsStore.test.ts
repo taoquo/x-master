@@ -15,7 +15,9 @@ import {
   listBookmarksByTag,
   listTagsForBookmark,
   mergeTags,
-  renameTag
+  renameTag,
+  setTagParent,
+  updateTagAliases
 } from "../../src/lib/storage/tagsStore.ts"
 
 test("createTag stores a tag and getAllTags returns it", async () => {
@@ -235,6 +237,83 @@ test("deleteTag removes the tag and all of its bookmark relations", async () => 
 
   assert.equal(tags.length, 0)
   assert.equal(bookmarkTags.length, 0)
+})
+
+test("setTagParent assigns and clears a parent tag", async () => {
+  await resetBookmarksDb()
+
+  const theme = await createTag({ name: "ai" })
+  const child = await createTag({ name: "ai agents" })
+
+  const parented = await setTagParent({ tagId: child.id, parentId: theme.id })
+  assert.equal(parented.parentId, theme.id)
+  assert.ok(parented.updatedAt)
+
+  const cleared = await setTagParent({ tagId: child.id })
+  assert.equal(cleared.parentId, undefined)
+  assert.equal(Object.hasOwn(cleared, "parentId"), false)
+
+  const stored = await getAllTags()
+  assert.equal(stored.find((tag) => tag.id === child.id)?.parentId, undefined)
+})
+
+test("setTagParent rejects self parenting, unknown parents and a third level", async () => {
+  await resetBookmarksDb()
+
+  const theme = await createTag({ name: "ai" })
+  const child = await createTag({ name: "ai agents" })
+  const grandchild = await createTag({ name: "agent memory" })
+  await setTagParent({ tagId: child.id, parentId: theme.id })
+
+  await assert.rejects(() => setTagParent({ tagId: child.id, parentId: child.id }), /own parent/)
+  await assert.rejects(() => setTagParent({ tagId: child.id, parentId: "tag-missing" }), /Parent tag not found/)
+  // theme already has a child, so it cannot become a child itself.
+  await assert.rejects(() => setTagParent({ tagId: theme.id, parentId: grandchild.id }), /two levels/)
+  // child already has a parent, so it cannot become a parent.
+  await assert.rejects(() => setTagParent({ tagId: grandchild.id, parentId: child.id }), /two levels/)
+  await assert.rejects(() => setTagParent({ tagId: "tag-missing", parentId: theme.id }), /Tag not found/)
+})
+
+test("updateTagAliases normalizes aliases and drops collisions", async () => {
+  await resetBookmarksDb()
+
+  const tag = await createTag({ name: "ai agents" })
+  await createTag({ name: "design" })
+
+  const updated = await updateTagAliases({
+    tagId: tag.id,
+    aliases: ["  #Agentic  ", "agentic", "AI Agent", "design", "", "LLM Agents"]
+  })
+
+  assert.deepEqual(updated.aliases, ["Agentic", "LLM Agents"])
+
+  const emptied = await updateTagAliases({ tagId: tag.id, aliases: ["   "] })
+  assert.equal(emptied.aliases, undefined)
+  assert.equal(Object.hasOwn(emptied, "aliases"), false)
+  await assert.rejects(() => updateTagAliases({ tagId: "tag-missing", aliases: [] }), /Tag not found/)
+})
+
+test("deleteTag and mergeTags keep the hierarchy consistent", async () => {
+  await resetBookmarksDb()
+
+  const theme = await createTag({ name: "ai" })
+  const child = await createTag({ name: "ai agents" })
+  await setTagParent({ tagId: child.id, parentId: theme.id })
+  await deleteTag(theme.id)
+
+  const afterDelete = await getAllTags()
+  assert.equal(afterDelete.length, 1)
+  assert.equal(afterDelete[0].parentId, undefined)
+
+  const survivor = await createTag({ name: "tooling" })
+  const doomedTheme = await createTag({ name: "infra" })
+  const orphanedChild = await createTag({ name: "kubernetes" })
+  await setTagParent({ tagId: orphanedChild.id, parentId: doomedTheme.id })
+  await mergeTags({ sourceTagIds: [doomedTheme.id], targetTagId: survivor.id })
+
+  const afterMerge = await getAllTags()
+  assert.equal(afterMerge.some((tag) => tag.id === doomedTheme.id), false)
+  assert.equal(afterMerge.find((tag) => tag.id === orphanedChild.id)?.parentId, survivor.id)
 })
 
 test("createSyncRun stores sync runs in IndexedDB and getLatestSyncRun returns the newest one", async () => {

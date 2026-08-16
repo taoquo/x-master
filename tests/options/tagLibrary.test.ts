@@ -4,7 +4,9 @@ import type { BookmarkTagRecord, TagRecord, TagSuggestionRecord } from "../../sr
 import {
   buildTagLibraryItems,
   countOrphanTags,
+  countUnparentedTags,
   filterSidebarTags,
+  getParentCandidates,
   getVisibleTagLibraryItems
 } from "../../src/options/tagLibrary.ts"
 
@@ -170,4 +172,102 @@ test("filterSidebarTags keeps every tag for an empty query and matches aliases",
   assert.deepEqual(filterSidebarTags(tags, "learning").map((item) => item.id), ["tag-ai"])
   assert.deepEqual(filterSidebarTags(tags, "design").map((item) => item.id), ["tag-design"])
   assert.equal(filterSidebarTags(tags, "zzz").length, 0)
+})
+
+test("buildTagLibraryItems resolves parent names and child counts", () => {
+  const items = buildTagLibraryItems({
+    tags: [
+      tag("tag-ai", "ai"),
+      tag("tag-agents", "agents", { parentId: "tag-ai" }),
+      tag("tag-rag", "rag", { parentId: "tag-ai" }),
+      tag("tag-design", "design")
+    ],
+    bookmarkTags: [],
+    tagSuggestions: []
+  })
+
+  const byId = new Map(items.map((item) => [item.tagId, item]))
+
+  assert.equal(byId.get("tag-ai")?.childCount, 2)
+  assert.equal(byId.get("tag-ai")?.parentId, undefined)
+  assert.equal(byId.get("tag-agents")?.parentId, "tag-ai")
+  assert.equal(byId.get("tag-agents")?.parentName, "ai")
+  assert.equal(byId.get("tag-agents")?.childCount, 0)
+  assert.equal(byId.get("tag-design")?.childCount, 0)
+})
+
+test("buildTagLibraryItems treats a parentId pointing at a deleted tag as unparented", () => {
+  const items = buildTagLibraryItems({
+    tags: [tag("tag-agents", "agents", { parentId: "tag-removed" })],
+    bookmarkTags: [],
+    tagSuggestions: []
+  })
+
+  assert.equal(items[0].parentId, undefined)
+  assert.equal(items[0].parentName, undefined)
+  assert.equal(items[0].childCount, 0)
+  assert.equal(countUnparentedTags(items), 1)
+})
+
+test("countUnparentedTags skips themes and children", () => {
+  const items = buildTagLibraryItems({
+    tags: [
+      tag("tag-ai", "ai"),
+      tag("tag-agents", "agents", { parentId: "tag-ai" }),
+      tag("tag-design", "design")
+    ],
+    bookmarkTags: [],
+    tagSuggestions: []
+  })
+
+  assert.equal(countUnparentedTags(items), 1)
+})
+
+test("getParentCandidates only offers root tags and never a tag that already has children", () => {
+  const items = buildTagLibraryItems({
+    tags: [
+      tag("tag-ai", "ai"),
+      tag("tag-agents", "agents", { parentId: "tag-ai" }),
+      tag("tag-design", "design"),
+      tag("tag-build", "build")
+    ],
+    bookmarkTags: [],
+    tagSuggestions: []
+  })
+
+  assert.deepEqual(getParentCandidates(items, "tag-ai"), [])
+  assert.deepEqual(getParentCandidates(items, "tag-unknown"), [])
+  assert.deepEqual(
+    getParentCandidates(items, "tag-design").map((item) => item.tagId),
+    ["tag-ai", "tag-build"]
+  )
+  assert.deepEqual(
+    getParentCandidates(items, "tag-agents").map((item) => item.tagId),
+    ["tag-ai", "tag-build", "tag-design"]
+  )
+})
+
+test("getVisibleTagLibraryItems supports the unparented filter and parent name search", () => {
+  const items = buildTagLibraryItems({
+    tags: [
+      tag("tag-ai", "ai"),
+      tag("tag-agents", "agents", { parentId: "tag-ai" }),
+      tag("tag-design", "design")
+    ],
+    bookmarkTags: [],
+    tagSuggestions: []
+  })
+
+  assert.deepEqual(
+    getVisibleTagLibraryItems({ items, searchQuery: "", filter: "unparented", sortOrder: "name-asc" }).map(
+      (item) => item.tagId
+    ),
+    ["tag-design"]
+  )
+  assert.deepEqual(
+    getVisibleTagLibraryItems({ items, searchQuery: "ai", filter: "all", sortOrder: "name-asc" }).map(
+      (item) => item.tagId
+    ),
+    ["tag-agents", "tag-ai"]
+  )
 })

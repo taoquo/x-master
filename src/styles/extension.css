@@ -4325,6 +4325,50 @@
   .options-tag-table-select {
     width: 40px;
   }
+
+  .options-tag-card-parent {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .options-tag-parent-select {
+    min-width: 0;
+    flex: 1 1 auto;
+    max-width: 200px;
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .options-tag-parent-locked {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .options-tag-alias-editor {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .options-tag-alias-input {
+    min-width: 0;
+    flex: 1 1 auto;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 38%, transparent);
+    font-size: 13px;
+  }
+
+  .options-tag-alias-save {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
 }
 
 @layer utilities {

@@ -15,7 +15,16 @@ import {
   rejectTagSuggestion
 } from "../../lib/autotag/suggestionActions.ts"
 import { getSettings, updateSettings } from "../../lib/storage/settings.ts"
-import { attachTagToBookmark, attachTagToBookmarks, createTag, detachTagFromBookmark, mergeTags, renameTag } from "../../lib/storage/tagsStore.ts"
+import {
+  attachTagToBookmark,
+  attachTagToBookmarks,
+  createTag,
+  detachTagFromBookmark,
+  mergeTags,
+  renameTag,
+  setTagParent,
+  updateTagAliases
+} from "../../lib/storage/tagsStore.ts"
 import { deleteTagPermanently, unblockTagKey } from "../../lib/tags/tagActions.ts"
 import { isSameTagName } from "../../lib/tags/canonical.ts"
 import type { BookmarkTagRecord, SavedViewRecord, TagRecord, WorkspaceData } from "../../lib/types.ts"
@@ -303,6 +312,50 @@ export function useWorkspaceCommands({
     }
   }
 
+  async function handleSetTagParent(tagId: string, parentId?: string) {
+    if (!tagId) {
+      return
+    }
+
+    setCommandError(null)
+    setIsSavingTags(true)
+
+    try {
+      const tag = await setTagParent({ tagId, parentId })
+      applyWorkspacePatch(({ tags }) => ({
+        tags: sortTagsByName(tags.map((existing) => (existing.id === tagId ? tag : existing)))
+      }))
+      return tag
+    } catch (error) {
+      setCommandError(toErrorMessage(error, "Failed to update tag parent"))
+      throw error
+    } finally {
+      setIsSavingTags(false)
+    }
+  }
+
+  async function handleUpdateTagAliases(tagId: string, aliases: string[]) {
+    if (!tagId) {
+      return
+    }
+
+    setCommandError(null)
+    setIsSavingTags(true)
+
+    try {
+      const tag = await updateTagAliases({ tagId, aliases })
+      applyWorkspacePatch(({ tags }) => ({
+        tags: sortTagsByName(tags.map((existing) => (existing.id === tagId ? tag : existing)))
+      }))
+      return tag
+    } catch (error) {
+      setCommandError(toErrorMessage(error, "Failed to update tag aliases"))
+      throw error
+    } finally {
+      setIsSavingTags(false)
+    }
+  }
+
   async function handleAttachTag(bookmarkId: string, tagId: string) {
     if (!bookmarkId || !tagId) {
       return
@@ -457,6 +510,8 @@ export function useWorkspaceCommands({
     handleDeleteTag,
     handleMergeTags,
     handleRenameTag,
+    handleSetTagParent,
+    handleUpdateTagAliases,
     handleAttachTag,
     handleDetachTag,
     handleBulkAttachTag,

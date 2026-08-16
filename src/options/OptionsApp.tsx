@@ -812,6 +812,8 @@ function OptionsScreen() {
                   onMergeSelectedTags={() => void handleMergeSelectedTags()}
                   onDeleteSelectedTags={() => void handleDeleteSelectedTags()}
                   onRenameTag={workspace.handleRenameTag}
+                  onSetTagParent={workspace.handleSetTagParent}
+                  onUpdateTagAliases={workspace.handleUpdateTagAliases}
                   onDeleteTag={handleDeleteTagFromLibrary}
                   onViewTagBookmarks={handleViewTagBookmarks}
                   onExitTagManagement={exitTagManagement}

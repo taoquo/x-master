@@ -10,6 +10,8 @@ import { AppIcon } from "../../ui/icons.tsx"
 import type { OptionsCopy } from "../i18n/copy.ts"
 import {
   countOrphanTags,
+  countUnparentedTags,
+  getParentCandidates,
   type TagLibraryFilter,
   type TagLibraryItem,
   type TagLibrarySortOrder
@@ -59,6 +61,8 @@ export interface TagResultsPaneProps {
   onMergeSelectedTags: () => void
   onDeleteSelectedTags: () => void
   onRenameTag: (tagId: string, name: string) => Promise<unknown>
+  onSetTagParent: (tagId: string, parentId?: string) => Promise<unknown>
+  onUpdateTagAliases: (tagId: string, aliases: string[]) => Promise<unknown>
   onDeleteTag: (tagId: string, tagName: string) => void
   onViewTagBookmarks: (tagId: string) => void
   onExitTagManagement: () => void
@@ -99,6 +103,8 @@ export function TagResultsPane({
   onMergeSelectedTags,
   onDeleteSelectedTags,
   onRenameTag,
+  onSetTagParent,
+  onUpdateTagAliases,
   onDeleteTag,
   onViewTagBookmarks,
   onExitTagManagement,
@@ -115,9 +121,13 @@ export function TagResultsPane({
   const [renamingTagId, setRenamingTagId] = useState<string | null>(null)
   const [renamingTagName, setRenamingTagName] = useState("")
   const [isSubmittingRename, setIsSubmittingRename] = useState(false)
+  const [editingAliasTagId, setEditingAliasTagId] = useState<string | null>(null)
+  const [editingAliasValue, setEditingAliasValue] = useState("")
+  const [isSubmittingAliases, setIsSubmittingAliases] = useState(false)
   const searchId = createFieldId("tags", "search")
   const sortId = createFieldId("tags", "sort")
   const orphanCount = countOrphanTags(tagItems)
+  const unparentedCount = countUnparentedTags(tagItems)
   const selectedCount = selectedTagIds.size
   const activeFilterCount = filter === "all" ? 0 : 1
   const reviewProposalCount = reviewMerges.length + reviewRenames.length
@@ -130,6 +140,32 @@ export function TagResultsPane({
   function cancelRename() {
     setRenamingTagId(null)
     setRenamingTagName("")
+  }
+
+  function startAliasEdit(item: TagLibraryItem) {
+    setEditingAliasTagId(item.tagId)
+    setEditingAliasValue(item.aliases.join(", "))
+  }
+
+  function cancelAliasEdit() {
+    setEditingAliasTagId(null)
+    setEditingAliasValue("")
+  }
+
+  async function submitAliases(tagId: string, rawValue: string) {
+    setIsSubmittingAliases(true)
+    try {
+      await onUpdateTagAliases(
+        tagId,
+        rawValue
+          .split(",")
+          .map((alias) => alias.trim())
+          .filter(Boolean)
+      )
+    } finally {
+      setIsSubmittingAliases(false)
+      cancelAliasEdit()
+    }
   }
 
   async function submitRename(tagId: string, nextName: string) {
@@ -158,7 +194,8 @@ export function TagResultsPane({
         aria-label={`${copy.renameTagLabel} ${item.name}`}
         disabled={isSubmittingRename}
         className="options-nav-row-input options-tag-rename-input"
-        onChange={(event) => setRenamingTagName(event.target.value)}
+        onInput={(event) => setRenamingTagName(event.currentTarget.value)}
+        onChange={(event) => setRenamingTagName(event.currentTarget.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault()
@@ -199,6 +236,14 @@ export function TagResultsPane({
         </button>
         <button
           type="button"
+          data-testid="tag-edit-aliases"
+          className="options-nav-row-delete"
+          aria-label={`${copy.editTagAliasesLabel} ${item.name}`}
+          onClick={() => startAliasEdit(item)}>
+          <AppIcon name="tag" size={12} />
+        </button>
+        <button
+          type="button"
           data-testid="tag-delete"
           className="options-nav-row-delete"
           aria-label={`${copy.deleteLabel} ${item.name}`}
@@ -206,6 +251,89 @@ export function TagResultsPane({
           <AppIcon name="trash" size={12} />
         </button>
       </span>
+    )
+  }
+
+  function renderParentSelect(item: TagLibraryItem) {
+    const candidates = getParentCandidates(tagItems, item.tagId)
+
+    if (!candidates.length) {
+      return (
+        <span
+          data-testid="tag-parent-locked"
+          className="options-meta-copy options-tag-parent-locked"
+          title={item.childCount ? copy.tagParentUnavailable : undefined}>
+          {item.childCount ? `${item.childCount} ${copy.tagChildCountSuffix}` : copy.tagParentNone}
+        </span>
+      )
+    }
+
+    return (
+      <select
+        data-testid="tag-parent-select"
+        data-tag-parent-select={item.tagId}
+        value={item.parentId ?? ""}
+        aria-label={`${copy.tagParentLabel} ${item.name}`}
+        disabled={isSavingTags}
+        className="field-shell options-tag-parent-select"
+        onChange={(event) => {
+          const nextParentId = event.currentTarget.value
+          void onSetTagParent(item.tagId, nextParentId || undefined)
+        }}>
+        <option value="">{copy.tagParentNone}</option>
+        {candidates.map((candidate) => (
+          <option key={candidate.tagId} value={candidate.tagId}>
+            {candidate.name}
+          </option>
+        ))}
+      </select>
+    )
+  }
+
+  function renderAliasEditor(item: TagLibraryItem) {
+    return (
+      <div className="options-tag-alias-editor">
+        <input
+          autoFocus
+          type="text"
+          value={editingAliasValue}
+          data-testid="tag-alias-input"
+          aria-label={`${copy.editTagAliasesLabel} ${item.name}`}
+          placeholder={copy.tagAliasesPlaceholder}
+          disabled={isSubmittingAliases}
+          className="options-nav-row-input options-tag-alias-input"
+          onInput={(event) => setEditingAliasValue(event.currentTarget.value)}
+          onChange={(event) => setEditingAliasValue(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault()
+              void submitAliases(item.tagId, event.currentTarget.value)
+              return
+            }
+
+            if (event.key === "Escape") {
+              event.preventDefault()
+              cancelAliasEdit()
+            }
+          }}
+        />
+        <button
+          type="button"
+          data-testid="tag-alias-save"
+          className="options-secondary-button options-tag-alias-save"
+          disabled={isSubmittingAliases}
+          onClick={() => void submitAliases(item.tagId, editingAliasValue)}>
+          {copy.saveLabel}
+        </button>
+        <button
+          type="button"
+          data-testid="tag-alias-cancel"
+          className="options-footer-icon-button"
+          aria-label={copy.cancelLabel}
+          onClick={cancelAliasEdit}>
+          <AppIcon name="close" size={12} />
+        </button>
+      </div>
     )
   }
 
@@ -228,7 +356,8 @@ export function TagResultsPane({
                     <div className="options-overline">{getSectionOverline(locale, copy.tagLibrary, "Taxonomy")}</div>
                     <h2 className="options-display-title-sm mt-3 truncate font-bold">{copy.manageTagsLabel}</h2>
                     <div data-testid="tag-header-meta" className="options-meta-copy options-tag-header-meta">
-                      {tagItems.length} {copy.tagsCountSuffix} · {orphanCount} {copy.orphanTagsSuffix}
+                      {tagItems.length} {copy.tagsCountSuffix} · {orphanCount} {copy.orphanTagsSuffix} · {unparentedCount}{" "}
+                      {copy.unparentedTagsSuffix}
                     </div>
                   </div>
                   <div className="options-main-header-summary text-right">
@@ -304,7 +433,8 @@ export function TagResultsPane({
                             [
                               ["all", copy.tagFilterAll],
                               ["orphan", copy.tagFilterOrphan],
-                              ["pending", copy.tagFilterPending]
+                              ["pending", copy.tagFilterPending],
+                              ["unparented", copy.tagFilterUnparented]
                             ] as Array<[TagLibraryFilter, string]>
                           ).map(([value, label]) => (
                             <label key={value} data-testid={`tag-filter-option-${value}`} className="options-filter-row">
@@ -383,7 +513,13 @@ export function TagResultsPane({
                         data-testid="tag-filter-chip"
                         onClick={() => onFilterChange("all")}
                         className="chip-button options-chip options-theme-elevated !px-3 !py-1.5 !text-xs">
-                        <span>{filter === "orphan" ? copy.tagFilterOrphan : copy.tagFilterPending}</span>
+                        <span>
+                          {filter === "orphan"
+                            ? copy.tagFilterOrphan
+                            : filter === "pending"
+                              ? copy.tagFilterPending
+                              : copy.tagFilterUnparented}
+                        </span>
                         <AppIcon name="close" size={12} />
                       </button>
                     )}
@@ -600,9 +736,21 @@ export function TagResultsPane({
                               {item.pendingSuggestionCount} {copy.tagTablePending}
                             </span>
                           ) : null}
+                          {item.childCount ? (
+                            <span className="options-nav-count">
+                              {item.childCount} {copy.tagChildCountSuffix}
+                            </span>
+                          ) : null}
                         </div>
 
-                        {item.aliases.length ? (
+                        <div className="options-tag-card-parent">
+                          <span className="options-meta-copy">{copy.tagParentLabel}</span>
+                          {renderParentSelect(item)}
+                        </div>
+
+                        {editingAliasTagId === item.tagId ? (
+                          renderAliasEditor(item)
+                        ) : item.aliases.length ? (
                           <div className="options-tag-card-aliases options-meta-copy">
                             {copy.tagAliasesLabel}: {item.aliases.join(", ")}
                           </div>
@@ -623,6 +771,7 @@ export function TagResultsPane({
                       <tr>
                         <th scope="col" className="options-tag-table-select" />
                         <th scope="col">{copy.tagTableName}</th>
+                        <th scope="col">{copy.tagTableParent}</th>
                         <th scope="col">{copy.tagTableBookmarks}</th>
                         <th scope="col">{copy.tagTablePending}</th>
                         <th scope="col">{copy.tagTableUpdated}</th>
@@ -655,10 +804,13 @@ export function TagResultsPane({
                                   {item.name}
                                 </button>
                               )}
-                              {item.aliases.length ? (
+                              {editingAliasTagId === item.tagId ? (
+                                renderAliasEditor(item)
+                              ) : item.aliases.length ? (
                                 <div className="options-meta-copy">{item.aliases.join(", ")}</div>
                               ) : null}
                             </td>
+                            <td>{renderParentSelect(item)}</td>
                             <td>{item.bookmarkCount}</td>
                             <td>{item.pendingSuggestionCount}</td>
                             <td>{formatTimestamp(item.updatedAt, locale)}</td>

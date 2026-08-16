@@ -8,8 +8,8 @@ import { upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
 import { createEmptySyncSummary } from "../../src/lib/types.ts"
 import { saveSettings } from "../../src/lib/storage/settings.ts"
-import { attachTagToBookmark, createTag } from "../../src/lib/storage/tagsStore.ts"
-import { cleanupRenders, render, settle } from "../helpers/render.tsx"
+import { attachTagToBookmark, createTag, getAllTags } from "../../src/lib/storage/tagsStore.ts"
+import { cleanupRenders, render, settle, waitForCondition } from "../helpers/render.tsx"
 import { installChromeRuntimeHarness } from "../helpers/runtime.ts"
 
 test.afterEach(cleanupRenders)
@@ -182,8 +182,10 @@ test("OptionsApp merges selected tags from the tag management bulk bar", async (
     dom.window.confirm = originalConfirm
   }
 
-  const remaining = Array.from(container.querySelectorAll("[data-tag-card]"))
-  assert.equal(remaining.length, 2)
+  // Merging writes through IndexedDB, which needs more than a fixed number of
+  // ticks when the suite runs files in parallel.
+  await waitForCondition(() => container.querySelectorAll("[data-tag-card]").length === 2)
+  assert.equal(container.querySelectorAll("[data-tag-card]").length, 2)
   assert.equal(findByTestId(container, "tag-bulk-actions-bar"), null)
 })
 
@@ -310,4 +312,87 @@ test("OptionsApp reports a failed vocabulary review without touching the tags", 
   await settle()
 
   assert.equal(findByTestId(container, "tag-review-panel"), null)
+})
+
+test("OptionsApp assigns a parent theme from the tag management table", async () => {
+  const { agentTag, designTag } = await seedTagWorkspace()
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+  await enterTagManagement(container, dom)
+
+  const parentSelect = container.querySelector(
+    `[data-tag-parent-select="${designTag.id}"]`
+  ) as HTMLSelectElement | null
+  assert.ok(parentSelect)
+  assert.equal(parentSelect?.value, "")
+
+  await act(async () => {
+    parentSelect.value = agentTag.id
+    parentSelect.dispatchEvent(new dom.window.Event("change", { bubbles: true }))
+  })
+  await settle()
+
+  await waitForCondition(
+    () =>
+      (container.querySelector(`[data-tag-parent-select="${designTag.id}"]`) as HTMLSelectElement | null)
+        ?.value === agentTag.id
+  )
+
+  const storedTags = await getAllTags()
+  assert.equal(storedTags.find((tag) => tag.id === designTag.id)?.parentId, agentTag.id)
+
+  // A tag that now owns a child can no longer be nested under another theme.
+  const agentCell = container.querySelector(`[data-tag-card="${agentTag.id}"]`) as HTMLElement | null
+  assert.ok(agentCell)
+  assert.equal(agentCell?.querySelector('[data-testid="tag-parent-select"]'), null)
+  assert.match(
+    agentCell?.querySelector('[data-testid="tag-parent-locked"]')?.textContent ?? "",
+    /1 child tags/
+  )
+  assert.match(findByTestId(container, "tag-header-meta")?.textContent ?? "", /1 without a theme/)
+})
+
+test("OptionsApp edits tag aliases inline", async () => {
+  const { designTag } = await seedTagWorkspace()
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+  await enterTagManagement(container, dom)
+
+  const designCard = container.querySelector(`[data-tag-card="${designTag.id}"]`) as HTMLElement | null
+  assert.ok(designCard)
+  const aliasButton = designCard?.querySelector('[data-testid="tag-edit-aliases"]') as HTMLButtonElement | null
+  assert.ok(aliasButton)
+
+  await act(async () => {
+    aliasButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const aliasInput = findByTestId(container, "tag-alias-input") as HTMLInputElement | null
+  assert.ok(aliasInput)
+
+  await act(async () => {
+    setInputValue(aliasInput, " Design Systems , ui , Design ", dom.window)
+  })
+  await settle()
+  const saveButton = findByTestId(container, "tag-alias-save") as HTMLButtonElement | null
+  assert.ok(saveButton)
+  await act(async () => {
+    saveButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  // The write goes through IndexedDB, so poll the rendered card instead of
+  // relying on a fixed number of ticks.
+  await waitForCondition(() =>
+    /Aliases: Design Systems, ui/.test(
+      container.querySelector(`[data-tag-card="${designTag.id}"]`)?.textContent ?? ""
+    )
+  )
+
+  const storedTags = await getAllTags()
+  assert.deepEqual(storedTags.find((tag) => tag.id === designTag.id)?.aliases, ["Design Systems", "ui"])
+  assert.equal(findByTestId(container, "tag-alias-input"), null)
 })

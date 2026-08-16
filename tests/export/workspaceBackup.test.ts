@@ -196,6 +196,47 @@ test("validateWorkspaceBackupText rejects non-json backup text", () => {
   assert.throws(() => validateWorkspaceBackupText("not json"), /Backup file must be valid JSON/)
 })
 
+test("validateWorkspaceBackupText round-trips the optional tag parentId", async () => {
+  const payload = createBackupPayload({
+    tags: [
+      { id: "tag-ai", name: "AI", createdAt: "2026-04-11T08:00:00.000Z" },
+      {
+        id: "tag-agents",
+        name: "agents",
+        createdAt: "2026-04-11T08:00:00.000Z",
+        parentId: "tag-ai"
+      }
+    ]
+  })
+
+  const result = validateWorkspaceBackupText(JSON.stringify(payload))
+
+  assert.equal(result.counts.tags, 2)
+  assert.equal(result.payload.tags[0].parentId, undefined)
+  assert.equal(result.payload.tags[1].parentId, "tag-ai")
+
+  await restoreWorkspaceBackup(result.payload)
+  const tags = await getAllTags()
+
+  assert.equal(tags.find((tag) => tag.id === "tag-agents")?.parentId, "tag-ai")
+})
+
+test("validateWorkspaceBackupText rejects a non-string tag parentId", () => {
+  const payload = createBackupPayload({
+    tags: [
+      {
+        id: "tag-agents",
+        name: "agents",
+        createdAt: "2026-04-11T08:00:00.000Z",
+        parentId: 42
+      } as unknown as WorkspaceExportPayload["tags"][number]
+    ],
+    bookmarkTags: []
+  })
+
+  assert.throws(() => validateWorkspaceBackupText(JSON.stringify(payload)), /tags\[0\]\.parentId must be a string/)
+})
+
 test("validateWorkspaceBackupText rejects unsupported export versions", () => {
   assert.throws(
     () => validateWorkspaceBackupText(JSON.stringify(createBackupPayload({ exportVersion: 999 }))),
