@@ -6,6 +6,10 @@ import {
   countOrphanTags,
   countUnparentedTags,
   filterSidebarTags,
+  getRemovableOrphanTagIds,
+  getRootTagCandidates,
+  getVisibleSidebarTags,
+  hasParentCandidates,
   getParentCandidates,
   getVisibleTagLibraryItems
 } from "../../src/options/tagLibrary.ts"
@@ -270,4 +274,93 @@ test("getVisibleTagLibraryItems supports the unparented filter and parent name s
     ),
     ["tag-agents", "tag-ai"]
   )
+})
+
+test("getRootTagCandidates and hasParentCandidates agree with getParentCandidates", () => {
+  const items = buildTagLibraryItems({
+    tags: [
+      tag("tag-ai", "ai"),
+      tag("tag-agents", "agents", { parentId: "tag-ai" }),
+      tag("tag-design", "design"),
+      tag("tag-build", "build")
+    ],
+    bookmarkTags: [],
+    tagSuggestions: []
+  })
+  const rootCandidates = getRootTagCandidates(items)
+
+  assert.deepEqual(
+    rootCandidates.map((item) => item.tagId),
+    ["tag-ai", "tag-build", "tag-design"]
+  )
+
+  for (const item of items) {
+    assert.equal(
+      hasParentCandidates(rootCandidates, item),
+      getParentCandidates(items, item.tagId).length > 0,
+      item.tagId
+    )
+  }
+})
+
+test("hasParentCandidates is false when a lone root tag has nothing to nest under", () => {
+  const items = buildTagLibraryItems({
+    tags: [tag("tag-ai", "ai")],
+    bookmarkTags: [],
+    tagSuggestions: []
+  })
+
+  assert.equal(hasParentCandidates(getRootTagCandidates(items), items[0]), false)
+})
+
+test("getRemovableOrphanTagIds skips tags with bookmarks or children", () => {
+  const items = buildTagLibraryItems({
+    tags: [
+      tag("tag-ai", "ai"),
+      tag("tag-agents", "agents", { parentId: "tag-ai" }),
+      tag("tag-design", "design"),
+      tag("tag-empty", "empty")
+    ],
+    bookmarkTags: [relation("tweet-1", "tag-design")],
+    tagSuggestions: []
+  })
+
+  assert.deepEqual(getRemovableOrphanTagIds(items), ["tag-agents", "tag-empty"])
+})
+
+test("getVisibleSidebarTags caps the collapsed list and expands on search", () => {
+  const tags = [tag("tag-a", "alpha"), tag("tag-b", "beta"), tag("tag-c", "gamma")]
+
+  const collapsed = getVisibleSidebarTags({
+    tags,
+    searchQuery: "",
+    expanded: false,
+    defaultVisibleCount: 2
+  })
+  assert.deepEqual(
+    collapsed.items.map((item) => item.id),
+    ["tag-a", "tag-b"]
+  )
+  assert.equal(collapsed.shouldShowToggle, true)
+
+  const expanded = getVisibleSidebarTags({
+    tags,
+    searchQuery: "",
+    expanded: true,
+    defaultVisibleCount: 2
+  })
+  assert.equal(expanded.items.length, 3)
+  assert.equal(expanded.shouldShowToggle, false)
+
+  const searched = getVisibleSidebarTags({
+    tags,
+    searchQuery: "gam",
+    expanded: false,
+    defaultVisibleCount: 2
+  })
+  assert.deepEqual(
+    searched.items.map((item) => item.id),
+    ["tag-c"]
+  )
+  assert.equal(searched.shouldShowToggle, false)
 })

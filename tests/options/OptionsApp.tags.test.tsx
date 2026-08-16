@@ -485,3 +485,61 @@ test("OptionsApp shows the graph empty state when no tags exist", async () => {
   assert.ok(findByTestId(container, "tag-graph-empty-state"))
   assert.equal(findByTestId(container, "tag-results-graph"), null)
 })
+
+test("OptionsApp cleans up every tag without bookmarks in one action", async () => {
+  await seedTagWorkspace()
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+  await enterTagManagement(container, dom)
+
+  const cleanupButton = findByTestId(container, "tag-cleanup-orphans") as HTMLButtonElement | null
+  assert.ok(cleanupButton)
+  assert.equal(cleanupButton?.disabled, false)
+
+  const originalConfirm = dom.window.confirm
+  dom.window.confirm = () => true
+  try {
+    await act(async () => {
+      cleanupButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+    })
+    await settle()
+  } finally {
+    dom.window.confirm = originalConfirm
+  }
+
+  await waitForCondition(() => container.querySelectorAll("[data-tag-card]").length === 2)
+
+  const storedTags = await getAllTags()
+  assert.deepEqual(
+    storedTags.map((storedTag) => storedTag.name).sort(),
+    ["Agent", "Design"]
+  )
+  assert.equal(
+    (findByTestId(container, "tag-cleanup-orphans") as HTMLButtonElement | null)?.disabled,
+    true
+  )
+})
+
+test("OptionsApp caps the sidebar tag rows until the user expands them", async () => {
+  await seedTagWorkspace()
+  for (let index = 0; index < 8; index += 1) {
+    await createTag({ name: `Extra ${index}` })
+  }
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+
+  // 8 tag rows + the "all bookmarks" row.
+  assert.equal(container.querySelectorAll("[data-list-button]").length, 9)
+
+  const showMore = findByTestId(container, "sidebar-tags-show-more") as HTMLButtonElement | null
+  assert.ok(showMore)
+  await act(async () => {
+    showMore.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.equal(container.querySelectorAll("[data-list-button]").length, 12)
+  assert.equal(findByTestId(container, "sidebar-tags-show-more"), null)
+})

@@ -37,6 +37,7 @@ import {
 import {
   buildTagLibraryItems,
   getVisibleTagLibraryItems,
+  getRemovableOrphanTagIds,
   type TagLibraryFilter,
   type TagLibrarySortOrder
 } from "./tagLibrary.ts"
@@ -79,6 +80,10 @@ function OptionsScreen() {
   const [renderLimit, setRenderLimit] = useState(INITIAL_RESULTS_RENDER_LIMIT)
   const [libraryMode, setLibraryMode] = useState<"bookmarks" | "tags">("bookmarks")
   const [tagSearchQuery, setTagSearchQuery] = useState("")
+  // Typing in the tag search re-filters and re-sorts the whole library, so let
+  // React keep the input responsive and catch up on the list afterwards.
+  const deferredTagSearchQuery = useDeferredValue(tagSearchQuery)
+  const [tagsExpanded, setTagsExpanded] = useState(false)
   const [tagLibraryFilter, setTagLibraryFilter] = useState<TagLibraryFilter>("all")
   const [tagLibrarySortOrder, setTagLibrarySortOrder] = useState<TagLibrarySortOrder>("count-desc")
   const [tagViewMode, setTagViewMode] = useState<TagViewMode>("grid")
@@ -300,11 +305,11 @@ function OptionsScreen() {
     () =>
       getVisibleTagLibraryItems({
         items: tagLibraryItems,
-        searchQuery: tagSearchQuery,
+        searchQuery: deferredTagSearchQuery,
         filter: tagLibraryFilter,
         sortOrder: tagLibrarySortOrder
       }),
-    [tagLibraryFilter, tagLibrarySortOrder, tagSearchQuery, tagLibraryItems]
+    [tagLibraryFilter, tagLibrarySortOrder, deferredTagSearchQuery, tagLibraryItems]
   )
   // Only build the relation graph while the graph view is on screen: it walks
   // every bookmark/tag pair and would be wasted work in the bookmark views.
@@ -320,13 +325,13 @@ function OptionsScreen() {
       scope: {
         ...EMPTY_GRAPH_SCOPE,
         activeAuthorHandles,
-        searchQuery: tagSearchQuery
+        searchQuery: deferredTagSearchQuery
       }
     })
   }, [
     activeAuthorHandles,
+    deferredTagSearchQuery,
     libraryMode,
-    tagSearchQuery,
     tagViewMode,
     workspace.bookmarkTags,
     workspace.bookmarks,
@@ -629,6 +634,25 @@ function OptionsScreen() {
     await workspace.handleDeleteTags(tagIds)
   }
 
+  async function handleCleanupOrphanTags() {
+    const tagIds = getRemovableOrphanTagIds(tagLibraryItems)
+    if (!tagIds.length) {
+      return
+    }
+
+    const confirmed =
+      typeof window === "undefined" || typeof window.confirm !== "function"
+        ? true
+        : window.confirm(`${copy.cleanupOrphanTagsConfirmPrefix} (${tagIds.length})?`)
+
+    if (!confirmed) {
+      return
+    }
+
+    clearTagSelection()
+    await workspace.handleDeleteTags(tagIds)
+  }
+
   function handleDeleteTagFromLibrary(tagId: string, tagName: string) {
     const confirmed =
       typeof window === "undefined" || typeof window.confirm !== "function"
@@ -771,6 +795,8 @@ function OptionsScreen() {
                 onToggleTagsCollapsed={() => setIsTagsCollapsed((current) => !current)}
                 onToggleAuthorsCollapsed={() => setIsAuthorsCollapsed((current) => !current)}
                 onExpandAuthors={() => setAuthorsExpanded(true)}
+                tagsExpanded={tagsExpanded}
+                onExpandTags={() => setTagsExpanded(true)}
                 onCreateTag={workspace.handleCreateTag}
                 onRenameTag={workspace.handleRenameTag}
                 onDeleteTag={workspace.handleDeleteTag}
@@ -852,6 +878,7 @@ function OptionsScreen() {
                   reviewRenames={reviewRenames}
                   selectedReviewKeys={selectedReviewKeys}
                   onReviewVocabulary={() => void handleReviewVocabulary()}
+                  onCleanupOrphanTags={() => void handleCleanupOrphanTags()}
                   onToggleReviewSelection={handleToggleReviewSelection}
                   onApplyReview={() => void handleApplyReview()}
                   onDismissReview={resetReviewState}

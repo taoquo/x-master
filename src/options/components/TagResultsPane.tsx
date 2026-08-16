@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
 import type { Locale } from "../../lib/types.ts"
 import {
   mergePlanKey,
@@ -12,16 +12,29 @@ import type { OptionsCopy } from "../i18n/copy.ts"
 import {
   countOrphanTags,
   countUnparentedTags,
-  getParentCandidates,
+  getRootTagCandidates,
+  hasParentCandidates,
   type TagLibraryFilter,
   type TagLibraryItem,
   type TagLibrarySortOrder
 } from "../tagLibrary.ts"
-import { cn, createFieldId, formatTimestamp, getSectionOverline } from "../utils.ts"
+import {
+  cn,
+  createFieldId,
+  formatTimestamp,
+  getSectionOverline,
+  INITIAL_RESULTS_RENDER_LIMIT,
+  RESULTS_RENDER_INCREMENT
+} from "../utils.ts"
 import { FeedStatusCard, InlineMessage, TextInputField } from "./common.tsx"
 import { TagGraphView } from "./TagGraphView.tsx"
 
 export type TagViewMode = "grid" | "table" | "graph"
+
+// Below this many root tags every parent dropdown can render its full option
+// list cheaply. Above it we only fill the dropdown the user is interacting with,
+// otherwise a large library would mount tags x tags option nodes.
+const PARENT_OPTIONS_PRELOAD_LIMIT = 50
 
 function getTagSortLabel(copy: OptionsCopy, sortOrder: TagLibrarySortOrder) {
   if (sortOrder === "count-asc") {
@@ -79,6 +92,7 @@ export interface TagResultsPaneProps {
   reviewRenames: TagRenamePlan[]
   selectedReviewKeys: Set<string>
   onReviewVocabulary: () => void
+  onCleanupOrphanTags: () => void
   onToggleReviewSelection: (key: string) => void
   onApplyReview: () => void
   onDismissReview: () => void
@@ -124,6 +138,7 @@ export function TagResultsPane({
   reviewRenames,
   selectedReviewKeys,
   onReviewVocabulary,
+  onCleanupOrphanTags,
   onToggleReviewSelection,
   onApplyReview,
   onDismissReview
@@ -134,13 +149,53 @@ export function TagResultsPane({
   const [editingAliasTagId, setEditingAliasTagId] = useState<string | null>(null)
   const [editingAliasValue, setEditingAliasValue] = useState("")
   const [isSubmittingAliases, setIsSubmittingAliases] = useState(false)
+  const [openParentSelectTagId, setOpenParentSelectTagId] = useState<string | null>(null)
+  const [isMergeTargetOpen, setIsMergeTargetOpen] = useState(false)
+  const [renderLimit, setRenderLimit] = useState(INITIAL_RESULTS_RENDER_LIMIT)
   const searchId = createFieldId("tags", "search")
   const sortId = createFieldId("tags", "sort")
   const orphanCount = countOrphanTags(tagItems)
   const unparentedCount = countUnparentedTags(tagItems)
+  // Every row offers the same root tags as parents, so build the list once
+  // instead of sorting the whole library again for each rendered tag.
+  const rootCandidates = useMemo(() => getRootTagCandidates(tagItems), [tagItems])
+  // Same idea for the merge dropdown: a huge library only materialises its
+  // options once the control is actually touched.
+  const mergeTargetOptions = useMemo(() => {
+    if (tagItems.length <= PARENT_OPTIONS_PRELOAD_LIMIT || isMergeTargetOpen) {
+      return tagItems
+    }
+
+    return tagItems.filter((item) => item.tagId === mergeTargetTagId)
+  }, [tagItems, isMergeTargetOpen, mergeTargetTagId])
   const selectedCount = selectedTagIds.size
   const activeFilterCount = filter === "all" ? 0 : 1
   const reviewProposalCount = reviewMerges.length + reviewRenames.length
+  // Render the library in pages so a few hundred tags do not mount hundreds of
+  // cards (and their selects) on every keystroke or save.
+  const renderedTagItems = useMemo(
+    () => (visibleTagItems.length > renderLimit ? visibleTagItems.slice(0, renderLimit) : visibleTagItems),
+    [visibleTagItems, renderLimit]
+  )
+
+  useEffect(() => {
+    setRenderLimit(INITIAL_RESULTS_RENDER_LIMIT)
+  }, [searchQuery, filter, sortOrder, viewMode])
+
+  function handleTagScroll(event: React.UIEvent<HTMLDivElement>) {
+    if (renderLimit >= visibleTagItems.length) {
+      return
+    }
+
+    const target = event.currentTarget
+    const remainingScroll = target.scrollHeight - target.scrollTop - target.clientHeight
+
+    if (remainingScroll > 320) {
+      return
+    }
+
+    setRenderLimit((current) => Math.min(current + RESULTS_RENDER_INCREMENT, visibleTagItems.length))
+  }
 
   function startRename(item: TagLibraryItem) {
     setRenamingTagId(item.tagId)
@@ -265,9 +320,7 @@ export function TagResultsPane({
   }
 
   function renderParentSelect(item: TagLibraryItem) {
-    const candidates = getParentCandidates(tagItems, item.tagId)
-
-    if (!candidates.length) {
+    if (!hasParentCandidates(rootCandidates, item)) {
       return (
         <span
           data-testid="tag-parent-locked"
@@ -278,6 +331,14 @@ export function TagResultsPane({
       )
     }
 
+    // Large libraries only fill the dropdown the user opened; the selected
+    // parent stays present so the closed control still shows the right label.
+    const showAllOptions =
+      rootCandidates.length <= PARENT_OPTIONS_PRELOAD_LIMIT || openParentSelectTagId === item.tagId
+    const options = showAllOptions
+      ? rootCandidates
+      : rootCandidates.filter((candidate) => candidate.tagId === item.parentId)
+
     return (
       <select
         data-testid="tag-parent-select"
@@ -286,16 +347,20 @@ export function TagResultsPane({
         aria-label={`${copy.tagParentLabel} ${item.name}`}
         disabled={isSavingTags}
         className="field-shell options-tag-parent-select"
+        onPointerDown={() => setOpenParentSelectTagId(item.tagId)}
+        onFocus={() => setOpenParentSelectTagId(item.tagId)}
         onChange={(event) => {
           const nextParentId = event.currentTarget.value
           void onSetTagParent(item.tagId, nextParentId || undefined)
         }}>
         <option value="">{copy.tagParentNone}</option>
-        {candidates.map((candidate) => (
-          <option key={candidate.tagId} value={candidate.tagId}>
-            {candidate.name}
-          </option>
-        ))}
+        {options.map((candidate) =>
+          candidate.tagId === item.tagId ? null : (
+            <option key={candidate.tagId} value={candidate.tagId}>
+              {candidate.name}
+            </option>
+          )
+        )}
       </select>
     )
   }
@@ -352,7 +417,10 @@ export function TagResultsPane({
       data-testid="tag-library-workspace"
       className="options-main-shell min-h-[420px] min-w-0 overflow-hidden p-0 xl:h-[100dvh]">
       <div className="flex h-full min-h-0 flex-col">
-        <div data-testid="tag-library-scroll" className="scroll-shell min-h-0 flex-1 overflow-y-auto">
+        <div
+          data-testid="tag-library-scroll"
+          className="scroll-shell min-h-0 flex-1 overflow-y-auto"
+          onScroll={handleTagScroll}>
           <div
             data-testid="tag-results-shell"
             className={cn(
@@ -419,6 +487,17 @@ export function TagResultsPane({
                       onClick={onReviewVocabulary}>
                       <AppIcon name="sparkle" size={14} />
                       <span>{reviewStatus === "running" ? copy.reviewVocabularyRunning : copy.reviewVocabularyLabel}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      data-testid="tag-cleanup-orphans"
+                      className="options-toolbar-action"
+                      disabled={isSavingTags || !orphanCount}
+                      onClick={onCleanupOrphanTags}>
+                      <AppIcon name="trash" size={14} />
+                      <span>{copy.cleanupOrphanTagsLabel}</span>
+                      {orphanCount ? <span className="options-toolbar-badge">{orphanCount}</span> : null}
                     </button>
 
                     <div className="relative">
@@ -648,9 +727,11 @@ export function TagResultsPane({
                     value={mergeTargetTagId}
                     aria-label={copy.mergeTargetLabel}
                     className="field-shell options-bulk-tag-select"
+                    onPointerDown={() => setIsMergeTargetOpen(true)}
+                    onFocus={() => setIsMergeTargetOpen(true)}
                     onChange={(event) => onMergeTargetChange(event.currentTarget.value)}>
                     <option value="">{copy.mergeTargetLabel}</option>
-                    {tagItems.map((item) => (
+                    {mergeTargetOptions.map((item) => (
                       <option key={item.tagId} value={item.tagId}>
                         {item.name}
                       </option>
@@ -725,7 +806,7 @@ export function TagResultsPane({
             ) : visibleTagItems.length ? (
               viewMode === "grid" ? (
                 <div data-testid="tag-results-grid" className="options-tag-grid">
-                  {visibleTagItems.map((item) => {
+                  {renderedTagItems.map((item) => {
                     const isSelected = selectedTagIds.has(item.tagId)
                     const isRenaming = renamingTagId === item.tagId
 
@@ -808,7 +889,7 @@ export function TagResultsPane({
                       </tr>
                     </thead>
                     <tbody>
-                      {visibleTagItems.map((item) => {
+                      {renderedTagItems.map((item) => {
                         const isSelected = selectedTagIds.has(item.tagId)
                         const isRenaming = renamingTagId === item.tagId
 

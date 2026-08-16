@@ -4267,9 +4267,21 @@
     gap: 4px;
   }
 
+  /* Tag rows keep their actions permanently mounted and visible at a lower
+     contrast. Fading them in from opacity 0 made the controls flicker whenever a
+     save re-rendered the list and the pointer briefly left the hovered node. */
+  .options-tag-card-actions .options-nav-row-delete,
+  .options-tag-table .options-nav-row-delete {
+    opacity: 0.55;
+    transition: none;
+  }
+
   .options-tag-card:hover .options-nav-row-delete,
   .options-tag-table tr:hover .options-nav-row-delete,
-  .options-tag-card-actions .options-nav-row-delete:focus-visible {
+  .options-tag-card-actions .options-nav-row-delete:hover,
+  .options-tag-table .options-nav-row-delete:hover,
+  .options-tag-card-actions .options-nav-row-delete:focus-visible,
+  .options-tag-table .options-nav-row-delete:focus-visible {
     opacity: 1;
   }
 

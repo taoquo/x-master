@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import type { Locale, SavedViewRecord, TagRecord } from "../../lib/types.ts"
 import {
   formatAuthorLabel,
@@ -22,7 +22,7 @@ import {
 } from "../utils.ts"
 import { FieldBlock, InlineMessage, TextInputField } from "./common.tsx"
 import { DataSafetyPanel } from "./DataSafetyPanel.tsx"
-import { filterSidebarTags } from "../tagLibrary.ts"
+import { getVisibleSidebarTags } from "../tagLibrary.ts"
 
 export function SavedViewsPanel({
   savedViews,
@@ -130,6 +130,8 @@ export function WorkspaceSidebar({
   onToggleTagsCollapsed,
   onToggleAuthorsCollapsed,
   onExpandAuthors,
+  tagsExpanded,
+  onExpandTags,
   onCreateTag,
   onRenameTag,
   onDeleteTag,
@@ -168,6 +170,8 @@ export function WorkspaceSidebar({
   onToggleTagsCollapsed: () => void
   onToggleAuthorsCollapsed: () => void
   onExpandAuthors: () => void
+  tagsExpanded: boolean
+  onExpandTags: () => void
   onCreateTag: (name: string) => Promise<unknown>
   onRenameTag: (tagId: string, name: string) => Promise<unknown>
   onDeleteTag: (tagId: string) => Promise<unknown>
@@ -182,10 +186,6 @@ export function WorkspaceSidebar({
   onOpenSettings: () => void
   dataSafety: ReturnType<typeof useDataSafetyActions>
 }) {
-  const tagCountById = workspace.bookmarkTags.reduce((map, bookmarkTag) => {
-    map.set(bookmarkTag.tagId, (map.get(bookmarkTag.tagId) ?? 0) + 1)
-    return map
-  }, new Map<string, number>())
   const [isCreatingTagInline, setIsCreatingTagInline] = useState(false)
   const [draftTagName, setDraftTagName] = useState("")
   const [renamingTagId, setRenamingTagId] = useState<string | null>(null)
@@ -204,7 +204,21 @@ export function WorkspaceSidebar({
   const isAllBookmarksSelected = activeTagIds.includes("all") && activeAuthorHandles.length === 0
   const authorSearchId = createFieldId("authors", "search")
   const tagSearchId = createFieldId("tags", "sidebar-search")
-  const visibleSidebarTags = filterSidebarTags(workspace.tags, tagSearchQuery)
+  // Counting every bookmark-tag pair is linear in the whole library, so keep it
+  // out of the render path unless the underlying data actually changed.
+  const tagCountById = useMemo(
+    () =>
+      workspace.bookmarkTags.reduce((map, bookmarkTag) => {
+        map.set(bookmarkTag.tagId, (map.get(bookmarkTag.tagId) ?? 0) + 1)
+        return map
+      }, new Map<string, number>()),
+    [workspace.bookmarkTags]
+  )
+  const { items: visibleSidebarTags, shouldShowToggle: shouldShowTagToggle } = getVisibleSidebarTags({
+    tags: workspace.tags,
+    searchQuery: tagSearchQuery,
+    expanded: tagsExpanded
+  })
   const tagSelectionCount = activeTagIds.includes("all") ? 0 : activeTagIds.length
   const authorSelectionCount = activeAuthorHandles.length
 
@@ -609,6 +623,16 @@ export function WorkspaceSidebar({
                   )
                 })}
               </div>
+
+              {!tagsExpanded && shouldShowTagToggle ? (
+                <button
+                  type="button"
+                  data-testid="sidebar-tags-show-more"
+                  onClick={onExpandTags}
+                  className="options-footer-chip">
+                  {copy.showMore}
+                </button>
+              ) : null}
               </div>
             ) : null}
           </section>

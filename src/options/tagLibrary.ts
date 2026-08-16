@@ -91,6 +91,12 @@ export function countOrphanTags(items: TagLibraryItem[]) {
   return items.reduce((total, item) => (item.bookmarkCount === 0 ? total + 1 : total), 0)
 }
 
+// Tags safe to sweep in one go: no bookmarks and no children, so removing them
+// never detaches a theme's sub tags.
+export function getRemovableOrphanTagIds(items: TagLibraryItem[]): string[] {
+  return items.filter((item) => !item.bookmarkCount && !item.childCount).map((item) => item.tagId)
+}
+
 // "Unparented" only counts tags that could reasonably sit under a theme: a tag
 // that already has children is a theme itself.
 export function countUnparentedTags(items: TagLibraryItem[]) {
@@ -101,16 +107,32 @@ export function countUnparentedTags(items: TagLibraryItem[]) {
 }
 
 // Only root tags (no parent of their own) may become a parent, which is what
-// keeps the taxonomy two levels deep on the UI side as well.
+// keeps the taxonomy two levels deep on the UI side as well. The list is the
+// same for every tag, so the UI computes it once instead of per row.
+export function getRootTagCandidates(items: TagLibraryItem[]): TagLibraryItem[] {
+  return items
+    .filter((item) => !item.parentId)
+    .sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" }))
+}
+
 export function getParentCandidates(items: TagLibraryItem[], tagId: string): TagLibraryItem[] {
   const self = items.find((item) => item.tagId === tagId)
   if (!self || self.childCount) {
     return []
   }
 
-  return items
-    .filter((item) => item.tagId !== tagId && !item.parentId)
-    .sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" }))
+  return getRootTagCandidates(items).filter((item) => item.tagId !== tagId)
+}
+
+// A tag can be nested when at least one other root tag is available. Derived
+// from the shared candidate list so a large library does not rebuild it per row.
+export function hasParentCandidates(rootCandidates: TagLibraryItem[], item: TagLibraryItem) {
+  if (item.childCount) {
+    return false
+  }
+
+  // The tag itself is part of the root list whenever it has no parent yet.
+  return rootCandidates.length - (item.parentId ? 0 : 1) > 0
 }
 
 function matchesTagQuery(item: TagLibraryItem, searchQuery: string) {
@@ -203,4 +225,27 @@ export function filterSidebarTags(tags: TagRecord[], searchQuery: string): TagRe
       trimmed
     )
   )
+}
+
+// Mirrors the author sidebar: only the first rows render until the user expands
+// or searches, so a library with hundreds of tags does not build hundreds of
+// nav rows on every workspace update.
+export function getVisibleSidebarTags({
+  tags,
+  searchQuery,
+  expanded,
+  defaultVisibleCount = 8
+}: {
+  tags: TagRecord[]
+  searchQuery: string
+  expanded: boolean
+  defaultVisibleCount?: number
+}) {
+  const matchingTags = filterSidebarTags(tags, searchQuery)
+  const collapsed = !searchQuery.trim() && !expanded
+
+  return {
+    items: collapsed ? matchingTags.slice(0, defaultVisibleCount) : matchingTags,
+    shouldShowToggle: collapsed && matchingTags.length > defaultVisibleCount
+  }
 }
