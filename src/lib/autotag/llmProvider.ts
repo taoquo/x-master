@@ -187,6 +187,77 @@ function delay(ms: number, sleep?: (ms: number) => Promise<void>) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
+// Shared chat/completions call used by tag suggestion batches and by the
+// vocabulary review. One attempt plus one retry, with a backoff on 429.
+export async function requestChatJson(options: {
+  settings: Pick<AutoTagLlmSettings, "baseUrl" | "model">
+  apiKey: string
+  prompt: string
+  fetchImpl?: FetchLike
+  sleep?: (ms: number) => Promise<void>
+}): Promise<{ ok: boolean; content: string; error?: string }> {
+  const fetchImpl: FetchLike = options.fetchImpl ?? ((input, init) => fetch(input, init))
+  const endpoint = `${resolveApiBaseUrl(options.settings.baseUrl)}/chat/completions`
+
+  async function requestOnce(): Promise<{ ok: boolean; rateLimited: boolean; content: string; error?: string }> {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${options.apiKey}`
+      },
+      body: JSON.stringify({
+        model: options.settings.model,
+        messages: [{ role: "user", content: options.prompt }],
+        response_format: { type: "json_object" },
+        temperature: 0
+      })
+    })
+
+    if (response.status === 429) {
+      return { ok: false, rateLimited: true, content: "", error: `HTTP ${response.status}` }
+    }
+
+    if (!response.ok) {
+      return { ok: false, rateLimited: false, content: "", error: await readErrorDetail(response) }
+    }
+
+    const payload = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>
+    }
+
+    return { ok: true, rateLimited: false, content: payload.choices?.[0]?.message?.content ?? "" }
+  }
+
+  let lastError = "request-failed"
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let result: { ok: boolean; rateLimited: boolean; content: string; error?: string }
+    try {
+      result = await requestOnce()
+    } catch (error) {
+      result = {
+        ok: false,
+        rateLimited: false,
+        content: "",
+        error: error instanceof Error ? error.message : String(error)
+      }
+    }
+
+    if (result.ok) {
+      return { ok: true, content: result.content }
+    }
+
+    lastError = result.error ?? lastError
+
+    if (attempt === 0) {
+      await delay(result.rateLimited ? RATE_LIMIT_BACKOFF_MS : 0, options.sleep)
+    }
+  }
+
+  return { ok: false, content: "", error: lastError }
+}
+
 // OpenAI-compatible chat/completions provider. One implementation covers
 // OpenAI / DeepSeek / Moonshot / Ollama etc. Batches are requested serially
 // by the pipeline; this class handles one batch with a single retry and a
@@ -197,39 +268,6 @@ export function createOpenAiCompatibleProvider(options: {
   fetchImpl?: FetchLike
   sleep?: (ms: number) => Promise<void>
 }): AutoTagLlmProvider {
-  const fetchImpl: FetchLike = options.fetchImpl ?? ((input, init) => fetch(input, init))
-  const endpoint = `${resolveApiBaseUrl(options.settings.baseUrl)}/chat/completions`
-
-  async function requestOnce(prompt: string): Promise<{ ok: boolean; rateLimited: boolean; content: string }> {
-    const response = await fetchImpl(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${options.apiKey}`
-      },
-      body: JSON.stringify({
-        model: options.settings.model,
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-        temperature: 0
-      })
-    })
-
-    if (response.status === 429) {
-      return { ok: false, rateLimited: true, content: "" }
-    }
-
-    if (!response.ok) {
-      return { ok: false, rateLimited: false, content: "" }
-    }
-
-    const payload = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>
-    }
-    const content = payload.choices?.[0]?.message?.content ?? ""
-    return { ok: true, rateLimited: false, content }
-  }
-
   return {
     async suggestTags(input) {
       if (!input.bookmarks.length) {
@@ -242,25 +280,15 @@ export function createOpenAiCompatibleProvider(options: {
 
       const prompt = buildPrompt(input)
       const validTweetIds = new Set(input.bookmarks.map((bookmark) => bookmark.tweetId))
+      const result = await requestChatJson({
+        settings: options.settings,
+        apiKey: options.apiKey,
+        prompt,
+        fetchImpl: options.fetchImpl,
+        sleep: options.sleep
+      })
 
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        let result: { ok: boolean; rateLimited: boolean; content: string }
-        try {
-          result = await requestOnce(prompt)
-        } catch {
-          result = { ok: false, rateLimited: false, content: "" }
-        }
-
-        if (result.ok) {
-          return parseSuggestions(result.content, validTweetIds)
-        }
-
-        if (attempt === 0) {
-          await delay(result.rateLimited ? RATE_LIMIT_BACKOFF_MS : 0, options.sleep)
-        }
-      }
-
-      return []
+      return result.ok ? parseSuggestions(result.content, validTweetIds) : []
     }
   }
 }

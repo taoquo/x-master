@@ -6,7 +6,8 @@ import {
   RUN_SYNC_MESSAGE,
   SUGGESTIONS_ACCEPT_BULK_MESSAGE,
   SUGGESTIONS_ACCEPT_MESSAGE,
-  SUGGESTIONS_REJECT_MESSAGE
+  SUGGESTIONS_REJECT_MESSAGE,
+  TAG_VOCABULARY_REVIEW_MESSAGE
 } from "../../src/lib/runtime/messages.ts"
 import type { WorkspaceData } from "../../src/lib/types.ts"
 
@@ -143,4 +144,36 @@ test("suggestion accept/reject/bulk messages route to the injected handlers", as
     ["bulk", ["s3", "s4"]]
   ])
   assert.equal(bulkResponse.acceptedCount, 2)
+})
+
+test("the vocabulary review message answers synchronously from the injected handler", async () => {
+  let calls = 0
+
+  const handler = createBackgroundMessageHandler({
+    loadWorkspaceData: async () => makeWorkspaceData(),
+    resetData: async () => ({ success: true }),
+    runSync: async () => ({}),
+    reviewTagVocabulary: async () => {
+      calls += 1
+      return {
+        ok: true,
+        merges: [
+          { targetTagId: "t1", targetName: "llm", sourceTagIds: ["t2"], sourceNames: ["llms"], reason: "same concept" }
+        ],
+        renames: []
+      }
+    }
+  })
+
+  const response = (await handler({ type: TAG_VOCABULARY_REVIEW_MESSAGE })) as {
+    ok: boolean
+    merges: Array<{ targetTagId: string }>
+  }
+
+  assert.equal(calls, 1)
+  assert.equal(response.ok, true)
+  assert.deepEqual(
+    response.merges.map((plan) => plan.targetTagId),
+    ["t1"]
+  )
 })

@@ -4116,6 +4116,80 @@
     gap: 14px;
   }
 
+  .options-tag-review-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid var(--theme-panel-border);
+    border-radius: 14px;
+    padding: 14px;
+    margin-top: -6px;
+    margin-bottom: 14px;
+  }
+
+  .options-tag-review-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .options-tag-review-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .options-tag-review-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .options-tag-review-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    border-radius: 10px;
+    padding: 6px 8px;
+    background: var(--theme-interactive-hover-bg);
+  }
+
+  .options-tag-review-check {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .options-tag-review-kind {
+    border-radius: 999px;
+    padding: 2px 8px;
+    background: var(--theme-panel-bg);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .options-tag-review-body {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .options-tag-review-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
   .options-tag-card {
     display: flex;
     min-width: 0;

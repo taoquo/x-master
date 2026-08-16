@@ -1,6 +1,7 @@
 import { runBookmarkSync } from "./syncBookmarks.ts"
 import { testLlmConnection } from "../lib/autotag/llmProvider.ts"
 import { runAutoTagPipeline } from "../lib/autotag/pipeline.ts"
+import { reviewTagVocabulary, type TagVocabularyReviewResult } from "../lib/autotag/vocabularyReview.ts"
 import {
   acceptTagSuggestion,
   acceptTagSuggestionsBulk,
@@ -29,7 +30,8 @@ import {
   SITE_TWEET_TAGGING_SET_TAG_MESSAGE,
   SUGGESTIONS_ACCEPT_BULK_MESSAGE,
   SUGGESTIONS_ACCEPT_MESSAGE,
-  SUGGESTIONS_REJECT_MESSAGE
+  SUGGESTIONS_REJECT_MESSAGE,
+  TAG_VOCABULARY_REVIEW_MESSAGE
 } from "../lib/runtime/messages.ts"
 import type {
   Locale,
@@ -54,6 +56,7 @@ interface BackgroundDependencies {
   rejectSuggestion?: (suggestionId: string) => Promise<TagSuggestionRecord | null>
   acceptSuggestionsBulk?: (suggestionIds: string[]) => Promise<{ acceptedCount: number }>
   testLlmConnection?: () => Promise<{ ok: boolean; error?: string }>
+  reviewTagVocabulary?: () => Promise<TagVocabularyReviewResult>
   syncSiteTweetBookmark?: (input: { tweet: SiteTweetDraft; enabled: boolean }) => Promise<SiteTweetBookmarkSyncResult>
   prepareSiteTweetTagging?: (input: { tweet: SiteTweetDraft }) => Promise<SiteTweetTagState>
   setSiteTweetTag?: (input: { bookmarkId: string; tagId: string; enabled: boolean }) => Promise<SiteTweetTagState>
@@ -69,6 +72,7 @@ type BackgroundMessage =
   | { type: typeof SUGGESTIONS_REJECT_MESSAGE; suggestionId: string }
   | { type: typeof SUGGESTIONS_ACCEPT_BULK_MESSAGE; suggestionIds: string[] }
   | { type: typeof LLM_TEST_CONNECTION_MESSAGE }
+  | { type: typeof TAG_VOCABULARY_REVIEW_MESSAGE }
   | { type: typeof SITE_TWEET_BOOKMARK_SYNC_MESSAGE; tweet: SiteTweetDraft; enabled: boolean }
   | { type: typeof SITE_TWEET_TAGGING_PREPARE_MESSAGE; tweet: SiteTweetDraft }
   | { type: typeof SITE_TWEET_TAGGING_SET_TAG_MESSAGE; bookmarkId: string; tagId: string; enabled: boolean }
@@ -84,6 +88,7 @@ export function createBackgroundMessageHandler({
   rejectSuggestion = rejectTagSuggestion,
   acceptSuggestionsBulk = acceptTagSuggestionsBulk,
   testLlmConnection: testLlmConnectionDep = testLlmConnectionDefault,
+  reviewTagVocabulary: reviewTagVocabularyDep = reviewTagVocabularyDefault,
   syncSiteTweetBookmark = async ({ tweet, enabled }) => syncSiteTweetBookmarkDefault({ tweet, enabled }),
   prepareSiteTweetTagging = async ({ tweet }) => prepareSiteTweetTaggingDefault({ tweet }),
   setSiteTweetTag = async ({ bookmarkId, tagId, enabled }) => setSiteTweetTagDefault({ bookmarkId, tagId, enabled }),
@@ -169,6 +174,10 @@ export function createBackgroundMessageHandler({
       return testLlmConnectionDep()
     }
 
+    if (message.type === TAG_VOCABULARY_REVIEW_MESSAGE) {
+      return reviewTagVocabularyDep()
+    }
+
     if (message.type === SITE_TWEET_BOOKMARK_SYNC_MESSAGE) {
       return syncSiteTweetBookmark({
         tweet: message.tweet as SiteTweetDraft,
@@ -218,6 +227,29 @@ async function testLlmConnectionDefault(): Promise<{ ok: boolean; error?: string
   }
 
   return testLlmConnection({ settings: settings.autoTag.llm, apiKey: secrets.llmApiKey })
+}
+
+// Vocabulary review is a single chat request over the whole tag list, so it can
+// answer the message directly instead of going through the fire-and-forget path
+// used by the batched auto-tag run.
+async function reviewTagVocabularyDefault(): Promise<TagVocabularyReviewResult> {
+  const [settings, secrets, tags, bookmarkTags] = await Promise.all([
+    getSettings(),
+    getSecrets(),
+    getAllTags(),
+    getAllBookmarkTags()
+  ])
+
+  if (!secrets.llmApiKey) {
+    return { ok: false, error: "missing-api-key", merges: [], renames: [] }
+  }
+
+  return reviewTagVocabulary({
+    settings: settings.autoTag.llm,
+    apiKey: secrets.llmApiKey,
+    tags,
+    bookmarkTags
+  })
 }
 
 async function persistSyncErrorFallback(error: unknown) {

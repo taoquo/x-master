@@ -29,8 +29,8 @@ function setInputValue(
   element.dispatchEvent(new dom.Event("change", { bubbles: true }))
 }
 
-async function seedTagWorkspace() {
-  installChromeRuntimeHarness()
+async function seedTagWorkspace(options: Parameters<typeof installChromeRuntimeHarness>[0] = {}) {
+  installChromeRuntimeHarness(options)
   await resetBookmarksDb()
 
   await upsertBookmarks([
@@ -222,4 +222,92 @@ test("OptionsApp toggles the tag table view and jumps back to the filtered bookm
   assert.equal(findByTestId(container, "tag-library-workspace"), null)
   assert.match(findByTestId(container, "library-header-section")?.textContent ?? "", /Design/)
   assert.equal(container.querySelectorAll("[data-bookmark-card]").length, 1)
+})
+
+test("OptionsApp applies the selected llm vocabulary proposals", async () => {
+  const plans: {
+    merges: Array<{ targetTagId: string; targetName: string; sourceTagIds: string[]; sourceNames: string[]; reason?: string }>
+    renames: Array<{ tagId: string; from: string; to: string; reason?: string }>
+  } = { merges: [], renames: [] }
+
+  const { agentTag, designTag, researchTag } = await seedTagWorkspace({
+    reviewTagVocabulary: async () => ({ ok: true, merges: plans.merges, renames: plans.renames })
+  })
+
+  plans.merges = [
+    {
+      targetTagId: agentTag.id,
+      targetName: agentTag.name,
+      sourceTagIds: [researchTag.id],
+      sourceNames: [researchTag.name],
+      reason: "same concept"
+    }
+  ]
+  plans.renames = [{ tagId: designTag.id, from: designTag.name, to: "design system" }]
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+  await enterTagManagement(container, dom)
+
+  assert.equal(findByTestId(container, "tag-review-panel"), null)
+
+  const reviewButton = findByTestId(container, "tag-review-vocabulary") as HTMLButtonElement | null
+  assert.ok(reviewButton)
+  await act(async () => {
+    reviewButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const panel = findByTestId(container, "tag-review-panel")
+  assert.ok(panel)
+  const rows = Array.from(container.querySelectorAll("[data-review-key]"))
+  assert.equal(rows.length, 2)
+  assert.match(rows[0].textContent ?? "", /Research → Agent/)
+  assert.match(rows[1].textContent ?? "", /Design → design system/)
+
+  const applyButton = findByTestId(container, "tag-review-apply") as HTMLButtonElement | null
+  assert.ok(applyButton)
+  assert.equal(applyButton?.disabled, false)
+
+  await act(async () => {
+    applyButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.equal(findByTestId(container, "tag-review-panel"), null)
+  const cards = Array.from(container.querySelectorAll("[data-tag-card]"))
+  assert.equal(cards.length, 2)
+  assert.match(cards.map((card) => card.textContent ?? "").join(" "), /design system/)
+})
+
+test("OptionsApp reports a failed vocabulary review without touching the tags", async () => {
+  await seedTagWorkspace({
+    reviewTagVocabulary: async () => ({ ok: false, error: "missing-api-key", merges: [], renames: [] })
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+  await enterTagManagement(container, dom)
+
+  const reviewButton = findByTestId(container, "tag-review-vocabulary") as HTMLButtonElement | null
+  assert.ok(reviewButton)
+  await act(async () => {
+    reviewButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const panel = findByTestId(container, "tag-review-panel")
+  assert.ok(panel)
+  assert.match(panel?.textContent ?? "", /missing-api-key/)
+  assert.equal(findByTestId(container, "tag-review-apply"), null)
+  assert.equal(container.querySelectorAll("[data-tag-card]").length, 3)
+
+  const dismissButton = findByTestId(container, "tag-review-dismiss") as HTMLButtonElement | null
+  assert.ok(dismissButton)
+  await act(async () => {
+    dismissButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.equal(findByTestId(container, "tag-review-panel"), null)
 })

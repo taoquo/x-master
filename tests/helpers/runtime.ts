@@ -4,10 +4,17 @@ import { loadWorkspaceDataFromLocal } from "../../src/lib/workspace/loadWorkspac
 
 export function installChromeRuntimeHarness({
   runSync,
-  testLlmConnection
+  testLlmConnection,
+  reviewTagVocabulary
 }: {
   runSync?: () => Promise<{ fetchedCount: number; insertedCount: number; updatedCount: number; failedCount: number }>
   testLlmConnection?: () => Promise<{ ok: boolean; error?: string }>
+  reviewTagVocabulary?: () => Promise<{
+    ok: boolean
+    error?: string
+    merges: Array<{ targetTagId: string; targetName: string; sourceTagIds: string[]; sourceNames: string[]; reason?: string }>
+    renames: Array<{ tagId: string; from: string; to: string; reason?: string }>
+  }>
 } = {}) {
   let stored: Record<string, unknown> = {}
   let openOptionsPageCallCount = 0
@@ -19,6 +26,7 @@ export function installChromeRuntimeHarness({
       return { success: true }
     },
     ...(testLlmConnection ? { testLlmConnection } : {}),
+    ...(reviewTagVocabulary ? { reviewTagVocabulary } : {}),
     runSync:
       runSync ??
       (async () => ({

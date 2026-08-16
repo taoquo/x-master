@@ -35,6 +35,14 @@ import {
   type TagLibrarySortOrder
 } from "./tagLibrary.ts"
 import { SettingsPanel } from "./settings/SettingsPanel.tsx"
+import { TAG_VOCABULARY_REVIEW_MESSAGE } from "../lib/runtime/messages.ts"
+import {
+  mergePlanKey,
+  renamePlanKey,
+  type TagMergePlan,
+  type TagRenamePlan,
+  type TagVocabularyReviewResult
+} from "../lib/autotag/vocabularyReview.ts"
 
 function OptionsScreen() {
   const workspace = useWorkspaceData()
@@ -71,6 +79,11 @@ function OptionsScreen() {
   const [tagFilterPopoverOpen, setTagFilterPopoverOpen] = useState(false)
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(() => new Set())
   const [mergeTargetTagId, setMergeTargetTagId] = useState("")
+  const [reviewStatus, setReviewStatus] = useState<"idle" | "running" | "ready" | "error">("idle")
+  const [reviewError, setReviewError] = useState<string | undefined>(undefined)
+  const [reviewMerges, setReviewMerges] = useState<TagMergePlan[]>([])
+  const [reviewRenames, setReviewRenames] = useState<TagRenamePlan[]>([])
+  const [selectedReviewKeys, setSelectedReviewKeys] = useState<Set<string>>(() => new Set())
   const resizeStateRef = useRef<null | { side: "left" | "right"; startX: number; startWidth: number }>(null)
   const paneWidthsRef = useRef({ left: 280, right: 360 })
 
@@ -517,12 +530,14 @@ function OptionsScreen() {
 
   function openTagManagement() {
     clearTagSelection()
+    resetReviewState()
     setTagFilterPopoverOpen(false)
     setLibraryMode("tags")
   }
 
   function exitTagManagement() {
     clearTagSelection()
+    resetReviewState()
     setTagFilterPopoverOpen(false)
     setLibraryMode("bookmarks")
   }
@@ -606,6 +621,87 @@ function OptionsScreen() {
     setActiveTagIds([tagId])
     setShowPendingSuggestionsOnly(false)
     exitTagManagement()
+  }
+
+  function resetReviewState() {
+    setReviewStatus("idle")
+    setReviewError(undefined)
+    setReviewMerges([])
+    setReviewRenames([])
+    setSelectedReviewKeys(new Set())
+  }
+
+  async function handleReviewVocabulary() {
+    if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) {
+      return
+    }
+
+    setReviewStatus("running")
+    setReviewError(undefined)
+    setReviewMerges([])
+    setReviewRenames([])
+    setSelectedReviewKeys(new Set())
+
+    let result: TagVocabularyReviewResult | undefined
+    try {
+      result = (await chrome.runtime.sendMessage({ type: TAG_VOCABULARY_REVIEW_MESSAGE })) as
+        | TagVocabularyReviewResult
+        | undefined
+    } catch (error) {
+      setReviewStatus("error")
+      setReviewError(error instanceof Error ? error.message : String(error))
+      return
+    }
+
+    if (!result?.ok) {
+      setReviewStatus("error")
+      setReviewError(result?.error ?? "request-failed")
+      return
+    }
+
+    const merges = result.merges ?? []
+    const renames = result.renames ?? []
+    setReviewMerges(merges)
+    setReviewRenames(renames)
+    // Everything the model proposed starts checked; the user unchecks what looks wrong.
+    setSelectedReviewKeys(
+      new Set([...merges.map((plan) => mergePlanKey(plan)), ...renames.map((plan) => renamePlanKey(plan))])
+    )
+    setReviewStatus("ready")
+  }
+
+  function handleToggleReviewSelection(key: string) {
+    setSelectedReviewKeys((current) => {
+      const next = new Set(current)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })
+  }
+
+  async function handleApplyReview() {
+    // Merges run first so a rename never targets a tag that is about to disappear.
+    for (const plan of reviewMerges) {
+      if (!selectedReviewKeys.has(mergePlanKey(plan))) {
+        continue
+      }
+
+      await workspace.handleMergeTags(plan.sourceTagIds, plan.targetTagId)
+    }
+
+    for (const plan of reviewRenames) {
+      if (!selectedReviewKeys.has(renamePlanKey(plan))) {
+        continue
+      }
+
+      await workspace.handleRenameTag(plan.tagId, plan.to)
+    }
+
+    resetReviewState()
+    clearTagSelection()
   }
 
   return (
@@ -719,6 +815,15 @@ function OptionsScreen() {
                   onDeleteTag={handleDeleteTagFromLibrary}
                   onViewTagBookmarks={handleViewTagBookmarks}
                   onExitTagManagement={exitTagManagement}
+                  reviewStatus={reviewStatus}
+                  reviewError={reviewError}
+                  reviewMerges={reviewMerges}
+                  reviewRenames={reviewRenames}
+                  selectedReviewKeys={selectedReviewKeys}
+                  onReviewVocabulary={() => void handleReviewVocabulary()}
+                  onToggleReviewSelection={handleToggleReviewSelection}
+                  onApplyReview={() => void handleApplyReview()}
+                  onDismissReview={resetReviewState}
                 />
               ) : (
                 <BookmarkResultsPane

@@ -1,5 +1,11 @@
 import React, { useState } from "react"
 import type { Locale } from "../../lib/types.ts"
+import {
+  mergePlanKey,
+  renamePlanKey,
+  type TagMergePlan,
+  type TagRenamePlan
+} from "../../lib/autotag/vocabularyReview.ts"
 import { AppIcon } from "../../ui/icons.tsx"
 import type { OptionsCopy } from "../i18n/copy.ts"
 import {
@@ -56,6 +62,15 @@ export interface TagResultsPaneProps {
   onDeleteTag: (tagId: string, tagName: string) => void
   onViewTagBookmarks: (tagId: string) => void
   onExitTagManagement: () => void
+  reviewStatus: "idle" | "running" | "ready" | "error"
+  reviewError?: string
+  reviewMerges: TagMergePlan[]
+  reviewRenames: TagRenamePlan[]
+  selectedReviewKeys: Set<string>
+  onReviewVocabulary: () => void
+  onToggleReviewSelection: (key: string) => void
+  onApplyReview: () => void
+  onDismissReview: () => void
 }
 
 export function TagResultsPane({
@@ -86,7 +101,16 @@ export function TagResultsPane({
   onRenameTag,
   onDeleteTag,
   onViewTagBookmarks,
-  onExitTagManagement
+  onExitTagManagement,
+  reviewStatus,
+  reviewError,
+  reviewMerges,
+  reviewRenames,
+  selectedReviewKeys,
+  onReviewVocabulary,
+  onToggleReviewSelection,
+  onApplyReview,
+  onDismissReview
 }: TagResultsPaneProps) {
   const [renamingTagId, setRenamingTagId] = useState<string | null>(null)
   const [renamingTagName, setRenamingTagName] = useState("")
@@ -96,6 +120,7 @@ export function TagResultsPane({
   const orphanCount = countOrphanTags(tagItems)
   const selectedCount = selectedTagIds.size
   const activeFilterCount = filter === "all" ? 0 : 1
+  const reviewProposalCount = reviewMerges.length + reviewRenames.length
 
   function startRename(item: TagLibraryItem) {
     setRenamingTagId(item.tagId)
@@ -247,6 +272,16 @@ export function TagResultsPane({
                       <span>{copy.exitTagManagement}</span>
                     </button>
 
+                    <button
+                      type="button"
+                      data-testid="tag-review-vocabulary"
+                      className="options-toolbar-action"
+                      disabled={reviewStatus === "running" || isSavingTags}
+                      onClick={onReviewVocabulary}>
+                      <AppIcon name="sparkle" size={14} />
+                      <span>{reviewStatus === "running" ? copy.reviewVocabularyRunning : copy.reviewVocabularyLabel}</span>
+                    </button>
+
                     <div className="relative">
                       <button
                         type="button"
@@ -359,6 +394,91 @@ export function TagResultsPane({
                 </div>
               </div>
             </div>
+
+            {reviewStatus !== "idle" ? (
+              <div data-testid="tag-review-panel" className="options-tag-review-panel options-theme-panel">
+                <div className="options-tag-review-head">
+                  <div className="options-tag-review-copy">
+                    <div className="options-overline">{copy.reviewVocabularyTitle}</div>
+                    <p className="options-meta-copy">{copy.reviewVocabularyDescription}</p>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="tag-review-dismiss"
+                    className="options-footer-icon-button"
+                    aria-label={copy.reviewDismissLabel}
+                    onClick={onDismissReview}>
+                    <AppIcon name="close" size={14} />
+                  </button>
+                </div>
+
+                {reviewStatus === "error" ? (
+                  <InlineMessage message={`${copy.reviewVocabularyFailedPrefix}: ${reviewError ?? ""}`} tone="error" />
+                ) : null}
+
+                {reviewStatus === "ready" && !reviewProposalCount ? (
+                  <p data-testid="tag-review-empty" className="options-meta-copy">
+                    {copy.reviewVocabularyEmpty}
+                  </p>
+                ) : null}
+
+                {reviewProposalCount ? (
+                  <>
+                    <ul data-testid="tag-review-list" className="options-tag-review-list">
+                      {reviewMerges.map((plan) => {
+                        const key = mergePlanKey(plan)
+                        return (
+                          <li key={key} data-review-key={key} className="options-tag-review-row">
+                            <label className="options-tag-review-check">
+                              <input
+                                type="checkbox"
+                                checked={selectedReviewKeys.has(key)}
+                                onChange={() => onToggleReviewSelection(key)}
+                              />
+                              <span className="options-tag-review-kind">{copy.reviewMergeLabel}</span>
+                              <span className="options-tag-review-body">
+                                {plan.sourceNames.join(", ")} → {plan.targetName}
+                              </span>
+                            </label>
+                            {plan.reason ? <span className="options-meta-copy">{plan.reason}</span> : null}
+                          </li>
+                        )
+                      })}
+                      {reviewRenames.map((plan) => {
+                        const key = renamePlanKey(plan)
+                        return (
+                          <li key={key} data-review-key={key} className="options-tag-review-row">
+                            <label className="options-tag-review-check">
+                              <input
+                                type="checkbox"
+                                checked={selectedReviewKeys.has(key)}
+                                onChange={() => onToggleReviewSelection(key)}
+                              />
+                              <span className="options-tag-review-kind">{copy.reviewRenameLabel}</span>
+                              <span className="options-tag-review-body">
+                                {plan.from} → {plan.to}
+                              </span>
+                            </label>
+                            {plan.reason ? <span className="options-meta-copy">{plan.reason}</span> : null}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                    <div className="options-tag-review-actions">
+                      <button
+                        type="button"
+                        data-testid="tag-review-apply"
+                        className="options-secondary-button"
+                        disabled={!selectedReviewKeys.size || isSavingTags}
+                        onClick={onApplyReview}>
+                        <AppIcon name="check" size={14} />
+                        {copy.reviewApplyLabel}
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
 
             {selectedCount ? (
               <div data-testid="tag-bulk-actions-bar" className="options-bulk-actions-bar options-theme-panel">
