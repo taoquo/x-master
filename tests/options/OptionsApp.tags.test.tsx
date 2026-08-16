@@ -208,7 +208,7 @@ test("OptionsApp toggles the tag table view and jumps back to the filtered bookm
   assert.equal(container.querySelectorAll("[data-tag-row]").length, 3)
 
   const graphToggle = findByTestId(container, "tag-view-toggle-graph") as HTMLButtonElement | null
-  assert.equal(graphToggle?.disabled, true)
+  assert.equal(graphToggle?.disabled, false)
 
   const designRow = container.querySelector('[data-tag-row]:nth-child(2)') as HTMLElement | null
   assert.ok(designRow)
@@ -395,4 +395,93 @@ test("OptionsApp edits tag aliases inline", async () => {
   const storedTags = await getAllTags()
   assert.deepEqual(storedTags.find((tag) => tag.id === designTag.id)?.aliases, ["Design Systems", "ui"])
   assert.equal(findByTestId(container, "tag-alias-input"), null)
+})
+
+test("OptionsApp renders the tag relation graph and focuses a tag from the node list", async () => {
+  const { agentTag, designTag, researchTag } = await seedTagWorkspace()
+  // A second tag on the same bookmark is what produces a cooccurrence edge.
+  await attachTagToBookmark({ bookmarkId: "tweet-tag-1", tagId: researchTag.id })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+  await enterTagManagement(container, dom)
+
+  const graphToggle = findByTestId(container, "tag-view-toggle-graph") as HTMLButtonElement | null
+  assert.ok(graphToggle)
+  assert.equal(graphToggle?.disabled, false)
+
+  await act(async () => {
+    graphToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.ok(findByTestId(container, "tag-results-graph"))
+  assert.equal(findByTestId(container, "tag-results-grid"), null)
+  assert.equal(findByTestId(container, "tag-results-table"), null)
+  assert.equal(findByTestId(container, "tag-selection-hint"), null)
+  assert.ok(findByTestId(container, "tag-graph-canvas"))
+  assert.equal(container.querySelectorAll("[data-graph-node]").length, 3)
+
+  const cooccurrenceEdges = Array.from(
+    container.querySelectorAll('[data-graph-edge-type="cooccurrence"]')
+  )
+  assert.equal(cooccurrenceEdges.length, 1)
+  assert.equal(
+    cooccurrenceEdges[0].getAttribute("data-graph-edge"),
+    [agentTag.id, researchTag.id].sort().join(":")
+  )
+
+  assert.equal(findByTestId(container, "tag-graph-focus-panel"), null)
+  const designChip = container.querySelector(
+    `[data-graph-node-button="${designTag.id}"]`
+  ) as HTMLButtonElement | null
+  assert.ok(designChip)
+
+  await act(async () => {
+    designChip.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const focusPanel = findByTestId(container, "tag-graph-focus-panel")
+  assert.ok(focusPanel)
+  assert.match(focusPanel?.textContent ?? "", /Design/)
+  assert.match(findByTestId(container, "tag-graph-focus-authors")?.textContent ?? "", /@bob/)
+  assert.ok(findByTestId(container, "tag-graph-clear-focus"))
+
+  const openBookmarks = findByTestId(container, "tag-graph-open-bookmarks") as HTMLButtonElement | null
+  assert.ok(openBookmarks)
+  await act(async () => {
+    openBookmarks.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.ok(findByTestId(container, "library-workspace"))
+  assert.equal(findByTestId(container, "tag-library-workspace"), null)
+  assert.match(findByTestId(container, "library-header-section")?.textContent ?? "", /Design/)
+  assert.equal(container.querySelectorAll("[data-bookmark-card]").length, 1)
+})
+
+test("OptionsApp shows the graph empty state when no tags exist", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary()
+  })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+  await enterTagManagement(container, dom)
+
+  const graphToggle = findByTestId(container, "tag-view-toggle-graph") as HTMLButtonElement | null
+  assert.ok(graphToggle)
+  await act(async () => {
+    graphToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.ok(findByTestId(container, "tag-graph-empty-state"))
+  assert.equal(findByTestId(container, "tag-results-graph"), null)
 })

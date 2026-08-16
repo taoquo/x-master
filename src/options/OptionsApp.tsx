@@ -27,7 +27,13 @@ import {
 import { BackgroundScene } from "./components/common.tsx"
 import { WorkspaceSidebar } from "./components/WorkspaceSidebar.tsx"
 import { BookmarkResultsPane } from "./components/BookmarkResultsPane.tsx"
-import { TagResultsPane } from "./components/TagResultsPane.tsx"
+import { TagResultsPane, type TagViewMode } from "./components/TagResultsPane.tsx"
+import {
+  buildGraphViewModel,
+  EMPTY_GRAPH_SCOPE,
+  EMPTY_GRAPH_VIEW_MODEL,
+  type GraphViewModel
+} from "./graph/graphModel.ts"
 import {
   buildTagLibraryItems,
   getVisibleTagLibraryItems,
@@ -75,7 +81,8 @@ function OptionsScreen() {
   const [tagSearchQuery, setTagSearchQuery] = useState("")
   const [tagLibraryFilter, setTagLibraryFilter] = useState<TagLibraryFilter>("all")
   const [tagLibrarySortOrder, setTagLibrarySortOrder] = useState<TagLibrarySortOrder>("count-desc")
-  const [tagViewMode, setTagViewMode] = useState<"grid" | "table">("grid")
+  const [tagViewMode, setTagViewMode] = useState<TagViewMode>("grid")
+  const [focusedGraphTagId, setFocusedGraphTagId] = useState<string | null>(null)
   const [tagFilterPopoverOpen, setTagFilterPopoverOpen] = useState(false)
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(() => new Set())
   const [mergeTargetTagId, setMergeTargetTagId] = useState("")
@@ -305,6 +312,32 @@ function OptionsScreen() {
       }),
     [tagLibraryFilter, tagLibrarySortOrder, tagSearchQuery, tagLibraryItems]
   )
+  // Only build the relation graph while the graph view is on screen: it walks
+  // every bookmark/tag pair and would be wasted work in the bookmark views.
+  const tagGraphModel = useMemo<GraphViewModel>(() => {
+    if (libraryMode !== "tags" || tagViewMode !== "graph") {
+      return EMPTY_GRAPH_VIEW_MODEL
+    }
+
+    return buildGraphViewModel({
+      tags: workspace.tags,
+      bookmarkTags: workspace.bookmarkTags,
+      bookmarks: workspace.bookmarks,
+      scope: {
+        ...EMPTY_GRAPH_SCOPE,
+        activeAuthorHandles,
+        searchQuery: tagSearchQuery
+      }
+    })
+  }, [
+    activeAuthorHandles,
+    libraryMode,
+    tagSearchQuery,
+    tagViewMode,
+    workspace.bookmarkTags,
+    workspace.bookmarks,
+    workspace.tags
+  ])
 
   useEffect(() => {
     const knownTagIds = new Set(workspace.tags.map((tag) => tag.id))
@@ -313,6 +346,7 @@ function OptionsScreen() {
       return next.size === current.size ? current : next
     })
     setMergeTargetTagId((current) => (current && !knownTagIds.has(current) ? "" : current))
+    setFocusedGraphTagId((current) => (current && !knownTagIds.has(current) ? null : current))
   }, [workspace.tags])
 
   const searchId = createFieldId("filters", "search")
@@ -620,6 +654,7 @@ function OptionsScreen() {
   function handleViewTagBookmarks(tagId: string) {
     setActiveTagIds([tagId])
     setShowPendingSuggestionsOnly(false)
+    setFocusedGraphTagId(null)
     exitTagManagement()
   }
 
@@ -801,6 +836,9 @@ function OptionsScreen() {
                   onSortOrderChange={setTagLibrarySortOrder}
                   viewMode={tagViewMode}
                   onViewModeChange={setTagViewMode}
+                  graphModel={tagGraphModel}
+                  focusedGraphTagId={focusedGraphTagId}
+                  onFocusGraphTag={setFocusedGraphTagId}
                   filterPopoverOpen={tagFilterPopoverOpen}
                   onFilterPopoverOpenChange={setTagFilterPopoverOpen}
                   selectedTagIds={selectedTagIds}

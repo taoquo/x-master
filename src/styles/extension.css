@@ -4369,6 +4369,136 @@
     padding: 4px 10px;
     font-size: 12px;
   }
+
+  .options-tag-graph-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border-radius: 16px;
+    padding: 14px;
+  }
+
+  .options-tag-graph-head {
+    display: flex;
+    min-height: 30px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .options-tag-graph-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 60vh;
+    border: 1px solid color-mix(in srgb, var(--theme-panel-border) 70%, transparent);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--surface-muted) 55%, transparent);
+  }
+
+  .options-tag-graph-edge {
+    stroke: color-mix(in srgb, var(--text-secondary) 34%, transparent);
+    stroke-linecap: round;
+    transition: opacity 140ms ease;
+  }
+
+  .options-tag-graph-edge.is-hierarchy {
+    stroke: color-mix(in srgb, var(--accent-primary) 52%, transparent);
+  }
+
+  .options-tag-graph-edge.is-author-bridge {
+    stroke: color-mix(in srgb, var(--text-tertiary) 46%, transparent);
+    stroke-dasharray: 6 6;
+  }
+
+  .options-tag-graph-edge.is-dimmed {
+    opacity: 0.16;
+  }
+
+  .options-tag-graph-node-dot {
+    fill: color-mix(in srgb, var(--accent-primary) 70%, transparent);
+    stroke: var(--theme-panel-bg);
+    stroke-width: 2;
+  }
+
+  .options-tag-graph-node.is-child .options-tag-graph-node-dot {
+    fill: color-mix(in srgb, var(--accent-primary) 38%, transparent);
+  }
+
+  .options-tag-graph-node.is-focused .options-tag-graph-node-dot {
+    fill: var(--accent-primary);
+    stroke: color-mix(in srgb, var(--accent-primary) 30%, var(--theme-panel-bg));
+    stroke-width: 5;
+  }
+
+  .options-tag-graph-node.is-dimmed {
+    opacity: 0.24;
+  }
+
+  .options-tag-graph-node-label {
+    fill: var(--text-secondary);
+    font-size: 15px;
+    font-weight: 500;
+    pointer-events: none;
+  }
+
+  .options-tag-graph-node.is-focused .options-tag-graph-node-label {
+    fill: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .options-tag-graph-focus {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 26%, transparent);
+    border-radius: 14px;
+    padding: 12px;
+    background: var(--theme-selected-bg);
+  }
+
+  .options-tag-graph-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .options-tag-graph-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--theme-panel-border);
+    border-radius: 999px;
+    padding: 4px 10px;
+    background: var(--surface-bg);
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .options-tag-graph-chip:hover {
+    background: var(--theme-interactive-hover-bg);
+  }
+
+  .options-tag-graph-chip.is-child {
+    border-style: dashed;
+  }
+
+  .options-tag-graph-chip.is-active {
+    border-color: color-mix(in srgb, var(--accent-primary) 52%, transparent);
+    background: var(--theme-selected-bg);
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .options-tag-graph-chip-count {
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 @layer utilities {

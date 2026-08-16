@@ -38,6 +38,14 @@ export const EMPTY_GRAPH_SCOPE: GraphScope = {
   searchQuery: ""
 }
 
+export const EMPTY_GRAPH_VIEW_MODEL: GraphViewModel = {
+  nodes: [],
+  edges: [],
+  totalTagCount: 0,
+  hiddenTagCount: 0,
+  droppedEdgeCount: 0
+}
+
 function normalizeHandle(handle: string) {
   return handle.trim().toLowerCase().replace(/^@/, "")
 }

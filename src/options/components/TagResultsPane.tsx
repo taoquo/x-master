@@ -7,6 +7,7 @@ import {
   type TagRenamePlan
 } from "../../lib/autotag/vocabularyReview.ts"
 import { AppIcon } from "../../ui/icons.tsx"
+import type { GraphViewModel } from "../graph/graphModel.ts"
 import type { OptionsCopy } from "../i18n/copy.ts"
 import {
   countOrphanTags,
@@ -18,6 +19,9 @@ import {
 } from "../tagLibrary.ts"
 import { cn, createFieldId, formatTimestamp, getSectionOverline } from "../utils.ts"
 import { FeedStatusCard, InlineMessage, TextInputField } from "./common.tsx"
+import { TagGraphView } from "./TagGraphView.tsx"
+
+export type TagViewMode = "grid" | "table" | "graph"
 
 function getTagSortLabel(copy: OptionsCopy, sortOrder: TagLibrarySortOrder) {
   if (sortOrder === "count-asc") {
@@ -48,8 +52,11 @@ export interface TagResultsPaneProps {
   onFilterChange: (filter: TagLibraryFilter) => void
   sortOrder: TagLibrarySortOrder
   onSortOrderChange: (sortOrder: TagLibrarySortOrder) => void
-  viewMode: "grid" | "table"
-  onViewModeChange: (viewMode: "grid" | "table") => void
+  viewMode: TagViewMode
+  onViewModeChange: (viewMode: TagViewMode) => void
+  graphModel: GraphViewModel
+  focusedGraphTagId: string | null
+  onFocusGraphTag: (tagId: string | null) => void
   filterPopoverOpen: boolean
   onFilterPopoverOpenChange: (open: boolean) => void
   selectedTagIds: Set<string>
@@ -92,6 +99,9 @@ export function TagResultsPane({
   onSortOrderChange,
   viewMode,
   onViewModeChange,
+  graphModel,
+  focusedGraphTagId,
+  onFocusGraphTag,
   filterPopoverOpen,
   onFilterPopoverOpenChange,
   selectedTagIds,
@@ -491,11 +501,12 @@ export function TagResultsPane({
                       </button>
                       <button
                         type="button"
-                        disabled
                         data-testid="tag-view-toggle-graph"
-                        className="options-view-toggle"
-                        aria-label={copy.tagGraphSoon}
-                        title={copy.tagGraphSoon}>
+                        className={cn("options-view-toggle", viewMode === "graph" && "is-active")}
+                        aria-pressed={viewMode === "graph"}
+                        aria-label={copy.tagViewGraph}
+                        title={copy.tagViewGraph}
+                        onClick={() => onViewModeChange("graph")}>
                         <AppIcon name="graph" size={16} />
                       </button>
                     </div>
@@ -616,7 +627,7 @@ export function TagResultsPane({
               </div>
             ) : null}
 
-            {selectedCount ? (
+            {viewMode !== "graph" && selectedCount ? (
               <div data-testid="tag-bulk-actions-bar" className="options-bulk-actions-bar options-theme-panel">
                 <div className="options-bulk-actions-meta">
                   <AppIcon name="check" size={14} />
@@ -675,7 +686,7 @@ export function TagResultsPane({
               </div>
             ) : null}
 
-            {!selectedCount && visibleTagItems.length ? (
+            {viewMode !== "graph" && !selectedCount && visibleTagItems.length ? (
               <div data-testid="tag-selection-hint" className="options-bulk-actions-bar options-theme-panel">
                 <div className="options-bulk-actions-meta">
                   <AppIcon name="tag" size={14} />
@@ -693,7 +704,25 @@ export function TagResultsPane({
               </div>
             ) : null}
 
-            {visibleTagItems.length ? (
+            {viewMode === "graph" ? (
+              graphModel.nodes.length ? (
+                <TagGraphView
+                  copy={copy}
+                  model={graphModel}
+                  focusedTagId={focusedGraphTagId}
+                  onFocusTag={onFocusGraphTag}
+                  onViewTagBookmarks={onViewTagBookmarks}
+                />
+              ) : (
+                <FeedStatusCard
+                  testId="tag-graph-empty-state"
+                  icon={<AppIcon name="graph" size={24} />}
+                  overline={copy.infoLabel}
+                  title={copy.graphEmptyTitle}
+                  description={copy.graphEmptyDescription}
+                />
+              )
+            ) : visibleTagItems.length ? (
               viewMode === "grid" ? (
                 <div data-testid="tag-results-grid" className="options-tag-grid">
                   {visibleTagItems.map((item) => {
