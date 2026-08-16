@@ -11,10 +11,12 @@ import type { GraphViewModel } from "../graph/graphModel.ts"
 import type { OptionsCopy } from "../i18n/copy.ts"
 import {
   countOrphanTags,
+  countLongTailTags,
   countUnparentedTags,
   getRemovableOrphanTagIds,
   getRootTagCandidates,
   hasParentCandidates,
+  HEALTHY_TAG_COUNT_MAX,
   type TagLibraryFilter,
   type TagLibraryItem,
   type TagLibrarySortOrder
@@ -394,6 +396,8 @@ export function TagResultsPane({
   const sortId = createFieldId("tags", "sort")
   const orphanCount = countOrphanTags(tagItems)
   const unparentedCount = countUnparentedTags(tagItems)
+  const longTailCount = countLongTailTags(tagItems)
+  const isLibraryOversized = tagItems.length > HEALTHY_TAG_COUNT_MAX
   // Every row offers the same root tags as parents, so build the list once
   // instead of sorting the whole library again for each rendered tag.
   const rootCandidates = useMemo(() => getRootTagCandidates(tagItems), [tagItems])
@@ -619,6 +623,10 @@ export function TagResultsPane({
                       {tagItems.length} {copy.tagsCountSuffix} · {orphanCount} {copy.orphanTagsSuffix} · {unparentedCount}{" "}
                       {copy.unparentedTagsSuffix}
                     </div>
+                    <div data-testid="tag-health-meta" className="options-meta-copy options-tag-header-meta">
+                      {longTailCount} {copy.longTailTagsSuffix} ·{" "}
+                      {isLibraryOversized ? copy.tagHealthTooMany : copy.tagHealthOk}
+                    </div>
                   </div>
                   <div className="options-main-header-summary text-right">
                     <div data-testid="tag-count" className="options-results-value options-main-header-summary-value font-bold">
@@ -706,6 +714,7 @@ export function TagResultsPane({
                             [
                               ["all", copy.tagFilterAll],
                               ["orphan", copy.tagFilterOrphan],
+                              ["long-tail", copy.tagFilterLongTail],
                               ["pending", copy.tagFilterPending],
                               ["unparented", copy.tagFilterUnparented]
                             ] as Array<[TagLibraryFilter, string]>
@@ -790,9 +799,11 @@ export function TagResultsPane({
                         <span>
                           {filter === "orphan"
                             ? copy.tagFilterOrphan
-                            : filter === "pending"
-                              ? copy.tagFilterPending
-                              : copy.tagFilterUnparented}
+                            : filter === "long-tail"
+                              ? copy.tagFilterLongTail
+                              : filter === "pending"
+                                ? copy.tagFilterPending
+                                : copy.tagFilterUnparented}
                         </span>
                         <AppIcon name="close" size={12} />
                       </button>

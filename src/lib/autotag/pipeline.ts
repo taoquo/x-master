@@ -12,6 +12,7 @@ import { getSettings } from "../storage/settings.ts"
 import { createTagSuggestion, getAllTagSuggestions, insertNewTagSuggestions } from "../storage/suggestionsStore.ts"
 import { getAllBookmarkTags, getAllTags } from "../storage/tagsStore.ts"
 import { canonicalTagKey } from "../tags/canonical.ts"
+import { HEALTHY_TAG_COUNT_MAX } from "../tags/health.ts"
 import type { BookmarkRecord, TagSuggestionRecord } from "../types.ts"
 
 export interface AutoTagRunResult {
@@ -131,9 +132,14 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
   return { suggestions, processedCount }
 }
 
-// "guarded" mode budget: roughly one new tag per 50 candidate bookmarks, with a
-// floor of 3 so a small run can still bootstrap a taxonomy.
-export function resolveNewTagBudget(mode: string, candidateCount: number) {
+// A healthy library holds 30-50 durable subject tags. Once it reaches the upper
+// bound "guarded" mode stops minting tags altogether and behaves like "closed",
+// which is what keeps the long tail from growing run after run.
+//
+// "guarded" mode budget: roughly one new tag per 150 candidate bookmarks, with
+// a floor of 1 so a fresh library can still bootstrap a taxonomy, and a ceiling
+// of the headroom left before the healthy size is reached.
+export function resolveNewTagBudget(mode: string, candidateCount: number, vocabularySize = 0) {
   if (mode === "open") {
     return Number.POSITIVE_INFINITY
   }
@@ -142,7 +148,8 @@ export function resolveNewTagBudget(mode: string, candidateCount: number) {
     return 0
   }
 
-  return Math.max(3, Math.ceil(candidateCount / 50))
+  const headroom = Math.max(0, HEALTHY_TAG_COUNT_MAX - vocabularySize)
+  return Math.min(headroom, Math.max(1, Math.ceil(candidateCount / 150)))
 }
 
 // Orchestrates one auto-tag run: heuristics first, LLM later (P5) for the
@@ -219,7 +226,8 @@ export async function runAutoTagPipeline(options?: {
         allowNewTags: llmSettings.tagVocabularyMode !== "closed",
         newTagBudget: resolveNewTagBudget(
           llmSettings.tagVocabularyMode,
-          Math.min(candidateCount, llmSettings.maxBookmarksPerRun)
+          Math.min(candidateCount, llmSettings.maxBookmarksPerRun),
+          tags.length
         ),
         blockedTagKeys: settings.autoTag.blockedTagKeys,
         batchSize: llmSettings.batchSize,

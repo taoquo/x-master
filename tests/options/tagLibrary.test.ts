@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import type { BookmarkTagRecord, TagRecord, TagSuggestionRecord } from "../../src/lib/types.ts"
 import {
   buildTagLibraryItems,
+  countLongTailTags,
   countOrphanTags,
   countUnparentedTags,
   filterSidebarTags,
@@ -142,6 +143,30 @@ test("getVisibleTagLibraryItems applies the orphan and pending filters", () => {
   assert.equal(
     getVisibleTagLibraryItems({ items, searchQuery: "", filter: "all", sortOrder: "name-asc" }).length,
     3
+  )
+})
+
+test("long-tail filter surfaces the tags used by one or two bookmarks", () => {
+  const items = buildTagLibraryItems({
+    tags: [tag("tag-ai", "ai"), tag("tag-thin", "thin"), tag("tag-orphan", "orphan"), tag("tag-child", "child", { parentId: "tag-ai" })],
+    bookmarkTags: [
+      relation("bookmark-1", "tag-ai"),
+      relation("bookmark-2", "tag-ai"),
+      relation("bookmark-3", "tag-ai"),
+      relation("bookmark-1", "tag-thin"),
+      relation("bookmark-2", "tag-child")
+    ],
+    tagSuggestions: []
+  })
+
+  // "orphan" has no bookmarks at all, "ai" is a theme with three bookmarks and
+  // one child, so only "thin" and the child tag are long tail.
+  assert.equal(countLongTailTags(items), 2)
+  assert.deepEqual(
+    getVisibleTagLibraryItems({ items, searchQuery: "", filter: "long-tail", sortOrder: "name-asc" }).map(
+      (item) => item.tagId
+    ),
+    ["tag-child", "tag-thin"]
   )
 })
 

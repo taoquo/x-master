@@ -1,3 +1,4 @@
+import { HEALTHY_TAG_COUNT_MAX, HEALTHY_TAG_COUNT_MIN } from "../tags/health.ts"
 import type { AutoTagLlmSettings } from "../types.ts"
 
 export interface LlmBookmarkInput {
@@ -86,6 +87,9 @@ async function readErrorDetail(response: Response): Promise<string> {
 
 const MAX_VOCABULARY_ENTRIES = 200
 
+// Mirrors the healthy taxonomy size used by the vocabulary review, so both
+// prompts push the library towards the same target instead of fighting.
+
 export function buildPrompt(input: {
   bookmarks: LlmBookmarkInput[]
   vocabulary: LlmVocabularyEntry[]
@@ -113,11 +117,14 @@ export function buildPrompt(input: {
 
   return [
     "You are a librarian assigning topical tags to bookmarked tweets. The tag set is a small, stable taxonomy shared by thousands of bookmarks.",
+    `The whole library should settle at ${HEALTHY_TAG_COUNT_MIN}-${HEALTHY_TAG_COUNT_MAX} tags in total, so treat every new tag as expensive.`,
     [
       "Rules for choosing tags:",
       "- Tag the durable subject area, not the specific event, product launch, person, or company mentioned once.",
       "- A good tag applies to dozens of bookmarks. If a tag would only ever fit this one bookmark, it is too specific.",
       "- Prefer the broader concept over a narrow instance (use \"llm\" over \"gpt-4o-mini-benchmark\", \"startup-funding\" over \"seriesb-of-companyx\").",
+      "- An imperfect existing tag beats a precise new one. Only reach for a new tag when the subject area is missing from the vocabulary entirely.",
+      "- Never introduce a near-synonym, translation, abbreviation, plural or hyphenated variant of a tag that already exists.",
       "- Assign 1-2 tags per bookmark. Never pad the list to reach a limit.",
       "- Skip a bookmark entirely if it has no clear topic."
     ].join("\n"),

@@ -1,8 +1,11 @@
 // Pure helpers for the tag management mode. Kept free of React so the search,
 // filter and sort behaviour can be unit tested directly.
 import { canonicalTagKey } from "../lib/tags/canonical.ts"
+import { HEALTHY_TAG_COUNT_MAX } from "../lib/tags/health.ts"
 import type { BookmarkTagRecord, TagRecord, TagSuggestionRecord } from "../lib/types.ts"
 import { compareNaturalNames } from "./collation.ts"
+
+export { HEALTHY_TAG_COUNT_MAX }
 
 export interface TagLibraryItem {
   tagId: string
@@ -16,7 +19,7 @@ export interface TagLibraryItem {
   updatedAt: string
 }
 
-export type TagLibraryFilter = "all" | "orphan" | "pending" | "unparented"
+export type TagLibraryFilter = "all" | "orphan" | "long-tail" | "pending" | "unparented"
 
 export type TagLibrarySortOrder = "count-desc" | "count-asc" | "name-asc" | "recent"
 
@@ -90,6 +93,19 @@ export function buildTagLibraryItems({
 
 export function countOrphanTags(items: TagLibraryItem[]) {
   return items.reduce((total, item) => (item.bookmarkCount === 0 ? total + 1 : total), 0)
+}
+
+// A tag used by only one or two bookmarks is almost always an over-specific
+// label that belongs inside a broader theme. Surfacing them is the main lever
+// for shrinking a library that drifted past the healthy 30-50 tags.
+export const LONG_TAIL_MAX_BOOKMARKS = 2
+
+export function isLongTailTag(item: TagLibraryItem) {
+  return item.bookmarkCount > 0 && item.bookmarkCount <= LONG_TAIL_MAX_BOOKMARKS && !item.childCount
+}
+
+export function countLongTailTags(items: TagLibraryItem[]) {
+  return items.reduce((total, item) => (isLongTailTag(item) ? total + 1 : total), 0)
 }
 
 // Tags safe to sweep in one go: no bookmarks and no children, so removing them
@@ -188,6 +204,10 @@ export function getVisibleTagLibraryItems({
 }): TagLibraryItem[] {
   const filtered = items.filter((item) => {
     if (filter === "orphan" && item.bookmarkCount > 0) {
+      return false
+    }
+
+    if (filter === "long-tail" && !isLongTailTag(item)) {
       return false
     }
 

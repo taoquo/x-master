@@ -543,3 +543,34 @@ test("OptionsApp caps the sidebar tag rows until the user expands them", async (
   assert.equal(container.querySelectorAll("[data-list-button]").length, 12)
   assert.equal(findByTestId(container, "sidebar-tags-show-more"), null)
 })
+
+test("OptionsApp reports tag library health and filters the long tail", async () => {
+  await seedTagWorkspace()
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+  await enterTagManagement(container, dom)
+
+  // Agent and Design hold one bookmark each; Research has none.
+  assert.match(findByTestId(container, "tag-health-meta")?.textContent ?? "", /2 long-tail tags/)
+  assert.match(findByTestId(container, "tag-health-meta")?.textContent ?? "", /Library size is healthy/)
+
+  const filterTrigger = findByTestId(container, "tag-filter-trigger") as HTMLButtonElement | null
+  assert.ok(filterTrigger)
+  await act(async () => {
+    filterTrigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const longTailOption = container.querySelector(
+    '[data-testid="tag-filter-option-long-tail"] input'
+  ) as HTMLInputElement | null
+  assert.ok(longTailOption)
+  await act(async () => {
+    longTailOption.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.equal(container.querySelectorAll("[data-tag-card]").length, 2)
+  assert.match(findByTestId(container, "tag-filter-chip")?.textContent ?? "", /Long-tail tags/)
+})

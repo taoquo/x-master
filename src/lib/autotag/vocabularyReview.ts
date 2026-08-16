@@ -1,5 +1,6 @@
 import { requestChatJson, type LlmVocabularyEntry } from "./llmProvider.ts"
 import { canonicalTagKey, normalizeTagDisplayName } from "../tags/canonical.ts"
+import { HEALTHY_TAG_COUNT_MAX, HEALTHY_TAG_COUNT_MIN } from "../tags/health.ts"
 import type { AutoTagLlmSettings, BookmarkTagRecord, TagRecord } from "../types.ts"
 
 // A tag library grows one suggestion at a time and drifts into near-synonyms
@@ -55,8 +56,6 @@ export function renamePlanKey(plan: TagRenamePlan) {
   return `rename:${plan.tagId}:${plan.to}`
 }
 
-const TARGET_TAG_COUNT_MIN = 30
-const TARGET_TAG_COUNT_MAX = 50
 const MAX_REVIEW_VOCABULARY_ENTRIES = 300
 const MAX_PROPOSALS = 60
 const MAX_TAG_NAME_LENGTH = 40
@@ -71,7 +70,7 @@ export function buildVocabularyReviewPrompt(input: { vocabulary: LlmVocabularyEn
     "You are a librarian consolidating the tag taxonomy of a bookmark library. The library has drifted: many tags are near-synonyms or one-off labels.",
     [
       "Goal:",
-      `- The healthy taxonomy size is ${TARGET_TAG_COUNT_MIN}-${TARGET_TAG_COUNT_MAX} durable subject tags. Propose the merges needed to move towards that size.`,
+      `- The healthy taxonomy size is ${HEALTHY_TAG_COUNT_MIN}-${HEALTHY_TAG_COUNT_MAX} durable subject tags. Propose the merges needed to move towards that size.`,
       "- Merge only tags that describe the same durable subject area. Never merge across different domains just to reduce the count.",
       "- Prefer the broader, most established name (highest usage count) as the surviving tag.",
       "- Rename a tag when its name breaks the naming rules but no other tag covers the same concept.",

@@ -2,7 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import "fake-indexeddb/auto"
 import type { AutoTagLlmProvider } from "../../src/lib/autotag/llmProvider.ts"
-import { runAutoTagPipeline } from "../../src/lib/autotag/pipeline.ts"
+import { resolveNewTagBudget, runAutoTagPipeline } from "../../src/lib/autotag/pipeline.ts"
 import { getAllBookmarks, upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
 import { saveSecrets } from "../../src/lib/storage/secrets.ts"
@@ -232,7 +232,7 @@ test("guarded mode accumulates the vocabulary across batches and caps new tags",
   // Batch 1 introduces the tag, batch 2 sees it in the vocabulary.
   assert.deepEqual(calls[0]?.vocabulary, [])
   assert.deepEqual(calls[1]?.vocabulary, [{ name: "ai agents", count: 1 }])
-  assert.equal(calls[0]?.newTagBudget, 3)
+  assert.equal(calls[0]?.newTagBudget, 1)
 
   const suggestions = (await getAllTagSuggestions()).filter((suggestion) => suggestion.source === "llm")
   // "AI Agent" collapses onto the spelling already introduced in batch 1.
@@ -262,8 +262,20 @@ test("guarded mode stops inventing tags once the budget is spent", async () => {
   await runAutoTagPipeline({ createLlmProvider: () => provider })
 
   const suggestions = (await getAllTagSuggestions()).filter((suggestion) => suggestion.source === "llm")
-  // Budget floor is 3 new tags per run, so the fourth invention is dropped.
-  assert.deepEqual(suggestions.map((suggestion) => suggestion.tagName).sort(), ["one", "three", "two"])
+  // Budget floor is 1 new tag per run, so every later invention is dropped.
+  assert.deepEqual(suggestions.map((suggestion) => suggestion.tagName).sort(), ["one"])
+})
+
+test("resolveNewTagBudget scales with the run and stops at the healthy library size", () => {
+  assert.equal(resolveNewTagBudget("open", 10, 0), Number.POSITIVE_INFINITY)
+  assert.equal(resolveNewTagBudget("closed", 10_000, 0), 0)
+  // Floor of 1 for a small run, ~1 per 150 candidates above that.
+  assert.equal(resolveNewTagBudget("guarded", 10, 0), 1)
+  assert.equal(resolveNewTagBudget("guarded", 450, 0), 3)
+  // Only the headroom left before the healthy ceiling is spendable.
+  assert.equal(resolveNewTagBudget("guarded", 450, 48), 2)
+  assert.equal(resolveNewTagBudget("guarded", 450, 50), 0)
+  assert.equal(resolveNewTagBudget("guarded", 450, 900), 0)
 })
 
 test("blocked tag keys are never suggested again", async () => {
