@@ -1,5 +1,7 @@
 import {
   createEmptySyncSummary,
+  type AutoTagRunOutcome,
+  type AutoTagRunSummary,
   type AutoTagSettings,
   type ExtensionSettings,
   type Locale,
@@ -198,7 +200,53 @@ function normalizeSyncSummary(summary: Partial<SyncSummary> | undefined): SyncSu
   return normalized
 }
 
+const AUTO_TAG_RUN_OUTCOMES = new Set<AutoTagRunOutcome>([
+  "ok",
+  "disabled",
+  "llm-disabled",
+  "missing-api-key",
+  "no-candidates",
+  "failed"
+])
+
+function normalizeCount(value: unknown) {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? Math.trunc(numeric) : 0
+}
+
+// Diagnostics only: a malformed or missing summary is dropped rather than
+// defaulted, so the panel can distinguish "never ran" from "ran with zeros".
+function normalizeAutoTagRunSummary(value: unknown): AutoTagRunSummary | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined
+  }
+
+  const record = value as Partial<AutoTagRunSummary>
+  const finishedAt = String(record.finishedAt ?? "").trim()
+  if (!finishedAt || !AUTO_TAG_RUN_OUTCOMES.has(record.outcome as AutoTagRunOutcome)) {
+    return undefined
+  }
+
+  const error = String(record.error ?? "").trim()
+
+  return {
+    finishedAt,
+    outcome: record.outcome as AutoTagRunOutcome,
+    suggestedCount: normalizeCount(record.suggestedCount),
+    pendingCount: normalizeCount(record.pendingCount),
+    candidateCount: normalizeCount(record.candidateCount),
+    llmProcessedCount: normalizeCount(record.llmProcessedCount),
+    llmBatchCount: normalizeCount(record.llmBatchCount),
+    llmFailedBatchCount: normalizeCount(record.llmFailedBatchCount),
+    newTagBudget: normalizeCount(record.newTagBudget),
+    vocabularySize: normalizeCount(record.vocabularySize),
+    ...(error ? { error } : {})
+  }
+}
+
 function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): ExtensionSettings {
+  const lastAutoTagRun = normalizeAutoTagRunSummary(settings?.lastAutoTagRun)
+
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     locale: normalizeLocale(settings?.locale),
@@ -214,7 +262,8 @@ function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): Ex
     rightSidebarWidth: normalizeRange(settings?.rightSidebarWidth, DEFAULT_RIGHT_SIDEBAR_WIDTH, 320, 520),
     savedViews: normalizeSavedViews(settings?.savedViews),
     hashtagBackfillDone: Boolean(settings?.hashtagBackfillDone),
-    autoTag: normalizeAutoTagSettings(settings?.autoTag)
+    autoTag: normalizeAutoTagSettings(settings?.autoTag),
+    ...(lastAutoTagRun ? { lastAutoTagRun } : {})
   }
 }
 

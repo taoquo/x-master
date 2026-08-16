@@ -89,15 +89,18 @@ test("provider backs off on 429 and gives up after the retry", async () => {
     }
   })
 
-  const suggestions = await provider.suggestTags({
-    bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
-    vocabulary: [{ name: "AI", count: 4 }],
-    allowNewTags: false
-  })
+  // The provider now surfaces the failure so the pipeline can count and report it.
+  await assert.rejects(
+    provider.suggestTags({
+      bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+      vocabulary: [{ name: "AI", count: 4 }],
+      allowNewTags: false
+    }),
+    /HTTP 429/
+  )
 
   assert.equal(calls, 2)
   assert.deepEqual(sleeps, [2000])
-  assert.deepEqual(suggestions, [])
 })
 
 test("provider skips the request in closed mode with an empty vocabulary", async () => {
@@ -121,7 +124,7 @@ test("provider skips the request in closed mode with an empty vocabulary", async
   assert.deepEqual(suggestions, [])
 })
 
-test("provider returns no suggestions when the response is not valid JSON", async () => {
+test("provider throws when the response carries no results array", async () => {
   const provider = createOpenAiCompatibleProvider({
     settings: SETTINGS,
     apiKey: "sk-test",
@@ -130,13 +133,42 @@ test("provider returns no suggestions when the response is not valid JSON", asyn
       jsonResponse(200, { choices: [{ message: { content: "not json" } }] })
   })
 
+  // A prose answer is a provider failure, not an empty verdict: the pipeline
+  // must be able to count the batch as failed and show the reason.
+  await assert.rejects(
+    provider.suggestTags({
+      bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+      vocabulary: [{ name: "AI", count: 4 }],
+      allowNewTags: false
+    }),
+    /invalid-response/
+  )
+})
+
+test("provider accepts a fenced bare array response", async () => {
+  const provider = createOpenAiCompatibleProvider({
+    settings: SETTINGS,
+    apiKey: "sk-test",
+    sleep: async () => {},
+    fetchImpl: async () =>
+      jsonResponse(200, {
+        choices: [
+          {
+            message: {
+              content: "Sure, here you go:\n```json\n[{\"tweetId\":\"t1\",\"tags\":[{\"name\":\"AI\",\"confidence\":0.8}]}]\n```"
+            }
+          }
+        ]
+      })
+  })
+
   const suggestions = await provider.suggestTags({
     bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
     vocabulary: [{ name: "AI", count: 4 }],
     allowNewTags: false
   })
 
-  assert.deepEqual(suggestions, [])
+  assert.deepEqual(suggestions, [{ tweetId: "t1", tags: [{ name: "AI", confidence: 0.8 }] }])
 })
 
 test("testLlmConnection reports ok and error states", async () => {

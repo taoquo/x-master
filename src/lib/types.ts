@@ -161,6 +161,30 @@ export interface AutoTagSettings {
   blockedTagKeys: string[]
 }
 
+// Why a run produced no LLM suggestions. Persisted so the settings panel can
+// explain a silent run instead of leaving the user guessing.
+export type AutoTagRunOutcome =
+  | "ok"
+  | "disabled"
+  | "llm-disabled"
+  | "missing-api-key"
+  | "no-candidates"
+  | "failed"
+
+export interface AutoTagRunSummary {
+  finishedAt: string
+  outcome: AutoTagRunOutcome
+  suggestedCount: number
+  pendingCount: number
+  candidateCount: number
+  llmProcessedCount: number
+  llmBatchCount: number
+  llmFailedBatchCount: number
+  newTagBudget: number
+  vocabularySize: number
+  error?: string
+}
+
 export interface ExtensionSettings {
   schemaVersion: number
   locale: Locale
@@ -174,6 +198,7 @@ export interface ExtensionSettings {
   rightSidebarWidth?: number
   savedViews: SavedViewRecord[]
   autoTag: AutoTagSettings
+  lastAutoTagRun?: AutoTagRunSummary
 }
 
 export interface WorkspaceData {

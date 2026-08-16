@@ -54,7 +54,18 @@ test("runAutoTagPipeline is a no-op when auto-tagging is disabled", async () => 
 
   const result = await runAutoTagPipeline()
 
-  assert.deepEqual(result, { ran: false, suggestedCount: 0, llmProcessedCount: 0, skippedCount: 0 })
+  assert.deepEqual(result, {
+    ran: false,
+    outcome: "disabled",
+    suggestedCount: 0,
+    llmProcessedCount: 0,
+    skippedCount: 0,
+    candidateCount: 0,
+    llmBatchCount: 0,
+    llmFailedBatchCount: 0,
+    newTagBudget: 0,
+    vocabularySize: 0
+  })
   assert.equal((await getAllTagSuggestions()).length, 0)
 })
 
@@ -183,7 +194,7 @@ test("runAutoTagPipeline sends untagged bookmarks to the LLM and persists sugges
   assert.ok(llmSuggestions.every((suggestion) => suggestion.status === "pending"))
 })
 
-test("runAutoTagPipeline skips bookmarks that already have pending suggestions", async () => {
+test("runAutoTagPipeline still sends rule-covered bookmarks to the LLM, but last", async () => {
   installChromeStorageMock()
   await resetBookmarksDb()
   await enableAutoTagWithLlm({ tagVocabularyMode: "closed" })
@@ -196,9 +207,10 @@ test("runAutoTagPipeline skips bookmarks that already have pending suggestions",
   const { provider, calls } = makeStubProvider([[{ tweetId: "t2", tags: [{ name: "News", confidence: 0.6 }] }]])
   await runAutoTagPipeline({ createLlmProvider: () => provider })
 
-  // t1 got a pending hashtag suggestion from heuristics, so only t2 reaches the LLM.
+  // t1 got a pending hashtag suggestion from heuristics. It stays eligible for
+  // the LLM (rules must not starve it) but is queued behind untouched t2.
   assert.equal(calls.length, 1)
-  assert.deepEqual(calls[0]?.tweetIds, ["t2"])
+  assert.deepEqual(calls[0]?.tweetIds, ["t2", "t1"])
 })
 
 test("runAutoTagPipeline honors the open vocabulary mode", async () => {
@@ -292,4 +304,74 @@ test("blocked tag keys are never suggested again", async () => {
 
   assert.equal(result.suggestedCount, 0)
   assert.equal((await getAllTagSuggestions()).length, 0)
+})
+
+test("a failing batch is isolated and reported, earlier batches stay persisted", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed", batchSize: 1 })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await createTag({ name: "News" })
+  await upsertBookmarks([makeBookmark("t1"), makeBookmark("t2")])
+
+  let calls = 0
+  const provider: AutoTagLlmProvider = {
+    async suggestTags(input) {
+      calls += 1
+      if (calls === 2) {
+        throw new Error("HTTP 500")
+      }
+      return input.bookmarks.map((bookmark) => ({
+        tweetId: bookmark.tweetId,
+        tags: [{ name: "News", confidence: 0.7 }]
+      }))
+    }
+  }
+
+  const result = await runAutoTagPipeline({ createLlmProvider: () => provider })
+
+  assert.equal(calls, 2)
+  assert.equal(result.llmBatchCount, 2)
+  assert.equal(result.llmFailedBatchCount, 1)
+  assert.equal(result.outcome, "ok")
+  assert.equal((await getAllTagSuggestions()).filter((item) => item.source === "llm").length, 1)
+})
+
+test("rule suggestions never starve the LLM step and the run is reported", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed", batchSize: 5 })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await createTag({ name: "AI" })
+  await upsertBookmarks([
+    makeBookmark("t1", { hashtags: ["AI"] }),
+    makeBookmark("t2", { hashtags: ["AI"] }),
+    makeBookmark("t3", { hashtags: ["AI"] })
+  ])
+
+  const { provider, calls } = makeStubProvider([[]])
+  const result = await runAutoTagPipeline({ createLlmProvider: () => provider })
+
+  // Every bookmark got a hashtag suggestion, yet the LLM still receives them.
+  assert.equal(calls.length, 1)
+  assert.equal(result.candidateCount, 3)
+  assert.equal(result.outcome, "ok")
+
+  const summary = (await getSettings()).lastAutoTagRun
+  assert.equal(summary?.outcome, "ok")
+  assert.equal(summary?.candidateCount, 3)
+  assert.equal(summary?.pendingCount, 3)
+  assert.ok(summary?.finishedAt)
+})
+
+test("a run without an api key is reported as missing-api-key", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm()
+  await upsertBookmarks([makeBookmark("t1")])
+
+  const result = await runAutoTagPipeline()
+
+  assert.equal(result.outcome, "missing-api-key")
+  assert.equal((await getSettings()).lastAutoTagRun?.outcome, "missing-api-key")
 })

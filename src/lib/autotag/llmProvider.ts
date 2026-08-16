@@ -144,17 +144,64 @@ export function buildPrompt(input: {
   ].join("\n\n")
 }
 
-function parseSuggestions(content: string, validTweetIds: Set<string>): LlmTagSuggestion[] {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(content)
-  } catch {
+// Providers behind OpenAI-compatible gateways do not all honour
+// response_format, so a valid answer can arrive fenced in markdown, prefixed
+// with prose, or as a bare array. Recover the JSON payload instead of
+// returning nothing.
+function extractJsonCandidates(content: string): string[] {
+  const trimmed = content.trim()
+  if (!trimmed) {
     return []
   }
 
-  const results = (parsed as { results?: unknown })?.results
+  const candidates = [trimmed]
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  if (fenced?.[1]) {
+    candidates.push(fenced[1].trim())
+  }
+
+  for (const [open, close] of [
+    ["{", "}"],
+    ["[", "]"]
+  ] as const) {
+    const start = trimmed.indexOf(open)
+    const end = trimmed.lastIndexOf(close)
+    if (start >= 0 && end > start) {
+      candidates.push(trimmed.slice(start, end + 1))
+    }
+  }
+
+  return candidates
+}
+
+// Returns null when the response carries no parsable results array. That is a
+// real provider failure (wrong model, prose answer, truncated output) and must
+// stay distinguishable from a valid "no tags for this batch" answer.
+function parseSuggestions(content: string, validTweetIds: Set<string>): LlmTagSuggestion[] | null {
+  let results: unknown
+
+  for (const candidate of extractJsonCandidates(content)) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(candidate)
+    } catch {
+      continue
+    }
+
+    const wrapped = (parsed as { results?: unknown })?.results
+    if (Array.isArray(wrapped)) {
+      results = wrapped
+      break
+    }
+
+    if (Array.isArray(parsed)) {
+      results = parsed
+      break
+    }
+  }
+
   if (!Array.isArray(results)) {
-    return []
+    return null
   }
 
   const suggestions: LlmTagSuggestion[] = []
@@ -206,7 +253,9 @@ export async function requestChatJson(options: {
   const fetchImpl: FetchLike = options.fetchImpl ?? ((input, init) => fetch(input, init))
   const endpoint = `${resolveApiBaseUrl(options.settings.baseUrl)}/chat/completions`
 
-  async function requestOnce(): Promise<{ ok: boolean; rateLimited: boolean; content: string; error?: string }> {
+  async function requestOnce(
+    withJsonMode: boolean
+  ): Promise<{ ok: boolean; rateLimited: boolean; badRequest: boolean; content: string; error?: string }> {
     const response = await fetchImpl(endpoint, {
       method: "POST",
       headers: {
@@ -216,36 +265,47 @@ export async function requestChatJson(options: {
       body: JSON.stringify({
         model: options.settings.model,
         messages: [{ role: "user", content: options.prompt }],
-        response_format: { type: "json_object" },
+        ...(withJsonMode ? { response_format: { type: "json_object" } } : {}),
         temperature: 0
       })
     })
 
     if (response.status === 429) {
-      return { ok: false, rateLimited: true, content: "", error: `HTTP ${response.status}` }
+      return { ok: false, rateLimited: true, badRequest: false, content: "", error: `HTTP ${response.status}` }
     }
 
     if (!response.ok) {
-      return { ok: false, rateLimited: false, content: "", error: await readErrorDetail(response) }
+      return {
+        ok: false,
+        rateLimited: false,
+        badRequest: response.status >= 400 && response.status < 500,
+        content: "",
+        error: await readErrorDetail(response)
+      }
     }
 
     const payload = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>
     }
 
-    return { ok: true, rateLimited: false, content: payload.choices?.[0]?.message?.content ?? "" }
+    return { ok: true, rateLimited: false, badRequest: false, content: payload.choices?.[0]?.message?.content ?? "" }
   }
 
   let lastError = "request-failed"
 
+  // Gateways that proxy non-OpenAI models often reject response_format with a
+  // 4xx, so the retry drops JSON mode instead of repeating a doomed request.
+  let withJsonMode = true
+
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    let result: { ok: boolean; rateLimited: boolean; content: string; error?: string }
+    let result: { ok: boolean; rateLimited: boolean; badRequest: boolean; content: string; error?: string }
     try {
-      result = await requestOnce()
+      result = await requestOnce(withJsonMode)
     } catch (error) {
       result = {
         ok: false,
         rateLimited: false,
+        badRequest: false,
         content: "",
         error: error instanceof Error ? error.message : String(error)
       }
@@ -258,6 +318,10 @@ export async function requestChatJson(options: {
     lastError = result.error ?? lastError
 
     if (attempt === 0) {
+      if (result.badRequest && withJsonMode) {
+        withJsonMode = false
+      }
+
       await delay(result.rateLimited ? RATE_LIMIT_BACKOFF_MS : 0, options.sleep)
     }
   }
@@ -295,7 +359,19 @@ export function createOpenAiCompatibleProvider(options: {
         sleep: options.sleep
       })
 
-      return result.ok ? parseSuggestions(result.content, validTweetIds) : []
+      if (!result.ok) {
+        // Surface the failure so the pipeline can count the batch and report a
+        // reason, instead of looking like the model returned nothing.
+        throw new Error(result.error ?? "request-failed")
+      }
+
+      const suggestions = parseSuggestions(result.content, validTweetIds)
+
+      if (!suggestions) {
+        throw new Error("invalid-response")
+      }
+
+      return suggestions
     }
   }
 }

@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react"
-import type { ExtensionSettings, KeywordTagRule, Locale, ThemePreference } from "../../lib/types.ts"
+import React, { useEffect, useRef, useState } from "react"
+import type { AutoTagRunSummary, ExtensionSettings, KeywordTagRule, Locale, ThemePreference } from "../../lib/types.ts"
 import { getSettings, updateSettings } from "../../lib/storage/settings.ts"
 import { getSecrets, saveSecrets } from "../../lib/storage/secrets.ts"
 import { AUTOTAG_RUN_MESSAGE, LLM_TEST_CONNECTION_MESSAGE } from "../../lib/runtime/messages.ts"
+import { subscribeAutoTagProgress, type AutoTagProgress } from "../../lib/runtime/autotagProgress.ts"
 import { AppIcon } from "../../ui/icons.tsx"
 import type { OptionsCopy } from "../i18n/copy.ts"
 import type { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
@@ -13,6 +14,8 @@ import { cn } from "../utils.ts"
 type SettingsSection = "general" | "sync" | "autotag" | "data-safety"
 
 const SETTINGS_SECTIONS: SettingsSection[] = ["general", "sync", "autotag", "data-safety"]
+const AUTOTAG_POLL_INTERVAL_MS = 1500
+const AUTOTAG_POLL_ATTEMPTS = 120
 
 function SettingsToggleRow({
   testId,
@@ -38,6 +41,28 @@ function SettingsToggleRow({
   )
 }
 
+function describeAutoTagOutcome(summary: AutoTagRunSummary, copy: OptionsCopy): string {
+  if (summary.outcome === "no-candidates") return copy.settingsAutoTagResultNoCandidates
+  if (summary.outcome === "llm-disabled") return copy.settingsAutoTagResultLlmDisabled
+  if (summary.outcome === "missing-api-key") return copy.settingsAutoTagResultMissingKey
+  if (summary.outcome === "failed") {
+    return summary.error ? `${copy.settingsAutoTagResultFailed}: ${summary.error}` : copy.settingsAutoTagResultFailed
+  }
+  return copy.settingsAutoTagResultOk
+    .replace("{suggested}", String(summary.suggestedCount))
+    .replace("{pending}", String(summary.pendingCount))
+}
+
+function describeAutoTagDetail(summary: AutoTagRunSummary, copy: OptionsCopy): string {
+  return copy.settingsAutoTagResultDetail
+    .replace("{candidate}", String(summary.candidateCount))
+    .replace("{processed}", String(summary.llmProcessedCount))
+    .replace("{batches}", String(summary.llmBatchCount))
+    .replace("{failed}", String(summary.llmFailedBatchCount))
+    .replace("{vocabulary}", String(summary.vocabularySize))
+    .replace("{budget}", summary.newTagBudget < 0 ? "∞" : String(summary.newTagBudget))
+}
+
 export function SettingsPanel({
   workspace,
   copy,
@@ -60,6 +85,9 @@ export function SettingsPanel({
   const [activeSection, setActiveSection] = useState<SettingsSection>("general")
   const [settings, setSettings] = useState<ExtensionSettings | null>(null)
   const [autoTagRunMessage, setAutoTagRunMessage] = useState<string | null>(null)
+  const [autoTagProgress, setAutoTagProgress] = useState<AutoTagProgress | null>(null)
+  const [autoTagRunSummary, setAutoTagRunSummary] = useState<AutoTagRunSummary | null>(null)
+  const [isAutoTagRunning, setIsAutoTagRunning] = useState(false)
   const [draftKeyword, setDraftKeyword] = useState("")
   const [draftTagName, setDraftTagName] = useState("")
   const [hasStoredApiKey, setHasStoredApiKey] = useState(false)
@@ -67,6 +95,7 @@ export function SettingsPanel({
   const [llmTestState, setLlmTestState] = useState<{ status: "idle" | "testing" | "ok" | "error"; error?: string }>({
     status: "idle"
   })
+  const pollAbortRef = useRef(false)
 
   useEffect(() => {
     let cancelled = false
@@ -75,6 +104,7 @@ export function SettingsPanel({
       .then((loaded) => {
         if (!cancelled) {
           setSettings(loaded)
+          setAutoTagRunSummary(loaded.lastAutoTagRun ?? null)
         }
       })
       .catch(() => {})
@@ -91,6 +121,17 @@ export function SettingsPanel({
       cancelled = true
     }
   }, [])
+
+  // The run happens in the background worker, so the panel listens for progress
+  // broadcasts instead of holding the message channel open.
+  useEffect(() => subscribeAutoTagProgress(setAutoTagProgress), [])
+
+  useEffect(
+    () => () => {
+      pollAbortRef.current = true
+    },
+    []
+  )
 
   // Field-level patch write: the panel holds a snapshot loaded on mount, so a
   // full overwrite here would revert whatever other surfaces changed since.
@@ -233,13 +274,55 @@ export function SettingsPanel({
     updateHeuristics({ keywordRules: nextRules })
   }
 
-  function runAutoTagNow() {
+  // The background worker answers the trigger immediately and finishes the run
+  // asynchronously, so the panel polls the persisted summary until finishedAt
+  // moves. Without this the button gave no feedback at all.
+  async function runAutoTagNow() {
     if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) {
       return
     }
 
-    void chrome.runtime.sendMessage({ type: AUTOTAG_RUN_MESSAGE })
+    if (isAutoTagRunning) {
+      return
+    }
+
+    const previousFinishedAt = autoTagRunSummary?.finishedAt ?? ""
     setAutoTagRunMessage(copy.settingsAutoTagRunning)
+    setAutoTagProgress(null)
+    setIsAutoTagRunning(true)
+    pollAbortRef.current = false
+
+    const started = (await chrome.runtime.sendMessage({ type: AUTOTAG_RUN_MESSAGE })) as
+      | { started?: boolean; alreadyRunning?: boolean }
+      | undefined
+
+    if (started?.alreadyRunning) {
+      setIsAutoTagRunning(false)
+      setAutoTagRunMessage(copy.settingsAutoTagAlreadyRunning)
+      return
+    }
+
+    for (let attempt = 0; attempt < AUTOTAG_POLL_ATTEMPTS; attempt += 1) {
+      if (pollAbortRef.current) {
+        return
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, AUTOTAG_POLL_INTERVAL_MS))
+
+      const latest = await getSettings().catch(() => null)
+      const summary = latest?.lastAutoTagRun
+
+      if (summary && summary.finishedAt !== previousFinishedAt) {
+        setAutoTagRunSummary(summary)
+        setAutoTagProgress(null)
+        setIsAutoTagRunning(false)
+        setAutoTagRunMessage(null)
+        return
+      }
+    }
+
+    setIsAutoTagRunning(false)
+    setAutoTagRunMessage(copy.settingsAutoTagRunTimeout)
   }
 
   function handleBufferPagesChange(rawValue: string) {
@@ -434,11 +517,30 @@ export function SettingsPanel({
                         type="button"
                         data-testid="settings-autotag-run-now"
                         className="chip-button"
-                        onClick={runAutoTagNow}>
-                        {copy.settingsRunAutoTagNow}
+                        disabled={isAutoTagRunning}
+                        onClick={() => void runAutoTagNow()}>
+                        {isAutoTagRunning ? copy.settingsAutoTagProgress : copy.settingsRunAutoTagNow}
                       </button>
                     </div>
                     <InlineMessage message={autoTagRunMessage} tone="info" />
+                    {autoTagProgress ? (
+                      <p data-testid="settings-autotag-progress" className="options-meta-copy">
+                        {`${copy.settingsAutoTagProgress} · ${autoTagProgress.phase} ${autoTagProgress.processed}/${autoTagProgress.total}`}
+                      </p>
+                    ) : null}
+                    {autoTagRunSummary ? (
+                      <div data-testid="settings-autotag-result" className="options-settings-result">
+                        <p className="options-settings-field-label">{copy.settingsAutoTagResultTitle}</p>
+                        <p className="options-meta-copy">{describeAutoTagOutcome(autoTagRunSummary, copy)}</p>
+                        <p className="options-meta-copy">{describeAutoTagDetail(autoTagRunSummary, copy)}</p>
+                        {autoTagRunSummary.newTagBudget === 0 &&
+                        settings.autoTag.llm.tagVocabularyMode !== "closed" ? (
+                          <p data-testid="settings-autotag-vocabulary-full" className="options-meta-copy">
+                            {copy.settingsAutoTagVocabularyFull}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
 
                   <h3 className="options-settings-group-title">{copy.settingsGroupAutoTagLlm}</h3>
