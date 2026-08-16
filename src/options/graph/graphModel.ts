@@ -9,6 +9,7 @@ import {
   type TagRelationNode
 } from "../../lib/graph/tagRelations.ts"
 import type { BookmarkRecord, BookmarkTagRecord, TagRecord } from "../../lib/types.ts"
+import { compareNaturalNames } from "../collation.ts"
 
 export const DEFAULT_GRAPH_NODE_LIMIT = 60
 
@@ -113,7 +114,7 @@ function compareNodesByWeight(left: TagRelationNode, right: TagRelationNode) {
   return (
     right.bookmarkCount - left.bookmarkCount ||
     right.authorCount - left.authorCount ||
-    left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" })
+    compareNaturalNames(left.name, right.name)
   )
 }
 

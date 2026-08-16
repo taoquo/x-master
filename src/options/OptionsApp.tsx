@@ -54,7 +54,9 @@ import {
 function OptionsScreen() {
   const workspace = useWorkspaceData()
   const { locale, themePreference, resolvedTheme, setLocale, setThemePreference } = useExtensionUi()
-  const copy = getOptionsCopy(locale)
+  // Rebuilt only when the locale changes: a fresh copy object on every render
+  // would invalidate every memoised child that receives it.
+  const copy = useMemo(() => getOptionsCopy(locale), [locale])
   const dataSafety = useDataSafetyActions({ workspace, copy })
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(280)
   const [_rightSidebarWidth, setRightSidebarWidth] = useState(360)

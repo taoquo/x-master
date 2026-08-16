@@ -11,6 +11,40 @@ export function haveSameItems(current: string[], next: string[]) {
   return current.length === next.length && current.every((value, index) => value === next[index])
 }
 
+// Building an `Intl` formatter is far more expensive than using one, and these
+// two run once per card/row on every render. Cache them per locale so a large
+// list only pays the construction cost once.
+const dateFormatterByLocale = new Map<string, Intl.DateTimeFormat>()
+const compactNumberFormatters = new Map<string, Intl.NumberFormat>()
+
+function getDateFormatter(locale: Locale) {
+  const cached = dateFormatterByLocale.get(locale)
+  if (cached) {
+    return cached
+  }
+
+  const formatter = new Intl.DateTimeFormat(locale, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  })
+  dateFormatterByLocale.set(locale, formatter)
+  return formatter
+}
+
+function getCompactNumberFormatter(locale: Locale, maximumFractionDigits: number) {
+  const cacheKey = `${locale}:${maximumFractionDigits}`
+  const cached = compactNumberFormatters.get(cacheKey)
+  if (cached) {
+    return cached
+  }
+
+  const formatter = new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits })
+  compactNumberFormatters.set(cacheKey, formatter)
+  return formatter
+}
+
 export function formatTimestamp(value: string | undefined, locale: Locale) {
   if (!value) {
     return locale === "zh-CN" ? "尚未同步" : "Not synced yet"
@@ -21,12 +55,7 @@ export function formatTimestamp(value: string | undefined, locale: Locale) {
     return value
   }
 
-  return new Intl.DateTimeFormat(locale, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(parsed)
+  return getDateFormatter(locale).format(parsed)
 }
 
 export function getSectionOverline(locale: Locale, zhLabel: string, enLabel: string) {
@@ -34,10 +63,7 @@ export function getSectionOverline(locale: Locale, zhLabel: string, enLabel: str
 }
 
 export function formatCompactCount(value: number | undefined, locale: Locale) {
-  return new Intl.NumberFormat(locale, {
-    notation: "compact",
-    maximumFractionDigits: value && value >= 1000 ? 1 : 0
-  }).format(value ?? 0)
+  return getCompactNumberFormatter(locale, value && value >= 1000 ? 1 : 0).format(value ?? 0)
 }
 
 export function formatSyncErrorSummary(summary: { errorKind?: SyncErrorKind; errorSummary?: string }, locale: Locale) {

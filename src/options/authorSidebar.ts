@@ -1,4 +1,5 @@
 import type { BookmarkRecord } from "../lib/types.ts"
+import { compareNaturalNames } from "./collation.ts"
 
 export interface AuthorSidebarItem {
   authorHandle: string
@@ -10,10 +11,7 @@ export interface AuthorSidebarItem {
 function compareAuthors(left: AuthorSidebarItem, right: AuthorSidebarItem) {
   return (
     right.count - left.count ||
-    left.authorHandle.localeCompare(right.authorHandle, undefined, {
-      numeric: true,
-      sensitivity: "base"
-    })
+    compareNaturalNames(left.authorHandle, right.authorHandle)
   )
 }
 

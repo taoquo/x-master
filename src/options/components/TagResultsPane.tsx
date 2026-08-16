@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Locale } from "../../lib/types.ts"
 import {
   mergePlanKey,
@@ -52,6 +52,243 @@ function getTagSortLabel(copy: OptionsCopy, sortOrder: TagLibrarySortOrder) {
 
   return copy.tagSortMostBookmarks
 }
+
+// Everything a rendered tag row needs that does not vary per row. Bundled into
+// one memoised object so toggling a single checkbox only re-renders the rows
+// whose own props changed instead of the whole page of cards.
+interface TagRowContext {
+  locale: Locale
+  copy: OptionsCopy
+  isSavingTags: boolean
+  rootCandidates: TagLibraryItem[]
+  preloadParentOptions: boolean
+  toggleSelection: (tagId: string) => void
+  viewBookmarks: (tagId: string) => void
+  deleteTag: (tagId: string, tagName: string) => void
+  setParent: (tagId: string, parentId?: string) => void
+  openParentSelect: (tagId: string) => void
+  startRename: (item: TagLibraryItem) => void
+  startAliasEdit: (item: TagLibraryItem) => void
+}
+
+interface TagRowProps {
+  item: TagLibraryItem
+  context: TagRowContext
+  isSelected: boolean
+  isParentSelectOpen: boolean
+  renameNode: React.ReactNode
+  aliasNode: React.ReactNode
+}
+
+function TagParentControl({
+  item,
+  context,
+  isParentSelectOpen
+}: {
+  item: TagLibraryItem
+  context: TagRowContext
+  isParentSelectOpen: boolean
+}) {
+  const { copy, rootCandidates } = context
+
+  if (!hasParentCandidates(rootCandidates, item)) {
+    return (
+      <span
+        data-testid="tag-parent-locked"
+        className="options-meta-copy options-tag-parent-locked"
+        title={item.childCount ? copy.tagParentUnavailable : undefined}>
+        {item.childCount ? `${item.childCount} ${copy.tagChildCountSuffix}` : copy.tagParentNone}
+      </span>
+    )
+  }
+
+  // Large libraries only fill the dropdown the user opened; the selected parent
+  // stays present so the closed control still shows the right label.
+  const showAllOptions = context.preloadParentOptions || isParentSelectOpen
+  const options = showAllOptions
+    ? rootCandidates
+    : rootCandidates.filter((candidate) => candidate.tagId === item.parentId)
+
+  return (
+    <select
+      data-testid="tag-parent-select"
+      data-tag-parent-select={item.tagId}
+      value={item.parentId ?? ""}
+      aria-label={`${copy.tagParentLabel} ${item.name}`}
+      disabled={context.isSavingTags}
+      className="field-shell options-tag-parent-select"
+      onPointerDown={() => context.openParentSelect(item.tagId)}
+      onFocus={() => context.openParentSelect(item.tagId)}
+      onChange={(event) => {
+        const nextParentId = event.currentTarget.value
+        context.setParent(item.tagId, nextParentId || undefined)
+      }}>
+      <option value="">{copy.tagParentNone}</option>
+      {options.map((candidate) =>
+        candidate.tagId === item.tagId ? null : (
+          <option key={candidate.tagId} value={candidate.tagId}>
+            {candidate.name}
+          </option>
+        )
+      )}
+    </select>
+  )
+}
+
+function TagRowActions({ item, context }: { item: TagLibraryItem; context: TagRowContext }) {
+  const { copy } = context
+
+  return (
+    <span className="options-tag-card-actions">
+      <button
+        type="button"
+        data-testid="tag-view-bookmarks"
+        className="options-nav-row-delete"
+        aria-label={`${copy.viewTagBookmarks} ${item.name}`}
+        onClick={() => context.viewBookmarks(item.tagId)}>
+        <AppIcon name="search" size={12} />
+      </button>
+      <button
+        type="button"
+        data-testid="tag-rename"
+        className="options-nav-row-delete"
+        aria-label={`${copy.renameTagLabel} ${item.name}`}
+        onClick={() => context.startRename(item)}>
+        <AppIcon name="edit" size={12} />
+      </button>
+      <button
+        type="button"
+        data-testid="tag-edit-aliases"
+        className="options-nav-row-delete"
+        aria-label={`${copy.editTagAliasesLabel} ${item.name}`}
+        onClick={() => context.startAliasEdit(item)}>
+        <AppIcon name="tag" size={12} />
+      </button>
+      <button
+        type="button"
+        data-testid="tag-delete"
+        className="options-nav-row-delete"
+        aria-label={`${copy.deleteLabel} ${item.name}`}
+        onClick={() => context.deleteTag(item.tagId, item.name)}>
+        <AppIcon name="trash" size={12} />
+      </button>
+    </span>
+  )
+}
+
+const TagLibraryCard = React.memo(function TagLibraryCard({
+  item,
+  context,
+  isSelected,
+  isParentSelectOpen,
+  renameNode,
+  aliasNode
+}: TagRowProps) {
+  const { copy, locale } = context
+
+  return (
+    <article
+      data-tag-card={item.tagId}
+      className={cn("options-tag-card options-theme-panel", isSelected && "is-selected")}>
+      <div className="options-tag-card-head">
+        <label className="options-tag-card-check">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            aria-label={`${copy.selectBookmark} ${item.name}`}
+            onChange={() => context.toggleSelection(item.tagId)}
+          />
+        </label>
+        <AppIcon name="hash" size={14} className="options-tag-card-icon" />
+        {renameNode ?? (
+          <button
+            type="button"
+            className="options-tag-card-name"
+            onClick={() => context.viewBookmarks(item.tagId)}>
+            {item.name}
+          </button>
+        )}
+      </div>
+
+      <div className="options-tag-card-meta">
+        <span className="options-nav-count">
+          {item.bookmarkCount} {copy.tagTableBookmarks}
+        </span>
+        {item.pendingSuggestionCount ? (
+          <span className="options-nav-count">
+            {item.pendingSuggestionCount} {copy.tagTablePending}
+          </span>
+        ) : null}
+        {item.childCount ? (
+          <span className="options-nav-count">
+            {item.childCount} {copy.tagChildCountSuffix}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="options-tag-card-parent">
+        <span className="options-meta-copy">{copy.tagParentLabel}</span>
+        <TagParentControl item={item} context={context} isParentSelectOpen={isParentSelectOpen} />
+      </div>
+
+      {aliasNode ??
+        (item.aliases.length ? (
+          <div className="options-tag-card-aliases options-meta-copy">
+            {copy.tagAliasesLabel}: {item.aliases.join(", ")}
+          </div>
+        ) : null)}
+
+      <div className="options-tag-card-footer">
+        <span className="options-meta-copy">{formatTimestamp(item.updatedAt, locale)}</span>
+        <TagRowActions item={item} context={context} />
+      </div>
+    </article>
+  )
+})
+
+const TagLibraryRow = React.memo(function TagLibraryRow({
+  item,
+  context,
+  isSelected,
+  isParentSelectOpen,
+  renameNode,
+  aliasNode
+}: TagRowProps) {
+  const { copy, locale } = context
+
+  return (
+    <tr data-tag-row={item.tagId} className={cn(isSelected && "is-selected")}>
+      <td className="options-tag-table-select">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          aria-label={`${copy.selectBookmark} ${item.name}`}
+          onChange={() => context.toggleSelection(item.tagId)}
+        />
+      </td>
+      <td>
+        {renameNode ?? (
+          <button
+            type="button"
+            className="options-tag-card-name"
+            onClick={() => context.viewBookmarks(item.tagId)}>
+            {item.name}
+          </button>
+        )}
+        {aliasNode ?? (item.aliases.length ? <div className="options-meta-copy">{item.aliases.join(", ")}</div> : null)}
+      </td>
+      <td>
+        <TagParentControl item={item} context={context} isParentSelectOpen={isParentSelectOpen} />
+      </td>
+      <td>{item.bookmarkCount}</td>
+      <td>{item.pendingSuggestionCount}</td>
+      <td>{formatTimestamp(item.updatedAt, locale)}</td>
+      <td>
+        <TagRowActions item={item} context={context} />
+      </td>
+    </tr>
+  )
+})
 
 export interface TagResultsPaneProps {
   locale: Locale
@@ -201,19 +438,44 @@ export function TagResultsPane({
     setRenderLimit((current) => Math.min(current + RESULTS_RENDER_INCREMENT, visibleTagItems.length))
   }
 
-  function startRename(item: TagLibraryItem) {
+  // Row callbacks are read through a ref so they keep a stable identity: the
+  // memoised cards would otherwise re-render on every parent render.
+  const handlersRef = useRef({ onToggleTagSelection, onViewTagBookmarks, onDeleteTag, onSetTagParent })
+  handlersRef.current = { onToggleTagSelection, onViewTagBookmarks, onDeleteTag, onSetTagParent }
+
+  const startRename = useCallback((item: TagLibraryItem) => {
     setRenamingTagId(item.tagId)
     setRenamingTagName(item.name)
-  }
+  }, [])
+
+  const startAliasEdit = useCallback((item: TagLibraryItem) => {
+    setEditingAliasTagId(item.tagId)
+    setEditingAliasValue(item.aliases.join(", "))
+  }, [])
+
+  const rowContext = useMemo<TagRowContext>(
+    () => ({
+      locale,
+      copy,
+      isSavingTags,
+      rootCandidates,
+      preloadParentOptions: rootCandidates.length <= PARENT_OPTIONS_PRELOAD_LIMIT,
+      toggleSelection: (tagId) => handlersRef.current.onToggleTagSelection(tagId),
+      viewBookmarks: (tagId) => handlersRef.current.onViewTagBookmarks(tagId),
+      deleteTag: (tagId, tagName) => handlersRef.current.onDeleteTag(tagId, tagName),
+      setParent: (tagId, parentId) => {
+        void handlersRef.current.onSetTagParent(tagId, parentId)
+      },
+      openParentSelect: setOpenParentSelectTagId,
+      startRename,
+      startAliasEdit
+    }),
+    [locale, copy, isSavingTags, rootCandidates, startRename, startAliasEdit]
+  )
 
   function cancelRename() {
     setRenamingTagId(null)
     setRenamingTagName("")
-  }
-
-  function startAliasEdit(item: TagLibraryItem) {
-    setEditingAliasTagId(item.tagId)
-    setEditingAliasValue(item.aliases.join(", "))
   }
 
   function cancelAliasEdit() {
@@ -284,90 +546,6 @@ export function TagResultsPane({
     )
   }
 
-  function renderRowActions(item: TagLibraryItem) {
-    return (
-      <span className="options-tag-card-actions">
-        <button
-          type="button"
-          data-testid="tag-view-bookmarks"
-          className="options-nav-row-delete"
-          aria-label={`${copy.viewTagBookmarks} ${item.name}`}
-          onClick={() => onViewTagBookmarks(item.tagId)}>
-          <AppIcon name="search" size={12} />
-        </button>
-        <button
-          type="button"
-          data-testid="tag-rename"
-          className="options-nav-row-delete"
-          aria-label={`${copy.renameTagLabel} ${item.name}`}
-          onClick={() => startRename(item)}>
-          <AppIcon name="edit" size={12} />
-        </button>
-        <button
-          type="button"
-          data-testid="tag-edit-aliases"
-          className="options-nav-row-delete"
-          aria-label={`${copy.editTagAliasesLabel} ${item.name}`}
-          onClick={() => startAliasEdit(item)}>
-          <AppIcon name="tag" size={12} />
-        </button>
-        <button
-          type="button"
-          data-testid="tag-delete"
-          className="options-nav-row-delete"
-          aria-label={`${copy.deleteLabel} ${item.name}`}
-          onClick={() => onDeleteTag(item.tagId, item.name)}>
-          <AppIcon name="trash" size={12} />
-        </button>
-      </span>
-    )
-  }
-
-  function renderParentSelect(item: TagLibraryItem) {
-    if (!hasParentCandidates(rootCandidates, item)) {
-      return (
-        <span
-          data-testid="tag-parent-locked"
-          className="options-meta-copy options-tag-parent-locked"
-          title={item.childCount ? copy.tagParentUnavailable : undefined}>
-          {item.childCount ? `${item.childCount} ${copy.tagChildCountSuffix}` : copy.tagParentNone}
-        </span>
-      )
-    }
-
-    // Large libraries only fill the dropdown the user opened; the selected
-    // parent stays present so the closed control still shows the right label.
-    const showAllOptions =
-      rootCandidates.length <= PARENT_OPTIONS_PRELOAD_LIMIT || openParentSelectTagId === item.tagId
-    const options = showAllOptions
-      ? rootCandidates
-      : rootCandidates.filter((candidate) => candidate.tagId === item.parentId)
-
-    return (
-      <select
-        data-testid="tag-parent-select"
-        data-tag-parent-select={item.tagId}
-        value={item.parentId ?? ""}
-        aria-label={`${copy.tagParentLabel} ${item.name}`}
-        disabled={isSavingTags}
-        className="field-shell options-tag-parent-select"
-        onPointerDown={() => setOpenParentSelectTagId(item.tagId)}
-        onFocus={() => setOpenParentSelectTagId(item.tagId)}
-        onChange={(event) => {
-          const nextParentId = event.currentTarget.value
-          void onSetTagParent(item.tagId, nextParentId || undefined)
-        }}>
-        <option value="">{copy.tagParentNone}</option>
-        {options.map((candidate) =>
-          candidate.tagId === item.tagId ? null : (
-            <option key={candidate.tagId} value={candidate.tagId}>
-              {candidate.name}
-            </option>
-          )
-        )}
-      </select>
-    )
-  }
 
   function renderAliasEditor(item: TagLibraryItem) {
     return (
@@ -812,73 +990,17 @@ export function TagResultsPane({
             ) : visibleTagItems.length ? (
               viewMode === "grid" ? (
                 <div data-testid="tag-results-grid" className="options-tag-grid">
-                  {renderedTagItems.map((item) => {
-                    const isSelected = selectedTagIds.has(item.tagId)
-                    const isRenaming = renamingTagId === item.tagId
-
-                    return (
-                      <article
-                        key={item.tagId}
-                        data-tag-card={item.tagId}
-                        className={cn("options-tag-card options-theme-panel", isSelected && "is-selected")}>
-                        <div className="options-tag-card-head">
-                          <label className="options-tag-card-check">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              aria-label={`${copy.selectBookmark} ${item.name}`}
-                              onChange={() => onToggleTagSelection(item.tagId)}
-                            />
-                          </label>
-                          <AppIcon name="hash" size={14} className="options-tag-card-icon" />
-                          {isRenaming ? (
-                            renderRenameInput(item)
-                          ) : (
-                            <button
-                              type="button"
-                              className="options-tag-card-name"
-                              onClick={() => onViewTagBookmarks(item.tagId)}>
-                              {item.name}
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="options-tag-card-meta">
-                          <span className="options-nav-count">
-                            {item.bookmarkCount} {copy.tagTableBookmarks}
-                          </span>
-                          {item.pendingSuggestionCount ? (
-                            <span className="options-nav-count">
-                              {item.pendingSuggestionCount} {copy.tagTablePending}
-                            </span>
-                          ) : null}
-                          {item.childCount ? (
-                            <span className="options-nav-count">
-                              {item.childCount} {copy.tagChildCountSuffix}
-                            </span>
-                          ) : null}
-                        </div>
-
-                        <div className="options-tag-card-parent">
-                          <span className="options-meta-copy">{copy.tagParentLabel}</span>
-                          {renderParentSelect(item)}
-                        </div>
-
-                        {editingAliasTagId === item.tagId ? (
-                          renderAliasEditor(item)
-                        ) : item.aliases.length ? (
-                          <div className="options-tag-card-aliases options-meta-copy">
-                            {copy.tagAliasesLabel}: {item.aliases.join(", ")}
-                          </div>
-                        ) : null}
-
-                        <div className="options-tag-card-footer">
-                          <span className="options-meta-copy">{formatTimestamp(item.updatedAt, locale)}</span>
-                          {renderRowActions(item)}
-                        </div>
-                      </article>
-                    )
-                  })}
+                  {renderedTagItems.map((item) => (
+                    <TagLibraryCard
+                      key={item.tagId}
+                      item={item}
+                      context={rowContext}
+                      isSelected={selectedTagIds.has(item.tagId)}
+                      isParentSelectOpen={openParentSelectTagId === item.tagId}
+                      renameNode={renamingTagId === item.tagId ? renderRenameInput(item) : null}
+                      aliasNode={editingAliasTagId === item.tagId ? renderAliasEditor(item) : null}
+                    />
+                  ))}
                 </div>
               ) : (
                 <div data-testid="tag-results-table" className="options-tag-table-shell options-theme-panel">
@@ -895,45 +1017,17 @@ export function TagResultsPane({
                       </tr>
                     </thead>
                     <tbody>
-                      {renderedTagItems.map((item) => {
-                        const isSelected = selectedTagIds.has(item.tagId)
-                        const isRenaming = renamingTagId === item.tagId
-
-                        return (
-                          <tr key={item.tagId} data-tag-row={item.tagId} className={cn(isSelected && "is-selected")}>
-                            <td className="options-tag-table-select">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                aria-label={`${copy.selectBookmark} ${item.name}`}
-                                onChange={() => onToggleTagSelection(item.tagId)}
-                              />
-                            </td>
-                            <td>
-                              {isRenaming ? (
-                                renderRenameInput(item)
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="options-tag-card-name"
-                                  onClick={() => onViewTagBookmarks(item.tagId)}>
-                                  {item.name}
-                                </button>
-                              )}
-                              {editingAliasTagId === item.tagId ? (
-                                renderAliasEditor(item)
-                              ) : item.aliases.length ? (
-                                <div className="options-meta-copy">{item.aliases.join(", ")}</div>
-                              ) : null}
-                            </td>
-                            <td>{renderParentSelect(item)}</td>
-                            <td>{item.bookmarkCount}</td>
-                            <td>{item.pendingSuggestionCount}</td>
-                            <td>{formatTimestamp(item.updatedAt, locale)}</td>
-                            <td>{renderRowActions(item)}</td>
-                          </tr>
-                        )
-                      })}
+                      {renderedTagItems.map((item) => (
+                        <TagLibraryRow
+                          key={item.tagId}
+                          item={item}
+                          context={rowContext}
+                          isSelected={selectedTagIds.has(item.tagId)}
+                          isParentSelectOpen={openParentSelectTagId === item.tagId}
+                          renameNode={renamingTagId === item.tagId ? renderRenameInput(item) : null}
+                          aliasNode={editingAliasTagId === item.tagId ? renderAliasEditor(item) : null}
+                        />
+                      ))}
                     </tbody>
                   </table>
                 </div>

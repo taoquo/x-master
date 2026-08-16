@@ -2,6 +2,7 @@
 // filter and sort behaviour can be unit tested directly.
 import { canonicalTagKey } from "../lib/tags/canonical.ts"
 import type { BookmarkTagRecord, TagRecord, TagSuggestionRecord } from "../lib/types.ts"
+import { compareNaturalNames } from "./collation.ts"
 
 export interface TagLibraryItem {
   tagId: string
@@ -112,7 +113,7 @@ export function countUnparentedTags(items: TagLibraryItem[]) {
 export function getRootTagCandidates(items: TagLibraryItem[]): TagLibraryItem[] {
   return items
     .filter((item) => !item.parentId)
-    .sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" }))
+    .sort((left, right) => compareNaturalNames(left.name, right.name))
 }
 
 export function getParentCandidates(items: TagLibraryItem[], tagId: string): TagLibraryItem[] {
@@ -156,7 +157,7 @@ function matchesTagQuery(item: TagLibraryItem, searchQuery: string) {
 
 function compareTagItems(left: TagLibraryItem, right: TagLibraryItem, sortOrder: TagLibrarySortOrder) {
   if (sortOrder === "name-asc") {
-    return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" })
+    return compareNaturalNames(left.name, right.name)
   }
 
   if (sortOrder === "recent") {
@@ -171,7 +172,7 @@ function compareTagItems(left: TagLibraryItem, right: TagLibraryItem, sortOrder:
     return delta
   }
 
-  return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" })
+  return compareNaturalNames(left.name, right.name)
 }
 
 export function getVisibleTagLibraryItems({
