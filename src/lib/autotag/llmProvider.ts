@@ -242,7 +242,32 @@ function delay(ms: number, sleep?: (ms: number) => Promise<void>) {
 }
 
 // Shared chat/completions call used by tag suggestion batches and by the
-// vocabulary review. One attempt plus one retry, with a backoff on 429.
+// vocabulary review. Optional parameters are dropped one by one when the
+// gateway rejects them, with a backoff on 429.
+//
+// Returns true when an optional parameter named by the error was dropped, so
+// the caller knows the next request differs from the one that just failed.
+function dropRejectedOption(sendOptions: { jsonMode: boolean; temperature: boolean }, error: string) {
+  const detail = error.toLowerCase()
+
+  if (sendOptions.temperature && detail.includes("temperature")) {
+    sendOptions.temperature = false
+    return true
+  }
+
+  if (sendOptions.jsonMode && (detail.includes("response_format") || !detail.includes("temperature"))) {
+    sendOptions.jsonMode = false
+    return true
+  }
+
+  if (sendOptions.temperature) {
+    sendOptions.temperature = false
+    return true
+  }
+
+  return false
+}
+
 export async function requestChatJson(options: {
   settings: Pick<AutoTagLlmSettings, "baseUrl" | "model">
   apiKey: string
@@ -253,9 +278,10 @@ export async function requestChatJson(options: {
   const fetchImpl: FetchLike = options.fetchImpl ?? ((input, init) => fetch(input, init))
   const endpoint = `${resolveApiBaseUrl(options.settings.baseUrl)}/chat/completions`
 
-  async function requestOnce(
-    withJsonMode: boolean
-  ): Promise<{ ok: boolean; rateLimited: boolean; badRequest: boolean; content: string; error?: string }> {
+  async function requestOnce(sendOptions: {
+    jsonMode: boolean
+    temperature: boolean
+  }): Promise<{ ok: boolean; rateLimited: boolean; badRequest: boolean; content: string; error?: string }> {
     const response = await fetchImpl(endpoint, {
       method: "POST",
       headers: {
@@ -265,8 +291,8 @@ export async function requestChatJson(options: {
       body: JSON.stringify({
         model: options.settings.model,
         messages: [{ role: "user", content: options.prompt }],
-        ...(withJsonMode ? { response_format: { type: "json_object" } } : {}),
-        temperature: 0
+        ...(sendOptions.jsonMode ? { response_format: { type: "json_object" } } : {}),
+        ...(sendOptions.temperature ? { temperature: 0 } : {})
       })
     })
 
@@ -293,14 +319,22 @@ export async function requestChatJson(options: {
 
   let lastError = "request-failed"
 
-  // Gateways that proxy non-OpenAI models often reject response_format with a
-  // 4xx, so the retry drops JSON mode instead of repeating a doomed request.
-  let withJsonMode = true
+  // Gateways that proxy non-OpenAI models reject optional parameters with a 4xx:
+  // some refuse response_format, newer reasoning models refuse temperature. Each
+  // retry drops exactly the parameter the error names instead of repeating a
+  // doomed request, and a request that carries no optional parameter left is the
+  // last one worth sending.
+  const sendOptions = { jsonMode: true, temperature: true }
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  // Transient failures (5xx, network, rate limiting) get exactly one blind
+  // retry; dropping a rejected parameter buys an extra attempt on top of that
+  // budget because the next request is genuinely different.
+  let blindRetriesLeft = 1
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
     let result: { ok: boolean; rateLimited: boolean; badRequest: boolean; content: string; error?: string }
     try {
-      result = await requestOnce(withJsonMode)
+      result = await requestOnce(sendOptions)
     } catch (error) {
       result = {
         ok: false,
@@ -317,13 +351,19 @@ export async function requestChatJson(options: {
 
     lastError = result.error ?? lastError
 
-    if (attempt === 0) {
-      if (result.badRequest && withJsonMode) {
-        withJsonMode = false
+    const dropped = result.badRequest ? dropRejectedOption(sendOptions, lastError) : false
+
+    if (!dropped) {
+      // A 4xx with nothing left to drop is a settled verdict (bad key, quota,
+      // unknown model); only transient failures deserve the blind retry.
+      if (result.badRequest || blindRetriesLeft <= 0) {
+        return { ok: false, content: "", error: lastError }
       }
 
-      await delay(result.rateLimited ? RATE_LIMIT_BACKOFF_MS : 0, options.sleep)
+      blindRetriesLeft -= 1
     }
+
+    await delay(result.rateLimited ? RATE_LIMIT_BACKOFF_MS : 0, options.sleep)
   }
 
   return { ok: false, content: "", error: lastError }

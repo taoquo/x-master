@@ -23,6 +23,15 @@ function chatResponse(results: unknown): Response {
   })
 }
 
+function errorResponse(status: number, message: string): Response {
+  return {
+    ok: false,
+    status,
+    text: async () => JSON.stringify({ error: { message } }),
+    json: async () => ({ error: { message } })
+  } as unknown as Response
+}
+
 test("provider posts batches to chat/completions and parses suggestions", async () => {
   const requests: Array<{ url: string; body: any }> = []
   const provider = createOpenAiCompatibleProvider({
@@ -101,6 +110,90 @@ test("provider backs off on 429 and gives up after the retry", async () => {
 
   assert.equal(calls, 2)
   assert.deepEqual(sleeps, [2000])
+})
+
+test("provider drops a gateway-rejected temperature and retries", async () => {
+  const bodies: Array<Record<string, unknown>> = []
+  const provider = createOpenAiCompatibleProvider({
+    settings: SETTINGS,
+    apiKey: "sk-test",
+    sleep: async () => {},
+    fetchImpl: async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      if (bodies.length === 1) {
+        return errorResponse(400, "`temperature` is deprecated for this model.")
+      }
+      return chatResponse([{ tweetId: "t1", tags: [{ name: "AI", confidence: 0.7 }] }])
+    }
+  })
+
+  const suggestions = await provider.suggestTags({
+    bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+    vocabulary: [{ name: "AI", count: 4 }],
+    allowNewTags: false
+  })
+
+  assert.equal(bodies.length, 2)
+  assert.equal(bodies[0]?.temperature, 0)
+  assert.equal("temperature" in (bodies[1] ?? {}), false)
+  assert.deepEqual(bodies[1]?.response_format, { type: "json_object" })
+  assert.equal(suggestions.length, 1)
+})
+
+test("provider drops response_format then temperature before giving up", async () => {
+  const bodies: Array<Record<string, unknown>> = []
+  const provider = createOpenAiCompatibleProvider({
+    settings: SETTINGS,
+    apiKey: "sk-test",
+    sleep: async () => {},
+    fetchImpl: async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      if (bodies.length === 1) {
+        return errorResponse(400, "response_format is not supported")
+      }
+      if (bodies.length === 2) {
+        return errorResponse(400, "temperature is not supported")
+      }
+      return chatResponse([{ tweetId: "t1", tags: [{ name: "AI", confidence: 0.7 }] }])
+    }
+  })
+
+  const suggestions = await provider.suggestTags({
+    bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+    vocabulary: [{ name: "AI", count: 4 }],
+    allowNewTags: false
+  })
+
+  assert.equal(bodies.length, 3)
+  assert.equal("response_format" in (bodies[1] ?? {}), false)
+  assert.equal("temperature" in (bodies[2] ?? {}), false)
+  assert.equal(suggestions.length, 1)
+})
+
+test("provider stops after one blind retry on an unexplained 400", async () => {
+  let calls = 0
+  const provider = createOpenAiCompatibleProvider({
+    settings: SETTINGS,
+    apiKey: "sk-test",
+    sleep: async () => {},
+    fetchImpl: async () => {
+      calls += 1
+      return errorResponse(400, "quota exhausted")
+    }
+  })
+
+  await assert.rejects(
+    provider.suggestTags({
+      bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+      vocabulary: [{ name: "AI", count: 4 }],
+      allowNewTags: false
+    }),
+    /quota exhausted/
+  )
+
+  // The error names no parameter, so both optional parameters are dropped in
+  // turn; a 4xx with nothing left to drop ends the attempt.
+  assert.equal(calls, 3)
 })
 
 test("provider skips the request in closed mode with an empty vocabulary", async () => {
