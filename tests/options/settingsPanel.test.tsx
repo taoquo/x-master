@@ -5,7 +5,7 @@ import React from "react"
 import { act } from "react"
 import { OptionsApp } from "../../src/options/OptionsApp.tsx"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
-import { getSettings } from "../../src/lib/storage/settings.ts"
+import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
 import { cleanupRenders, render, settle } from "../helpers/render.tsx"
 import { installChromeRuntimeHarness } from "../helpers/runtime.ts"
 
@@ -108,6 +108,31 @@ test("keyword rules can be added and removed with persistence", async () => {
   stored = await getSettings()
   assert.deepEqual(stored.autoTag.heuristics.keywordRules, [])
   assert.equal(findByTestId(container, "settings-keyword-rule-row"), null)
+})
+
+test("the block list can be cleared from the auto-tag section", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  const current = await getSettings()
+  await saveSettings({
+    ...current,
+    autoTag: { ...current.autoTag, blockedTagKeys: ["ai", "design"] }
+  })
+
+  const { container, dom } = render(<OptionsApp />)
+  await settle()
+
+  await click(dom, findByTestId(container, "footer-settings-toggle"))
+  await click(dom, findByTestId(container, "settings-nav-autotag"))
+
+  const clearButton = findByTestId(container, "settings-autotag-clear-blocked")
+  assert.ok(clearButton)
+  assert.ok(clearButton.textContent?.includes("2"))
+
+  await click(dom, clearButton)
+
+  assert.deepEqual((await getSettings()).autoTag.blockedTagKeys, [])
+  assert.equal(findByTestId(container, "settings-autotag-clear-blocked"), null)
 })
 
 test("sync buffer pages persist from the sync section", async () => {

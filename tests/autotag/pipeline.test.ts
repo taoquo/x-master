@@ -65,7 +65,8 @@ test("runAutoTagPipeline is a no-op when auto-tagging is disabled", async () => 
     llmFailedBatchCount: 0,
     newTagBudget: 0,
     vocabularySize: 0,
-    blockedTagKeyCount: 0
+    blockedTagKeyCount: 0,
+    blockedDroppedCount: 0
   })
   assert.equal((await getAllTagSuggestions()).length, 0)
 })
@@ -305,6 +306,33 @@ test("blocked tag keys are never suggested again", async () => {
 
   assert.equal(result.suggestedCount, 0)
   assert.equal((await getAllTagSuggestions()).length, 0)
+})
+
+test("a run whose every suggestion is blocked reports all-blocked, not ok", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "open" })
+  const settings = await getSettings()
+  await saveSettings({
+    ...settings,
+    autoTag: { ...settings.autoTag, blockedTagKeys: ["ai", "design"] }
+  })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await upsertBookmarks([makeBookmark("t1")])
+
+  const { provider } = makeStubProvider([
+    [{ tweetId: "t1", tags: [{ name: "AI", confidence: 0.9 }, { name: "Design", confidence: 0.8 }] }]
+  ])
+  const result = await runAutoTagPipeline({ createLlmProvider: () => provider })
+
+  // Reporting this as "ok, 0 suggestions" is what made a poisoned block list
+  // look like a broken feature.
+  assert.equal(result.outcome, "all-blocked")
+  assert.equal(result.blockedDroppedCount, 2)
+  assert.equal(result.suggestedCount, 0)
+  const stored = await getSettings()
+  assert.equal(stored.lastAutoTagRun?.outcome, "all-blocked")
+  assert.equal(stored.lastAutoTagRun?.blockedDroppedCount, 2)
 })
 
 test("a failing batch is isolated and reported, earlier batches stay persisted", async () => {

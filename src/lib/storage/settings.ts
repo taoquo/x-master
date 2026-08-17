@@ -207,6 +207,7 @@ const AUTO_TAG_RUN_OUTCOMES = new Set<AutoTagRunOutcome>([
   "missing-api-key",
   "no-candidates",
   "empty-vocabulary",
+  "all-blocked",
   "failed"
 ])
 
@@ -242,6 +243,7 @@ function normalizeAutoTagRunSummary(value: unknown): AutoTagRunSummary | undefin
     newTagBudget: normalizeCount(record.newTagBudget),
     vocabularySize: normalizeCount(record.vocabularySize),
     blockedTagKeyCount: normalizeCount(record.blockedTagKeyCount),
+    blockedDroppedCount: normalizeCount(record.blockedDroppedCount),
     ...(error ? { error } : {})
   }
 }

@@ -83,3 +83,15 @@ export async function unblockTagKey(tagName: string) {
     }
   }))
 }
+
+// Empties the block list in one go. Bulk deletions can block hundreds of names,
+// including mainstream subjects the user never meant to ban forever, which
+// starves both the rules and the LLM with no visible cause.
+export async function clearBlockedTagKeys() {
+  await updateSettings((current) => ({
+    autoTag: {
+      ...current.autoTag,
+      blockedTagKeys: []
+    }
+  }))
+}

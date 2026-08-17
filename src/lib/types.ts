@@ -173,6 +173,10 @@ export type AutoTagRunOutcome =
   // has nothing to choose from. Without its own outcome this ran as "ok" and
   // reported "done, 0 suggestions" while never issuing a single request.
   | "empty-vocabulary"
+  // The model answered, but every tag it proposed is on the block list left
+  // behind by deleted tags. Without its own outcome this looked like a success
+  // that produced nothing.
+  | "all-blocked"
   | "failed"
 
 export interface AutoTagRunSummary {
@@ -189,6 +193,8 @@ export interface AutoTagRunSummary {
   // Canonical keys of deliberately deleted tags. Surfaced because a long block
   // list silently starves both the rules and the LLM.
   blockedTagKeyCount?: number
+  // Suggestions dropped by that block list during this run.
+  blockedDroppedCount?: number
   error?: string
 }
 

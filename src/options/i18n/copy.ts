@@ -249,6 +249,11 @@ export function getOptionsCopy(locale: Locale) {
       settingsAutoTagResultFailed: "LLM 分析失败",
       settingsAutoTagResultDetail: "候选 {candidate} 条，本次分析 {processed} 条，批次 {batches}（失败 {failed}），词表 {vocabulary} 个，新标签额度 {budget}。",
       settingsAutoTagResultBlocked: "已屏蔽 {blocked} 个标签名（删除标签时写入），这些名字不会再被建议。",
+      settingsAutoTagResultAllBlocked:
+        "模型给出了标签，但全部命中屏蔽名单（删除标签时写入），因此本次没有新增建议。清空屏蔽名单后再试。",
+      settingsAutoTagResultBlockedDropped: "本次有 {dropped} 条建议因命中屏蔽名单被丢弃。",
+      settingsClearBlockedTags: "清空屏蔽名单",
+      settingsClearBlockedTagsDone: "屏蔽名单已清空。",
       settingsAutoTagVocabularyFull: "标签数量已达健康上限，本次不会创建新标签。",
       settingsLlmEnabled: "启用 LLM 智能标签",
       settingsLlmEnabledHint: "规则覆盖不到的书签交给大模型分析，需配置 API Key。仅发送推文文本与作者名。",
@@ -526,6 +531,11 @@ export function getOptionsCopy(locale: Locale) {
     settingsAutoTagResultFailed: "LLM analysis failed",
     settingsAutoTagResultDetail: "{candidate} candidates, {processed} analyzed, {batches} batches ({failed} failed), {vocabulary} tags in vocabulary, new tag budget {budget}.",
     settingsAutoTagResultBlocked: "{blocked} tag names are blocked from deletions and will never be suggested again.",
+    settingsAutoTagResultAllBlocked:
+      "The model returned tags, but every name is on the block list left behind by deleted tags, so nothing was suggested. Clear the block list and try again.",
+    settingsAutoTagResultBlockedDropped: "{dropped} suggestions were dropped by the block list in this run.",
+    settingsClearBlockedTags: "Clear block list",
+    settingsClearBlockedTagsDone: "Block list cleared.",
     settingsAutoTagVocabularyFull: "The tag library reached its healthy size, so this run cannot mint new tags.",
     settingsLlmEnabled: "Enable LLM smart tagging",
     settingsLlmEnabledHint: "Bookmarks the rules cannot cover are analyzed by an LLM. Requires an API key. Only tweet text and author names are sent.",

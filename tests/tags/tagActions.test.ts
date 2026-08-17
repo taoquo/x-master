@@ -9,7 +9,12 @@ import {
   insertNewTagSuggestions
 } from "../../src/lib/storage/suggestionsStore.ts"
 import { createTag, getAllTags } from "../../src/lib/storage/tagsStore.ts"
-import { deleteTagPermanently, deleteTagsPermanently, unblockTagKey } from "../../src/lib/tags/tagActions.ts"
+import {
+  clearBlockedTagKeys,
+  deleteTagPermanently,
+  deleteTagsPermanently,
+  unblockTagKey
+} from "../../src/lib/tags/tagActions.ts"
 
 function installChromeStorageMock() {
   let stored: Record<string, unknown> = {}
@@ -120,5 +125,18 @@ test("unblockTagKey lets a deleted name come back", async () => {
   // Unknown or empty names are no-ops.
   await unblockTagKey("  ")
   await unblockTagKey("Rust")
+  assert.deepEqual((await getSettings()).autoTag.blockedTagKeys, [])
+})
+
+test("clearBlockedTagKeys empties the whole block list", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+
+  const first = await createTag({ name: "AI" })
+  const second = await createTag({ name: "Design" })
+  await deleteTagsPermanently([{ tagId: first.id }, { tagId: second.id }])
+  assert.equal((await getSettings()).autoTag.blockedTagKeys.length, 2)
+
+  await clearBlockedTagKeys()
   assert.deepEqual((await getSettings()).autoTag.blockedTagKeys, [])
 })

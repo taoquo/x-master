@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react"
 import type { AutoTagRunSummary, ExtensionSettings, KeywordTagRule, Locale, ThemePreference } from "../../lib/types.ts"
 import { getSettings, updateSettings } from "../../lib/storage/settings.ts"
 import { getSecrets, saveSecrets } from "../../lib/storage/secrets.ts"
+import { clearBlockedTagKeys } from "../../lib/tags/tagActions.ts"
 import { AUTOTAG_RUN_MESSAGE, LLM_TEST_CONNECTION_MESSAGE } from "../../lib/runtime/messages.ts"
 import { subscribeAutoTagProgress, type AutoTagProgress } from "../../lib/runtime/autotagProgress.ts"
 import { AppIcon } from "../../ui/icons.tsx"
@@ -44,6 +45,7 @@ function SettingsToggleRow({
 function describeAutoTagOutcome(summary: AutoTagRunSummary, copy: OptionsCopy): string {
   if (summary.outcome === "no-candidates") return copy.settingsAutoTagResultNoCandidates
   if (summary.outcome === "empty-vocabulary") return copy.settingsAutoTagResultEmptyVocabulary
+  if (summary.outcome === "all-blocked") return copy.settingsAutoTagResultAllBlocked
   if (summary.outcome === "llm-disabled") return copy.settingsAutoTagResultLlmDisabled
   if (summary.outcome === "missing-api-key") return copy.settingsAutoTagResultMissingKey
   if (summary.outcome === "failed") {
@@ -155,6 +157,16 @@ export function SettingsPanel({
     }
 
     updateAutoTag({ heuristics: { ...settings.autoTag.heuristics, ...patch } })
+  }
+
+  // Bulk tag deletions can block hundreds of mainstream names, which silently
+  // starves every later run. This is the only way back out of that state.
+  async function clearBlockedTags() {
+    await clearBlockedTagKeys()
+    setSettings((current) =>
+      current ? { ...current, autoTag: { ...current.autoTag, blockedTagKeys: [] } } : current
+    )
+    setAutoTagRunMessage(copy.settingsClearBlockedTagsDone)
   }
 
   function updateLlm(patch: Partial<ExtensionSettings["autoTag"]["llm"]>) {
@@ -542,12 +554,31 @@ export function SettingsPanel({
                             )}
                           </p>
                         ) : null}
+                        {autoTagRunSummary.blockedDroppedCount ? (
+                          <p data-testid="settings-autotag-blocked-dropped" className="options-meta-copy">
+                            {copy.settingsAutoTagResultBlockedDropped.replace(
+                              "{dropped}",
+                              String(autoTagRunSummary.blockedDroppedCount)
+                            )}
+                          </p>
+                        ) : null}
                         {autoTagRunSummary.newTagBudget === 0 &&
                         settings.autoTag.llm.tagVocabularyMode !== "closed" ? (
                           <p data-testid="settings-autotag-vocabulary-full" className="options-meta-copy">
                             {copy.settingsAutoTagVocabularyFull}
                           </p>
                         ) : null}
+                      </div>
+                    ) : null}
+                    {settings.autoTag.blockedTagKeys.length ? (
+                      <div className="options-settings-actions">
+                        <button
+                          type="button"
+                          data-testid="settings-autotag-clear-blocked"
+                          className="chip-button"
+                          onClick={() => void clearBlockedTags()}>
+                          {`${copy.settingsClearBlockedTags} (${settings.autoTag.blockedTagKeys.length})`}
+                        </button>
                       </div>
                     ) : null}
                   </div>
