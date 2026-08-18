@@ -90,6 +90,9 @@ function OptionsScreen() {
   const [tagLibrarySortOrder, setTagLibrarySortOrder] = useState<TagLibrarySortOrder>("count-desc")
   const [tagViewMode, setTagViewMode] = useState<TagViewMode>("grid")
   const [focusedGraphTagId, setFocusedGraphTagId] = useState<string | null>(null)
+  // Authors stay off by default: the tag core is the primary read, the author
+  // ring is the "why are these connected" overlay.
+  const [graphShowAuthors, setGraphShowAuthors] = useState(false)
   const [tagFilterPopoverOpen, setTagFilterPopoverOpen] = useState(false)
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(() => new Set())
   const [mergeTargetTagId, setMergeTargetTagId] = useState("")
@@ -324,6 +327,7 @@ function OptionsScreen() {
       tags: workspace.tags,
       bookmarkTags: workspace.bookmarkTags,
       bookmarks: workspace.bookmarks,
+      includeAuthors: graphShowAuthors,
       scope: {
         ...EMPTY_GRAPH_SCOPE,
         activeAuthorHandles,
@@ -333,6 +337,7 @@ function OptionsScreen() {
   }, [
     activeAuthorHandles,
     deferredTagSearchQuery,
+    graphShowAuthors,
     libraryMode,
     tagViewMode,
     workspace.bookmarkTags,
@@ -857,6 +862,8 @@ function OptionsScreen() {
                   onViewModeChange={setTagViewMode}
                   graphModel={tagGraphModel}
                   focusedGraphTagId={focusedGraphTagId}
+                  graphShowAuthors={graphShowAuthors}
+                  onToggleGraphAuthors={() => setGraphShowAuthors((current) => !current)}
                   onFocusGraphTag={setFocusedGraphTagId}
                   filterPopoverOpen={tagFilterPopoverOpen}
                   onFilterPopoverOpenChange={setTagFilterPopoverOpen}

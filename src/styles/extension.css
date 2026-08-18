@@ -4409,6 +4409,12 @@
     gap: 12px;
   }
 
+  .options-tag-graph-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
   .options-tag-graph-canvas {
     display: block;
     width: 100%;
@@ -4436,6 +4442,28 @@
 
   .options-tag-graph-edge.is-dimmed {
     opacity: 0.16;
+  }
+
+  .options-tag-graph-edge.is-author-tag {
+    stroke: color-mix(in srgb, var(--text-tertiary) 34%, transparent);
+    stroke-dasharray: 2 5;
+  }
+
+  .options-tag-graph-author-dot {
+    fill: color-mix(in srgb, var(--surface-muted) 40%, var(--theme-panel-bg));
+    stroke: color-mix(in srgb, var(--text-secondary) 48%, transparent);
+    stroke-width: 2;
+  }
+
+  .options-tag-graph-author-label {
+    fill: var(--text-tertiary);
+    font-size: 12px;
+    font-weight: 500;
+    pointer-events: none;
+  }
+
+  .options-tag-graph-author.is-dimmed {
+    opacity: 0.2;
   }
 
   .options-tag-graph-node-dot {

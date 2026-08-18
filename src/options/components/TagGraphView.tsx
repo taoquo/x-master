@@ -35,6 +35,8 @@ export interface TagGraphViewProps {
   copy: OptionsCopy
   model: GraphViewModel
   focusedTagId: string | null
+  showAuthors: boolean
+  onToggleAuthors: () => void
   onFocusTag: (tagId: string | null) => void
   onViewTagBookmarks: (tagId: string) => void
 }
@@ -43,6 +45,8 @@ export function TagGraphView({
   copy,
   model,
   focusedTagId,
+  showAuthors,
+  onToggleAuthors,
   onFocusTag,
   onViewTagBookmarks
 }: TagGraphViewProps) {
@@ -52,6 +56,17 @@ export function TagGraphView({
   const focusedNode = focusedTagId
     ? model.nodes.find((node) => node.tagId === focusedTagId)
     : undefined
+  const nodeById = new Map(model.nodes.map((node) => [node.tagId, node]))
+  const authorNodeByHandle = new Map(model.authorNodes.map((node) => [node.authorHandle, node]))
+  // With a tag focused, only that tag's authors stay lit; otherwise the author
+  // ring adds noise instead of explanation.
+  const focusedAuthorHandles = focusedTagId
+    ? new Set(
+        model.authorEdges
+          .filter((edge) => edge.tagId === focusedTagId)
+          .map((edge) => edge.authorHandle)
+      )
+    : null
 
   return (
     <div data-testid="tag-results-graph" className="options-tag-graph-shell options-theme-panel">
@@ -59,16 +74,27 @@ export function TagGraphView({
         <span data-testid="tag-graph-summary" className="options-meta-copy">
           {model.nodes.length} {copy.tagsCountSuffix} · {model.edges.length} {copy.graphEdgesSuffix}
           {model.hiddenTagCount ? ` · ${model.hiddenTagCount} ${copy.graphHiddenSuffix}` : ""}
+          {showAuthors ? ` · ${model.authorNodes.length} ${copy.graphAuthorNodesSuffix}` : ""}
         </span>
-        {focusedTagId ? (
+        <div className="options-tag-graph-head-actions">
           <button
             type="button"
-            data-testid="tag-graph-clear-focus"
-            className="options-secondary-button"
-            onClick={() => onFocusTag(null)}>
-            {copy.graphClearFocus}
+            data-testid="tag-graph-toggle-authors"
+            className={cn("options-secondary-button", showAuthors && "is-active")}
+            aria-pressed={showAuthors}
+            onClick={onToggleAuthors}>
+            {copy.graphShowAuthors}
           </button>
-        ) : null}
+          {focusedTagId ? (
+            <button
+              type="button"
+              data-testid="tag-graph-clear-focus"
+              className="options-secondary-button"
+              onClick={() => onFocusTag(null)}>
+              {copy.graphClearFocus}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {model.nodes.length ? (
@@ -107,6 +133,33 @@ export function TagGraphView({
               )
             })}
           </g>
+          {showAuthors ? (
+            <g className="options-tag-graph-author-edges">
+              {model.authorEdges.map((edge) => {
+                const source = authorNodeByHandle.get(edge.authorHandle)
+                const target = nodeById.get(edge.tagId)
+                if (!source || !target) {
+                  return null
+                }
+
+                const isActive = !focusedTagId || edge.tagId === focusedTagId
+
+                return (
+                  <line
+                    key={`author:${edge.authorHandle}:${edge.tagId}`}
+                    data-graph-author-edge={`${edge.authorHandle}:${edge.tagId}`}
+                    className={cn("options-tag-graph-edge", "is-author-tag", !isActive && "is-dimmed")}
+                    x1={toViewBoxX(source.x)}
+                    y1={toViewBoxY(source.y)}
+                    x2={toViewBoxX(target.x)}
+                    y2={toViewBoxY(target.y)}
+                    strokeWidth={0.75 + edge.weight * 2}>
+                    <title>{`@${edge.authorHandle} — ${target.name} · ${copy.graphAuthorTagLink} (${edge.rawCount})`}</title>
+                  </line>
+                )
+              })}
+            </g>
+          ) : null}
           <g className="options-tag-graph-nodes">
             {model.nodes.map((node) => {
               const isFocused = node.tagId === focusedTagId
@@ -140,6 +193,34 @@ export function TagGraphView({
               )
             })}
           </g>
+          {showAuthors ? (
+            <g className="options-tag-graph-author-nodes">
+              {model.authorNodes.map((node) => {
+                const isDimmed = Boolean(focusedAuthorHandles) && !focusedAuthorHandles?.has(node.authorHandle)
+
+                return (
+                  <g
+                    key={`author:${node.authorHandle}`}
+                    data-graph-author-node={node.authorHandle}
+                    className={cn("options-tag-graph-author", isDimmed && "is-dimmed")}>
+                    <circle
+                      cx={toViewBoxX(node.x)}
+                      cy={toViewBoxY(node.y)}
+                      r={node.radius}
+                      className="options-tag-graph-author-dot"
+                    />
+                    <text
+                      x={toViewBoxX(node.x)}
+                      y={toViewBoxY(node.y) + node.radius + 12}
+                      className="options-tag-graph-author-label"
+                      textAnchor="middle">
+                      {`@${node.authorHandle}`}
+                    </text>
+                  </g>
+                )
+              })}
+            </g>
+          ) : null}
         </svg>
       ) : null}
 

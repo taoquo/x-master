@@ -15,6 +15,22 @@ export interface TagRelationAuthor {
   count: number
 }
 
+// Authors are first-class nodes when the caller asks for them: the tag/author
+// bipartite layer is what turns "topics that sit together" into "people who
+// connect topics", which is the base signal the 3D view will need.
+export interface TagRelationAuthorNode {
+  authorHandle: string
+  bookmarkCount: number
+  tagCount: number
+}
+
+export interface AuthorTagEdge {
+  authorHandle: string
+  tagId: string
+  weight: number
+  rawCount: number
+}
+
 export interface TagRelationNode {
   tagId: string
   name: string
@@ -38,6 +54,8 @@ export interface TagRelationEdge {
 export interface TagRelationGraph {
   nodes: TagRelationNode[]
   edges: TagRelationEdge[]
+  authorNodes: TagRelationAuthorNode[]
+  authorEdges: AuthorTagEdge[]
   droppedEdgeCount: number
 }
 
@@ -47,6 +65,9 @@ export interface TagRelationGraphOptions {
   minAuthorBridgeCount?: number
   maxEdgesPerNode?: number
   topAuthorsPerTag?: number
+  includeAuthors?: boolean
+  minAuthorTagCount?: number
+  maxAuthors?: number
 }
 
 export const DEFAULT_TAG_RELATION_OPTIONS: Required<TagRelationGraphOptions> = {
@@ -54,7 +75,10 @@ export const DEFAULT_TAG_RELATION_OPTIONS: Required<TagRelationGraphOptions> = {
   minCooccurrenceWeight: 0.05,
   minAuthorBridgeCount: 2,
   maxEdgesPerNode: 8,
-  topAuthorsPerTag: 3
+  topAuthorsPerTag: 3,
+  includeAuthors: false,
+  minAuthorTagCount: 2,
+  maxAuthors: 24
 }
 
 const PAIR_SEPARATOR = "\u0000"
@@ -138,6 +162,7 @@ export function buildTagRelationGraph({
 
   const authorCountsByTagId = new Map<string, Map<string, number>>()
   const tagIdsByAuthorHandle = new Map<string, Set<string>>()
+  const taggedBookmarkCountByAuthor = new Map<string, number>()
 
   for (const [bookmarkId, tagIdsForBookmark] of tagIdsByBookmarkId) {
     const authorHandle = authorHandleByBookmarkId.get(bookmarkId)
@@ -146,6 +171,7 @@ export function buildTagRelationGraph({
     }
 
     const tagIdsForAuthor = tagIdsByAuthorHandle.get(authorHandle) ?? new Set<string>()
+    taggedBookmarkCountByAuthor.set(authorHandle, (taggedBookmarkCountByAuthor.get(authorHandle) ?? 0) + 1)
 
     for (const tagId of tagIdsForBookmark) {
       tagIdsForAuthor.add(tagId)
@@ -288,11 +314,94 @@ export function buildTagRelationGraph({
   const keptEdges = applyPerNodeEdgeBudget(weightedEdges, settings.maxEdgesPerNode)
   droppedEdgeCount += weightedEdges.length - keptEdges.length
 
+  const { authorNodes, authorEdges } = settings.includeAuthors
+    ? buildAuthorLayer({
+        tagIdsByAuthorHandle,
+        taggedBookmarkCountByAuthor,
+        authorCountsByTagId,
+        minAuthorTagCount: settings.minAuthorTagCount,
+        maxAuthors: settings.maxAuthors
+      })
+    : { authorNodes: [], authorEdges: [] }
+
   return {
     nodes,
     edges: [...hierarchyEdges, ...keptEdges].sort(compareEdges),
+    authorNodes,
+    authorEdges,
     droppedEdgeCount
   }
+}
+
+// Bipartite author layer: only authors who bridge at least `minAuthorTagCount`
+// topics are worth a node, otherwise every one-off author becomes a leaf and
+// the graph turns into a hairball. Ranking by bridged topics first keeps the
+// connectors, not just the loudest accounts.
+function buildAuthorLayer({
+  tagIdsByAuthorHandle,
+  taggedBookmarkCountByAuthor,
+  authorCountsByTagId,
+  minAuthorTagCount,
+  maxAuthors
+}: {
+  tagIdsByAuthorHandle: Map<string, Set<string>>
+  taggedBookmarkCountByAuthor: Map<string, number>
+  authorCountsByTagId: Map<string, Map<string, number>>
+  minAuthorTagCount: number
+  maxAuthors: number
+}): { authorNodes: TagRelationAuthorNode[]; authorEdges: AuthorTagEdge[] } {
+  if (maxAuthors <= 0) {
+    return { authorNodes: [], authorEdges: [] }
+  }
+
+  const ranked: TagRelationAuthorNode[] = []
+  for (const [authorHandle, tagIdsForAuthor] of tagIdsByAuthorHandle) {
+    if (tagIdsForAuthor.size < Math.max(1, minAuthorTagCount)) {
+      continue
+    }
+
+    ranked.push({
+      authorHandle,
+      bookmarkCount: taggedBookmarkCountByAuthor.get(authorHandle) ?? 0,
+      tagCount: tagIdsForAuthor.size
+    })
+  }
+
+  ranked.sort(
+    (left, right) =>
+      right.tagCount - left.tagCount ||
+      right.bookmarkCount - left.bookmarkCount ||
+      left.authorHandle.localeCompare(right.authorHandle)
+  )
+
+  const authorNodes = ranked.slice(0, maxAuthors)
+  const keptHandles = new Set(authorNodes.map((node) => node.authorHandle))
+  const authorEdges: AuthorTagEdge[] = []
+
+  for (const [tagId, counts] of authorCountsByTagId) {
+    for (const [authorHandle, rawCount] of counts) {
+      if (!keptHandles.has(authorHandle)) {
+        continue
+      }
+
+      const authorTotal = taggedBookmarkCountByAuthor.get(authorHandle) ?? 0
+      authorEdges.push({
+        authorHandle,
+        tagId,
+        weight: authorTotal > 0 ? roundWeight(Math.min(1, rawCount / authorTotal)) : 0,
+        rawCount
+      })
+    }
+  }
+
+  authorEdges.sort(
+    (left, right) =>
+      left.authorHandle.localeCompare(right.authorHandle) ||
+      right.rawCount - left.rawCount ||
+      left.tagId.localeCompare(right.tagId)
+  )
+
+  return { authorNodes, authorEdges }
 }
 
 // An edge survives when it ranks inside the budget of either endpoint, which is

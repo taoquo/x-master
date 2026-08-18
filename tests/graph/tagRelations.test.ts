@@ -29,7 +29,13 @@ function bookmark(id: string, authorHandle: string): BookmarkRecord {
 test("buildTagRelationGraph returns an empty graph for empty inputs", () => {
   const graph = buildTagRelationGraph({ tags: [], bookmarkTags: [] })
 
-  assert.deepEqual(graph, { nodes: [], edges: [], droppedEdgeCount: 0 })
+  assert.deepEqual(graph, {
+    nodes: [],
+    edges: [],
+    authorNodes: [],
+    authorEdges: [],
+    droppedEdgeCount: 0
+  })
 })
 
 test("buildTagRelationGraph normalizes cooccurrence weight with jaccard", () => {
@@ -240,5 +246,83 @@ test("buildTagRelationGraph sorts hierarchy edges ahead of weighted edges", () =
   assert.deepEqual(
     graph.edges.map((edge) => edge.type),
     ["hierarchy", "cooccurrence"]
+  )
+})
+
+test("buildTagRelationGraph keeps the author layer out unless it is requested", () => {
+  const input = {
+    tags: [tag("tag-a", "A"), tag("tag-b", "B")],
+    bookmarkTags: [relation("tweet-1", "tag-a"), relation("tweet-2", "tag-b")],
+    bookmarks: [bookmark("tweet-1", "alice"), bookmark("tweet-2", "alice")]
+  }
+
+  const without = buildTagRelationGraph(input)
+  assert.deepEqual(without.authorNodes, [])
+  assert.deepEqual(without.authorEdges, [])
+
+  const withAuthors = buildTagRelationGraph({ ...input, options: { includeAuthors: true } })
+  assert.deepEqual(withAuthors.authorNodes, [{ authorHandle: "alice", bookmarkCount: 2, tagCount: 2 }])
+  assert.deepEqual(withAuthors.authorEdges, [
+    { authorHandle: "alice", tagId: "tag-a", weight: 0.5, rawCount: 1 },
+    { authorHandle: "alice", tagId: "tag-b", weight: 0.5, rawCount: 1 }
+  ])
+})
+
+test("buildTagRelationGraph drops authors that bridge fewer topics than the floor", () => {
+  const graph = buildTagRelationGraph({
+    tags: [tag("tag-a", "A"), tag("tag-b", "B")],
+    bookmarkTags: [relation("tweet-1", "tag-a"), relation("tweet-2", "tag-a"), relation("tweet-3", "tag-b")],
+    bookmarks: [bookmark("tweet-1", "alice"), bookmark("tweet-2", "alice"), bookmark("tweet-3", "bob")],
+    options: { includeAuthors: true, minAuthorTagCount: 2 }
+  })
+
+  assert.deepEqual(
+    graph.authorNodes.map((node) => node.authorHandle),
+    []
+  )
+
+  const relaxed = buildTagRelationGraph({
+    tags: [tag("tag-a", "A"), tag("tag-b", "B")],
+    bookmarkTags: [relation("tweet-1", "tag-a"), relation("tweet-2", "tag-a"), relation("tweet-3", "tag-b")],
+    bookmarks: [bookmark("tweet-1", "alice"), bookmark("tweet-2", "alice"), bookmark("tweet-3", "bob")],
+    options: { includeAuthors: true, minAuthorTagCount: 1 }
+  })
+
+  assert.deepEqual(
+    relaxed.authorNodes.map((node) => `${node.authorHandle}:${node.bookmarkCount}:${node.tagCount}`),
+    ["alice:2:1", "bob:1:1"]
+  )
+  assert.deepEqual(
+    relaxed.authorEdges.map((edge) => `${edge.authorHandle}->${edge.tagId}@${edge.rawCount}`),
+    ["alice->tag-a@2", "bob->tag-b@1"]
+  )
+})
+
+test("buildTagRelationGraph ranks authors by bridged topics and caps the layer", () => {
+  const graph = buildTagRelationGraph({
+    tags: [tag("tag-a", "A"), tag("tag-b", "B"), tag("tag-c", "C")],
+    bookmarkTags: [
+      relation("tweet-1", "tag-a"),
+      relation("tweet-1", "tag-b"),
+      relation("tweet-2", "tag-c"),
+      relation("tweet-3", "tag-a"),
+      relation("tweet-4", "tag-a")
+    ],
+    bookmarks: [
+      bookmark("tweet-1", "alice"),
+      bookmark("tweet-2", "alice"),
+      bookmark("tweet-3", "bob"),
+      bookmark("tweet-4", "bob")
+    ],
+    options: { includeAuthors: true, minAuthorTagCount: 1, maxAuthors: 1 }
+  })
+
+  assert.deepEqual(
+    graph.authorNodes.map((node) => node.authorHandle),
+    ["alice"]
+  )
+  assert.deepEqual(
+    graph.authorEdges.map((edge) => edge.tagId),
+    ["tag-a", "tag-b", "tag-c"]
   )
 })

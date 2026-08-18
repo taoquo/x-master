@@ -3,15 +3,20 @@
 // layer and every scoping rule can be unit tested.
 import {
   buildTagRelationGraph,
+  type AuthorTagEdge,
   type TagRelationEdge,
   type TagRelationGraph,
   type TagRelationGraphOptions,
-  type TagRelationNode
+  type TagRelationNode,
+  type TagRelationAuthorNode
 } from "../../lib/graph/tagRelations.ts"
 import type { BookmarkRecord, BookmarkTagRecord, TagRecord } from "../../lib/types.ts"
 import { compareNaturalNames } from "../collation.ts"
 
 export const DEFAULT_GRAPH_NODE_LIMIT = 60
+// Authors are opt-in and capped much lower than tags: they exist to explain why
+// two topics touch, not to become the bulk of the canvas.
+export const DEFAULT_GRAPH_AUTHOR_LIMIT = 18
 
 export interface GraphScope {
   activeTagIds: string[]
@@ -25,9 +30,17 @@ export interface GraphViewNode extends TagRelationNode {
   radius: number
 }
 
+export interface GraphViewAuthorNode extends TagRelationAuthorNode {
+  x: number
+  y: number
+  radius: number
+}
+
 export interface GraphViewModel {
   nodes: GraphViewNode[]
   edges: TagRelationEdge[]
+  authorNodes: GraphViewAuthorNode[]
+  authorEdges: AuthorTagEdge[]
   totalTagCount: number
   hiddenTagCount: number
   droppedEdgeCount: number
@@ -42,6 +55,8 @@ export const EMPTY_GRAPH_SCOPE: GraphScope = {
 export const EMPTY_GRAPH_VIEW_MODEL: GraphViewModel = {
   nodes: [],
   edges: [],
+  authorNodes: [],
+  authorEdges: [],
   totalTagCount: 0,
   hiddenTagCount: 0,
   droppedEdgeCount: 0
@@ -169,12 +184,36 @@ function assignLayout(nodes: TagRelationNode[]): GraphViewNode[] {
   })
 }
 
+// Authors ride an outer ring so the tag core stays readable. Order is stable
+// (the relation layer already sorted them), which keeps DOM snapshots stable.
+function assignAuthorLayout(nodes: TagRelationAuthorNode[]): GraphViewAuthorNode[] {
+  if (!nodes.length) {
+    return []
+  }
+
+  const maxBookmarkCount = nodes.reduce((max, node) => Math.max(max, node.bookmarkCount), 0)
+
+  return nodes.map((node, index) => {
+    const angle = (index / nodes.length) * Math.PI * 2 + Math.PI / nodes.length
+    const scale = maxBookmarkCount > 0 ? node.bookmarkCount / maxBookmarkCount : 0
+
+    return {
+      ...node,
+      x: Math.round((0.5 + Math.cos(angle) * 0.49) * 1000) / 1000,
+      y: Math.round((0.5 + Math.sin(angle) * 0.49) * 1000) / 1000,
+      radius: Math.round((4 + Math.sqrt(scale) * 7) * 100) / 100
+    }
+  })
+}
+
 export function buildGraphViewModel({
   tags,
   bookmarkTags,
   bookmarks = [],
   scope = EMPTY_GRAPH_SCOPE,
   nodeLimit = DEFAULT_GRAPH_NODE_LIMIT,
+  authorLimit = DEFAULT_GRAPH_AUTHOR_LIMIT,
+  includeAuthors = false,
   relationOptions
 }: {
   tags: TagRecord[]
@@ -182,6 +221,8 @@ export function buildGraphViewModel({
   bookmarks?: BookmarkRecord[]
   scope?: GraphScope
   nodeLimit?: number
+  authorLimit?: number
+  includeAuthors?: boolean
   relationOptions?: TagRelationGraphOptions
 }): GraphViewModel {
   const scopedBookmarkTags = selectScopedBookmarkTags({
@@ -194,7 +235,7 @@ export function buildGraphViewModel({
     tags,
     bookmarkTags: scopedBookmarkTags,
     bookmarks,
-    options: relationOptions
+    options: { ...relationOptions, includeAuthors, maxAuthors: Math.max(0, authorLimit) }
   })
 
   const focusTagIds = selectFocusTagIds(graph, scope.activeTagIds)
@@ -215,9 +256,17 @@ export function buildGraphViewModel({
     (edge) => keptTagIds.has(edge.sourceTagId) && keptTagIds.has(edge.targetTagId)
   )
 
+  // An author only stays on the canvas while at least one of its topics is still
+  // visible, so scoping a tag never leaves floating author dots behind.
+  const authorEdges = graph.authorEdges.filter((edge) => keptTagIds.has(edge.tagId))
+  const connectedHandles = new Set(authorEdges.map((edge) => edge.authorHandle))
+  const authorNodes = graph.authorNodes.filter((node) => connectedHandles.has(node.authorHandle))
+
   return {
     nodes: assignLayout(kept),
     edges,
+    authorNodes: assignAuthorLayout(authorNodes),
+    authorEdges,
     totalTagCount: graph.nodes.length,
     hiddenTagCount: graph.nodes.length - kept.length,
     droppedEdgeCount: graph.droppedEdgeCount

@@ -461,6 +461,41 @@ test("OptionsApp renders the tag relation graph and focuses a tag from the node 
   assert.equal(container.querySelectorAll("[data-bookmark-card]").length, 1)
 })
 
+test("OptionsApp reveals the author layer in the tag relation graph on demand", async () => {
+  const { researchTag } = await seedTagWorkspace()
+  // Alice now carries two tags, which is the minimum for an author bridge node.
+  await attachTagToBookmark({ bookmarkId: "tweet-tag-1", tagId: researchTag.id })
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+  await enterTagManagement(container, dom)
+
+  const graphToggle = findByTestId(container, "tag-view-toggle-graph") as HTMLButtonElement | null
+  assert.ok(graphToggle)
+  await act(async () => {
+    graphToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.equal(container.querySelectorAll("[data-graph-author-node]").length, 0)
+
+  const authorToggle = findByTestId(container, "tag-graph-toggle-authors") as HTMLButtonElement | null
+  assert.ok(authorToggle)
+  assert.equal(authorToggle?.getAttribute("aria-pressed"), "false")
+  await act(async () => {
+    authorToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  assert.equal(
+    findByTestId(container, "tag-graph-toggle-authors")?.getAttribute("aria-pressed"),
+    "true"
+  )
+  assert.ok(container.querySelector('[data-graph-author-node="alice"]'))
+  assert.ok(container.querySelectorAll("[data-graph-author-edge]").length >= 2)
+  assert.equal(container.querySelectorAll("[data-graph-node]").length, 3)
+})
+
 test("OptionsApp shows the graph empty state when no tags exist", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()

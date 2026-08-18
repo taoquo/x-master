@@ -40,6 +40,8 @@ test("buildGraphViewModel returns an empty model without tags", () => {
   assert.deepEqual(model, {
     nodes: [],
     edges: [],
+    authorNodes: [],
+    authorEdges: [],
     totalTagCount: 0,
     hiddenTagCount: 0,
     droppedEdgeCount: 0
@@ -150,6 +152,63 @@ test("buildGraphViewModel caps nodes at the limit and drops their edges", () => 
   assert.equal(model.hiddenTagCount, 1)
   for (const edge of model.edges) {
     assert.ok(edge.sourceTagId !== "tag-c" && edge.targetTagId !== "tag-c")
+  }
+})
+
+test("buildGraphViewModel lays out the author layer only when it is enabled", () => {
+  const input = {
+    tags: [tag("tag-a", "A"), tag("tag-b", "B")],
+    bookmarkTags: [relation("tweet-1", "tag-a"), relation("tweet-2", "tag-b")],
+    bookmarks: [bookmark("tweet-1", "alice"), bookmark("tweet-2", "alice")]
+  }
+
+  const without = buildGraphViewModel(input)
+  assert.deepEqual(without.authorNodes, [])
+  assert.deepEqual(without.authorEdges, [])
+
+  const withAuthors = buildGraphViewModel({ ...input, includeAuthors: true })
+  assert.deepEqual(
+    withAuthors.authorNodes.map((node) => node.authorHandle),
+    ["alice"]
+  )
+  assert.equal(withAuthors.authorEdges.length, 2)
+
+  for (const node of withAuthors.authorNodes) {
+    assert.ok(node.x >= 0 && node.x <= 1, `x out of range: ${node.x}`)
+    assert.ok(node.y >= 0 && node.y <= 1, `y out of range: ${node.y}`)
+    assert.ok(node.radius > 0)
+  }
+})
+
+test("buildGraphViewModel drops authors whose tags fell outside the node limit", () => {
+  const model = buildGraphViewModel({
+    tags: [tag("tag-a", "A"), tag("tag-b", "B"), tag("tag-c", "C")],
+    bookmarkTags: [
+      relation("tweet-1", "tag-a"),
+      relation("tweet-2", "tag-a"),
+      relation("tweet-3", "tag-b"),
+      relation("tweet-4", "tag-c")
+    ],
+    bookmarks: [
+      bookmark("tweet-1", "alice"),
+      bookmark("tweet-2", "alice"),
+      bookmark("tweet-3", "alice"),
+      bookmark("tweet-4", "carol")
+    ],
+    includeAuthors: true,
+    nodeLimit: 2
+  })
+
+  assert.deepEqual(
+    model.nodes.map((node) => node.tagId).sort(),
+    ["tag-a", "tag-b"]
+  )
+  assert.deepEqual(
+    model.authorNodes.map((node) => node.authorHandle),
+    ["alice"]
+  )
+  for (const edge of model.authorEdges) {
+    assert.notEqual(edge.tagId, "tag-c")
   }
 })
 

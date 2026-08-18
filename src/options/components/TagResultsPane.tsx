@@ -310,6 +310,8 @@ export interface TagResultsPaneProps {
   graphModel: GraphViewModel
   focusedGraphTagId: string | null
   onFocusGraphTag: (tagId: string | null) => void
+  graphShowAuthors: boolean
+  onToggleGraphAuthors: () => void
   filterPopoverOpen: boolean
   onFilterPopoverOpenChange: (open: boolean) => void
   selectedTagIds: Set<string>
@@ -356,6 +358,8 @@ export function TagResultsPane({
   graphModel,
   focusedGraphTagId,
   onFocusGraphTag,
+  graphShowAuthors,
+  onToggleGraphAuthors,
   filterPopoverOpen,
   onFilterPopoverOpenChange,
   selectedTagIds,
@@ -986,6 +990,8 @@ export function TagResultsPane({
                   copy={copy}
                   model={graphModel}
                   focusedTagId={focusedGraphTagId}
+                  showAuthors={graphShowAuthors}
+                  onToggleAuthors={onToggleGraphAuthors}
                   onFocusTag={onFocusGraphTag}
                   onViewTagBookmarks={onViewTagBookmarks}
                 />
