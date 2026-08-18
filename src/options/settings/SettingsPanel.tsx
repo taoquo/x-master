@@ -46,6 +46,7 @@ function describeAutoTagOutcome(summary: AutoTagRunSummary, copy: OptionsCopy): 
   if (summary.outcome === "no-candidates") return copy.settingsAutoTagResultNoCandidates
   if (summary.outcome === "empty-vocabulary") return copy.settingsAutoTagResultEmptyVocabulary
   if (summary.outcome === "all-blocked") return copy.settingsAutoTagResultAllBlocked
+  if (summary.outcome === "budget-exhausted") return copy.settingsAutoTagResultBudgetExhausted
   if (summary.outcome === "llm-disabled") return copy.settingsAutoTagResultLlmDisabled
   if (summary.outcome === "missing-api-key") return copy.settingsAutoTagResultMissingKey
   if (summary.outcome === "failed") {
@@ -559,6 +560,14 @@ export function SettingsPanel({
                             {copy.settingsAutoTagResultBlockedDropped.replace(
                               "{dropped}",
                               String(autoTagRunSummary.blockedDroppedCount)
+                            )}
+                          </p>
+                        ) : null}
+                        {autoTagRunSummary.budgetDroppedCount ? (
+                          <p data-testid="settings-autotag-budget-dropped" className="options-meta-copy">
+                            {copy.settingsAutoTagResultBudgetDropped.replace(
+                              "{dropped}",
+                              String(autoTagRunSummary.budgetDroppedCount)
                             )}
                           </p>
                         ) : null}

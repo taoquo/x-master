@@ -66,7 +66,8 @@ test("runAutoTagPipeline is a no-op when auto-tagging is disabled", async () => 
     newTagBudget: 0,
     vocabularySize: 0,
     blockedTagKeyCount: 0,
-    blockedDroppedCount: 0
+    blockedDroppedCount: 0,
+    budgetDroppedCount: 0
   })
   assert.equal((await getAllTagSuggestions()).length, 0)
 })
@@ -333,6 +334,30 @@ test("a run whose every suggestion is blocked reports all-blocked, not ok", asyn
   const stored = await getSettings()
   assert.equal(stored.lastAutoTagRun?.outcome, "all-blocked")
   assert.equal(stored.lastAutoTagRun?.blockedDroppedCount, 2)
+})
+
+test("a run that only gets new tag names with no budget left reports budget-exhausted", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  // "closed" mode leaves no new-tag budget at all, so every new name the model
+  // proposes is dropped. Before this outcome existed the run reported "ok" with
+  // zero suggestions and looked identical to a broken provider.
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed" })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await createTag({ name: "News" })
+  await upsertBookmarks([makeBookmark("t1")])
+
+  const { provider } = makeStubProvider([
+    [{ tweetId: "t1", tags: [{ name: "Brand New Topic", confidence: 0.9 }] }]
+  ])
+  const result = await runAutoTagPipeline({ createLlmProvider: () => provider })
+
+  assert.equal(result.outcome, "budget-exhausted")
+  assert.equal(result.budgetDroppedCount, 1)
+  assert.equal(result.suggestedCount, 0)
+  const stored = await getSettings()
+  assert.equal(stored.lastAutoTagRun?.outcome, "budget-exhausted")
+  assert.equal(stored.lastAutoTagRun?.budgetDroppedCount, 1)
 })
 
 test("a failing batch is isolated and reported, earlier batches stay persisted", async () => {

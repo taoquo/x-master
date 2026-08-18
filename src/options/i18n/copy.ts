@@ -252,6 +252,9 @@ export function getOptionsCopy(locale: Locale) {
       settingsAutoTagResultAllBlocked:
         "模型给出了标签，但全部命中屏蔽名单（删除标签时写入），因此本次没有新增建议。清空屏蔽名单后再试。",
       settingsAutoTagResultBlockedDropped: "本次有 {dropped} 条建议因命中屏蔽名单被丢弃。",
+      settingsAutoTagResultBudgetExhausted:
+        "模型给出的都是新标签，但本次的新标签额度已用完，因此没有新增建议。把词表模式改成「允许创建新标签」，或先确认几个建议把词表建起来。",
+      settingsAutoTagResultBudgetDropped: "本次有 {dropped} 条建议因新标签额度不足被丢弃。",
       settingsClearBlockedTags: "清空屏蔽名单",
       settingsClearBlockedTagsDone: "屏蔽名单已清空。",
       settingsAutoTagVocabularyFull: "标签数量已达健康上限，本次不会创建新标签。",
@@ -534,6 +537,9 @@ export function getOptionsCopy(locale: Locale) {
     settingsAutoTagResultAllBlocked:
       "The model returned tags, but every name is on the block list left behind by deleted tags, so nothing was suggested. Clear the block list and try again.",
     settingsAutoTagResultBlockedDropped: "{dropped} suggestions were dropped by the block list in this run.",
+    settingsAutoTagResultBudgetExhausted:
+      "The model only proposed new tag names, but this run had no new-tag budget left, so nothing was suggested. Switch the vocabulary mode to allow new tags, or accept a few suggestions first to seed the vocabulary.",
+    settingsAutoTagResultBudgetDropped: "{dropped} suggestions were dropped because the new-tag budget ran out.",
     settingsClearBlockedTags: "Clear block list",
     settingsClearBlockedTagsDone: "Block list cleared.",
     settingsAutoTagVocabularyFull: "The tag library reached its healthy size, so this run cannot mint new tags.",

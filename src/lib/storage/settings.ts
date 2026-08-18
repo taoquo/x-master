@@ -208,6 +208,7 @@ const AUTO_TAG_RUN_OUTCOMES = new Set<AutoTagRunOutcome>([
   "no-candidates",
   "empty-vocabulary",
   "all-blocked",
+  "budget-exhausted",
   "failed"
 ])
 
@@ -244,6 +245,7 @@ function normalizeAutoTagRunSummary(value: unknown): AutoTagRunSummary | undefin
     vocabularySize: normalizeCount(record.vocabularySize),
     blockedTagKeyCount: normalizeCount(record.blockedTagKeyCount),
     blockedDroppedCount: normalizeCount(record.blockedDroppedCount),
+    budgetDroppedCount: normalizeCount(record.budgetDroppedCount),
     ...(error ? { error } : {})
   }
 }

@@ -135,6 +135,44 @@ test("the block list can be cleared from the auto-tag section", async () => {
   assert.equal(findByTestId(container, "settings-autotag-clear-blocked"), null)
 })
 
+test("a budget-exhausted run explains why nothing was suggested", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  const current = await getSettings()
+  await saveSettings({
+    ...current,
+    lastAutoTagRun: {
+      finishedAt: "2026-08-18T00:00:00.000Z",
+      outcome: "budget-exhausted",
+      suggestedCount: 0,
+      pendingCount: 0,
+      candidateCount: 8895,
+      llmProcessedCount: 20,
+      llmBatchCount: 2,
+      llmFailedBatchCount: 0,
+      newTagBudget: 1,
+      vocabularySize: 0,
+      blockedTagKeyCount: 0,
+      blockedDroppedCount: 0,
+      budgetDroppedCount: 19
+    }
+  })
+
+  const { container, dom } = render(<OptionsApp />)
+  await settle()
+
+  await click(dom, findByTestId(container, "footer-settings-toggle"))
+  await click(dom, findByTestId(container, "settings-nav-autotag"))
+
+  const dropped = findByTestId(container, "settings-autotag-budget-dropped")
+  assert.ok(dropped)
+  assert.ok(dropped.textContent?.includes("19"))
+  // The outcome line must name the budget, not read as a generic success.
+  const result = findByTestId(container, "settings-autotag-result")
+  assert.ok(result)
+  assert.equal(/完成/.test(result.textContent ?? ""), false)
+})
+
 test("sync buffer pages persist from the sync section", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()

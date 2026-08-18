@@ -177,6 +177,9 @@ export type AutoTagRunOutcome =
   // behind by deleted tags. Without its own outcome this looked like a success
   // that produced nothing.
   | "all-blocked"
+  // The model answered, but every tag it proposed was new and the run had no
+  // new-tag budget left. Also a "successful" run that stores nothing.
+  | "budget-exhausted"
   | "failed"
 
 export interface AutoTagRunSummary {
@@ -195,6 +198,8 @@ export interface AutoTagRunSummary {
   blockedTagKeyCount?: number
   // Suggestions dropped by that block list during this run.
   blockedDroppedCount?: number
+  // Suggestions dropped because the run had no new-tag budget left.
+  budgetDroppedCount?: number
   error?: string
 }
 

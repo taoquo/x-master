@@ -31,6 +31,9 @@ export interface AutoTagRunResult {
   // on the block list. A large count means the block list, not the model, is
   // the reason a run produced nothing.
   blockedDroppedCount: number
+  // Suggestions dropped because the run had already spent its new-tag budget.
+  // A large count means the guarded budget, not the model, ate the results.
+  budgetDroppedCount: number
   error?: string
 }
 
@@ -76,6 +79,8 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
   insertedCount: number
   // Tags the model returned that the block list rejected.
   blockedDroppedCount: number
+  // Tags the model returned that the new-tag budget rejected.
+  budgetDroppedCount: number
   // Set when the step returned before issuing a single request, so the caller
   // can tell "nothing left to analyze" apart from "nothing to analyze with".
   stoppedReason?: "no-candidates" | "empty-vocabulary"
@@ -104,6 +109,7 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
       failedBatchCount: 0,
       insertedCount: 0,
       blockedDroppedCount: 0,
+      budgetDroppedCount: 0,
       stoppedReason: candidates.length ? "empty-vocabulary" : "no-candidates"
     }
   }
@@ -114,6 +120,7 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
   let failedBatchCount = 0
   let insertedCount = 0
   let blockedDroppedCount = 0
+  let budgetDroppedCount = 0
   let lastError: string | undefined
 
   const vocabulary = new Map<string, LlmVocabularyEntry>()
@@ -171,6 +178,7 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
 
         if (!known) {
           if (!input.allowNewTags || remainingNewTagBudget <= 0) {
+            budgetDroppedCount += 1
             continue
           }
 
@@ -214,6 +222,7 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
     failedBatchCount,
     insertedCount,
     blockedDroppedCount,
+    budgetDroppedCount,
     ...(lastError ? { lastError } : {})
   }
 }
@@ -268,6 +277,7 @@ async function finishRun(result: AutoTagRunResult): Promise<AutoTagRunResult> {
         vocabularySize: result.vocabularySize,
         blockedTagKeyCount: result.blockedTagKeyCount,
         blockedDroppedCount: result.blockedDroppedCount,
+        budgetDroppedCount: result.budgetDroppedCount,
         ...(result.error ? { error: result.error } : {})
       }
     })
@@ -296,7 +306,8 @@ export async function runAutoTagPipeline(options?: {
       newTagBudget: 0,
       vocabularySize: 0,
       blockedTagKeyCount: settings.autoTag.blockedTagKeys.length,
-      blockedDroppedCount: 0
+      blockedDroppedCount: 0,
+      budgetDroppedCount: 0
     })
   }
 
@@ -333,6 +344,7 @@ export async function runAutoTagPipeline(options?: {
   let llmFailedBatchCount = 0
   let newTagBudget = 0
   let llmBlockedDroppedCount = 0
+  let llmBudgetDroppedCount = 0
   let runError: string | undefined
 
   const llmSettings = settings.autoTag.llm
@@ -399,6 +411,7 @@ export async function runAutoTagPipeline(options?: {
         llmInsertedCount = llmResult.insertedCount
         llmSkippedCount = llmResult.suggestions.length - llmResult.insertedCount
         llmBlockedDroppedCount = llmResult.blockedDroppedCount
+        llmBudgetDroppedCount = llmResult.budgetDroppedCount
 
         // A run that issued zero batches while candidates were waiting is never
         // "ok": either there was nothing left to analyze, or the vocabulary was
@@ -414,6 +427,11 @@ export async function runAutoTagPipeline(options?: {
           // The model answered, but every name it proposed is on the block list.
           // Reporting this as "ok" is what made the feature look broken.
           outcome = "all-blocked"
+        } else if (!llmResult.suggestions.length && llmBudgetDroppedCount > 0) {
+          // The model answered with nothing but new tag names while the run had
+          // no new-tag budget left. Same failure shape as "all-blocked": a
+          // successful run that stored nothing, so it needs its own outcome.
+          outcome = "budget-exhausted"
         }
       } catch (error) {
         outcome = "failed"
@@ -435,6 +453,7 @@ export async function runAutoTagPipeline(options?: {
     vocabularySize: tags.length,
     blockedTagKeyCount: settings.autoTag.blockedTagKeys.length,
     blockedDroppedCount: llmBlockedDroppedCount,
+    budgetDroppedCount: llmBudgetDroppedCount,
     ...(runError ? { error: runError } : {})
   })
 }
