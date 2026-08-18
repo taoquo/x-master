@@ -2,6 +2,8 @@ import { createBackgroundMessageHandler } from "../../src/background/index.ts"
 import { resetLocalData } from "../../src/lib/storage/resetLocalData.ts"
 import { loadWorkspaceDataFromLocal } from "../../src/lib/workspace/loadWorkspaceData.ts"
 
+type StorageListener = (changes: Record<string, { newValue?: unknown }>, areaName: string) => void
+
 export function installChromeRuntimeHarness({
   runSync,
   testLlmConnection,
@@ -17,6 +19,7 @@ export function installChromeRuntimeHarness({
   }>
 } = {}) {
   let stored: Record<string, unknown> = {}
+  const storageListeners = new Set<StorageListener>()
   let openOptionsPageCallCount = 0
 
   const handler = createBackgroundMessageHandler({
@@ -50,6 +53,18 @@ export function installChromeRuntimeHarness({
         get: async (key?: string) => (key ? { [key]: stored[key] } : { ...stored }),
         set: async (value: Record<string, unknown>) => {
           stored = { ...stored, ...value }
+          const changes = Object.fromEntries(Object.keys(value).map((key) => [key, { newValue: value[key] }]))
+          for (const listener of storageListeners) {
+            listener(changes, "local")
+          }
+        }
+      },
+      onChanged: {
+        addListener: (listener: StorageListener) => {
+          storageListeners.add(listener)
+        },
+        removeListener: (listener: StorageListener) => {
+          storageListeners.delete(listener)
         }
       }
     },

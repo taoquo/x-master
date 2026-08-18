@@ -247,7 +247,13 @@ function delay(ms: number, sleep?: (ms: number) => Promise<void>) {
 //
 // Returns true when an optional parameter named by the error was dropped, so
 // the caller knows the next request differs from the one that just failed.
-function dropRejectedOption(sendOptions: { jsonMode: boolean; temperature: boolean }, error: string) {
+export type ChatCapabilities = { jsonMode: boolean; temperature: boolean }
+
+export function createChatCapabilities(): ChatCapabilities {
+  return { jsonMode: true, temperature: true }
+}
+
+function dropRejectedOption(sendOptions: ChatCapabilities, error: string) {
   const detail = error.toLowerCase()
 
   if (sendOptions.temperature && detail.includes("temperature")) {
@@ -274,6 +280,7 @@ export async function requestChatJson(options: {
   prompt: string
   fetchImpl?: FetchLike
   sleep?: (ms: number) => Promise<void>
+  capabilities?: ChatCapabilities
 }): Promise<{ ok: boolean; content: string; error?: string }> {
   const fetchImpl: FetchLike = options.fetchImpl ?? ((input, init) => fetch(input, init))
   const endpoint = `${resolveApiBaseUrl(options.settings.baseUrl)}/chat/completions`
@@ -324,7 +331,10 @@ export async function requestChatJson(options: {
   // retry drops exactly the parameter the error names instead of repeating a
   // doomed request, and a request that carries no optional parameter left is the
   // last one worth sending.
-  const sendOptions = { jsonMode: true, temperature: true }
+  // Shared across batches when the caller passes it in: a gateway that rejects
+  // temperature rejects it for every batch, and re-probing per batch wasted one
+  // failing request each time and could exhaust the retry budget on its own.
+  const sendOptions = options.capabilities ?? createChatCapabilities()
 
   // Transient failures (5xx, network, rate limiting) get exactly one blind
   // retry; dropping a rejected parameter buys an extra attempt on top of that
@@ -379,6 +389,9 @@ export function createOpenAiCompatibleProvider(options: {
   fetchImpl?: FetchLike
   sleep?: (ms: number) => Promise<void>
 }): AutoTagLlmProvider {
+  // One capability probe per provider instance, reused by every batch.
+  const capabilities = createChatCapabilities()
+
   return {
     async suggestTags(input) {
       if (!input.bookmarks.length) {
@@ -396,7 +409,8 @@ export function createOpenAiCompatibleProvider(options: {
         apiKey: options.apiKey,
         prompt,
         fetchImpl: options.fetchImpl,
-        sleep: options.sleep
+        sleep: options.sleep,
+        capabilities
       })
 
       if (!result.ok) {

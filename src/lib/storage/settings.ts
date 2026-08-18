@@ -15,7 +15,7 @@ import type { BookmarkSortOrder } from "../search/searchBookmarks.ts"
 import { canonicalTagKey } from "../tags/canonical.ts"
 import { isSyncErrorKind } from "../x/syncErrors.ts"
 
-const SETTINGS_STORAGE_KEY = "settings"
+export const SETTINGS_STORAGE_KEY = "settings"
 const SETTINGS_SCHEMA_VERSION = 6
 const SYNC_STRATEGY_VERSION = 1
 const DEFAULT_LOCALE: Locale = "en"

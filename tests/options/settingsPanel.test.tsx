@@ -173,6 +173,61 @@ test("a budget-exhausted run explains why nothing was suggested", async () => {
   assert.equal(/完成/.test(result.textContent ?? ""), false)
 })
 
+test("the result block follows a later run written by the background worker", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  const current = await getSettings()
+  const failedRun = {
+    finishedAt: "2026-08-17T15:07:59.321Z",
+    outcome: "failed" as const,
+    error: "HTTP 400: `temperature` is deprecated for this model.",
+    suggestedCount: 0,
+    pendingCount: 0,
+    candidateCount: 8895,
+    llmProcessedCount: 0,
+    llmBatchCount: 2,
+    llmFailedBatchCount: 2,
+    newTagBudget: 1,
+    vocabularySize: 0
+  }
+  await saveSettings({ ...current, lastAutoTagRun: failedRun })
+
+  const { container, dom } = render(<OptionsApp />)
+  await settle()
+
+  await click(dom, findByTestId(container, "footer-settings-toggle"))
+  await click(dom, findByTestId(container, "settings-nav-autotag"))
+
+  const before = findByTestId(container, "settings-autotag-result")
+  assert.ok(before?.textContent?.includes("temperature"))
+
+  // A run started elsewhere (sync, popup, an earlier panel visit) only lands in
+  // storage. Without mirroring it the panel keeps showing the stale failure.
+  await act(async () => {
+    await saveSettings({
+      ...(await getSettings()),
+      lastAutoTagRun: {
+        finishedAt: "2026-08-18T00:27:04.259Z",
+        outcome: "ok",
+        suggestedCount: 3,
+        pendingCount: 3,
+        candidateCount: 8895,
+        llmProcessedCount: 20,
+        llmBatchCount: 2,
+        llmFailedBatchCount: 0,
+        newTagBudget: 1,
+        vocabularySize: 0
+      }
+    })
+  })
+  await settle()
+
+  const after = findByTestId(container, "settings-autotag-result")
+  assert.equal(/temperature/.test(after?.textContent ?? ""), false)
+  assert.ok(after?.textContent?.includes("3"))
+  assert.ok(findByTestId(container, "settings-autotag-result-at"))
+})
+
 test("sync buffer pages persist from the sync section", async () => {
   installChromeRuntimeHarness()
   await resetBookmarksDb()

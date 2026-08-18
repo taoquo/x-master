@@ -140,6 +140,37 @@ test("provider drops a gateway-rejected temperature and retries", async () => {
   assert.equal(suggestions.length, 1)
 })
 
+test("provider remembers a rejected temperature across batches", async () => {
+  const bodies: Array<Record<string, unknown>> = []
+  const provider = createOpenAiCompatibleProvider({
+    settings: SETTINGS,
+    apiKey: "sk-test",
+    sleep: async () => {},
+    fetchImpl: async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      bodies.push(body)
+      if ("temperature" in body) {
+        return errorResponse(400, "`temperature` is deprecated for this model.")
+      }
+      return chatResponse([{ tweetId: "t1", tags: [{ name: "AI", confidence: 0.7 }] }])
+    }
+  })
+
+  const input = {
+    bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+    vocabulary: [{ name: "AI", count: 4 }],
+    allowNewTags: false
+  }
+
+  assert.equal((await provider.suggestTags(input)).length, 1)
+  assert.equal(bodies.length, 2)
+
+  // The second batch must not re-probe the parameter the gateway already refused.
+  assert.equal((await provider.suggestTags(input)).length, 1)
+  assert.equal(bodies.length, 3)
+  assert.equal("temperature" in (bodies[2] ?? {}), false)
+})
+
 test("provider drops response_format then temperature before giving up", async () => {
   const bodies: Array<Record<string, unknown>> = []
   const provider = createOpenAiCompatibleProvider({

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react"
 import type { AutoTagRunSummary, ExtensionSettings, KeywordTagRule, Locale, ThemePreference } from "../../lib/types.ts"
-import { getSettings, updateSettings } from "../../lib/storage/settings.ts"
+import { SETTINGS_STORAGE_KEY, getSettings, updateSettings } from "../../lib/storage/settings.ts"
 import { getSecrets, saveSecrets } from "../../lib/storage/secrets.ts"
 import { clearBlockedTagKeys } from "../../lib/tags/tagActions.ts"
 import { AUTOTAG_RUN_MESSAGE, LLM_TEST_CONNECTION_MESSAGE } from "../../lib/runtime/messages.ts"
@@ -10,7 +10,7 @@ import type { OptionsCopy } from "../i18n/copy.ts"
 import type { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
 import type { useDataSafetyActions } from "../hooks/useDataSafetyActions.ts"
 import { InlineMessage } from "../components/common.tsx"
-import { cn } from "../utils.ts"
+import { cn, formatTimestamp } from "../utils.ts"
 
 type SettingsSection = "general" | "sync" | "autotag" | "data-safety"
 
@@ -129,6 +129,31 @@ export function SettingsPanel({
   // The run happens in the background worker, so the panel listens for progress
   // broadcasts instead of holding the message channel open.
   useEffect(() => subscribeAutoTagProgress(setAutoTagProgress), [])
+
+  // The background worker owns the run summary, and a run can also be started
+  // by a sync instead of by this panel. Mirroring storage changes keeps the
+  // result block from showing a stale failure long after a later run succeeded.
+  useEffect(() => {
+    if (typeof chrome === "undefined" || !chrome.storage?.onChanged?.addListener) {
+      return
+    }
+
+    const listener = (changes: Record<string, { newValue?: unknown }>, areaName: string) => {
+      if (areaName !== "local" || !changes[SETTINGS_STORAGE_KEY]) {
+        return
+      }
+
+      void getSettings()
+        .then((loaded) => {
+          setSettings(loaded)
+          setAutoTagRunSummary(loaded.lastAutoTagRun ?? null)
+        })
+        .catch(() => {})
+    }
+
+    chrome.storage.onChanged.addListener(listener)
+    return () => chrome.storage.onChanged.removeListener(listener)
+  }, [])
 
   useEffect(
     () => () => {
@@ -545,6 +570,12 @@ export function SettingsPanel({
                     {autoTagRunSummary ? (
                       <div data-testid="settings-autotag-result" className="options-settings-result">
                         <p className="options-settings-field-label">{copy.settingsAutoTagResultTitle}</p>
+                        <p data-testid="settings-autotag-result-at" className="options-meta-copy">
+                          {copy.settingsAutoTagResultAt.replace(
+                            "{time}",
+                            formatTimestamp(autoTagRunSummary.finishedAt, locale)
+                          )}
+                        </p>
                         <p className="options-meta-copy">{describeAutoTagOutcome(autoTagRunSummary, copy)}</p>
                         <p className="options-meta-copy">{describeAutoTagDetail(autoTagRunSummary, copy)}</p>
                         {autoTagRunSummary.blockedTagKeyCount ? (

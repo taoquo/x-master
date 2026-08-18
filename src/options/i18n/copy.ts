@@ -239,7 +239,8 @@ export function getOptionsCopy(locale: Locale) {
       settingsAutoTagAlreadyRunning: "已有一次分析正在进行，请等待它结束。",
       settingsAutoTagRunTimeout: "分析仍在后台运行，稍后重新打开设置即可看到结果。",
       settingsAutoTagProgress: "正在分析",
-      settingsAutoTagResultTitle: "上次分析结果",
+     settingsAutoTagResultTitle: "上次分析结果",
+      settingsAutoTagResultAt: "记录时间 {time}",
       settingsAutoTagResultOk: "完成：新增 {suggested} 条建议，待确认 {pending} 条。",
       settingsAutoTagResultNoCandidates: "没有需要分析的书签：所有书签都已有标签或已被分析过。",
       settingsAutoTagResultEmptyVocabulary:
@@ -524,7 +525,8 @@ export function getOptionsCopy(locale: Locale) {
     settingsAutoTagAlreadyRunning: "An analysis is already running. Wait for it to finish.",
     settingsAutoTagRunTimeout: "Analysis is still running in the background. Reopen settings later to see the result.",
     settingsAutoTagProgress: "Analyzing",
-    settingsAutoTagResultTitle: "Last analysis",
+   settingsAutoTagResultTitle: "Last analysis",
+    settingsAutoTagResultAt: "Recorded {time}",
     settingsAutoTagResultOk: "Done: {suggested} new suggestions, {pending} awaiting review.",
     settingsAutoTagResultNoCandidates: "Nothing to analyze: every bookmark is already tagged or was analyzed before.",
     settingsAutoTagResultEmptyVocabulary:
