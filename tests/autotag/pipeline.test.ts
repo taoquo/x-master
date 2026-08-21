@@ -5,6 +5,7 @@ import type { AutoTagLlmProvider } from "../../src/lib/autotag/llmProvider.ts"
 import { resolveNewTagBudget, runAutoTagPipeline } from "../../src/lib/autotag/pipeline.ts"
 import { getAllBookmarks, upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
+import { clearLlmAnalysis } from "../../src/lib/storage/llmAnalysisStore.ts"
 import { saveSecrets } from "../../src/lib/storage/secrets.ts"
 import {
   AUTO_TAG_RUN_STALE_MS,
@@ -14,7 +15,7 @@ import {
   requestAutoTagRunCancel,
   saveSettings
 } from "../../src/lib/storage/settings.ts"
-import { getAllTagSuggestions } from "../../src/lib/storage/suggestionsStore.ts"
+import { getAllTagSuggestions, createTagSuggestion, insertNewTagSuggestions } from "../../src/lib/storage/suggestionsStore.ts"
 import { attachTagToBookmark, createTag } from "../../src/lib/storage/tagsStore.ts"
 import type { BookmarkRecord } from "../../src/lib/types.ts"
 
@@ -570,4 +571,129 @@ test("isAutoTagRunStateStale only trusts a moving heartbeat", () => {
   assert.equal(isAutoTagRunStateStale(state, base + AUTO_TAG_RUN_STALE_MS + 1), true)
   // An unparsable heartbeat cannot be trusted to be recent.
   assert.equal(isAutoTagRunStateStale({ ...state, updatedAt: "not-a-date" }, base), true)
+})
+
+// The reported bug: bookmarks the model had already looked at were sent again on
+// every later run. "Analyzed" was inferred from suggestion rows, so the only
+// bookmarks that retired from the queue were the ones that produced a tag. A
+// bookmark the model deliberately skipped produced nothing, looked untouched,
+// and was re-sent forever while newer bookmarks never reached the window.
+test("a bookmark the model returned no tags for is never analyzed twice", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed" })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await createTag({ name: "AI" })
+  await upsertBookmarks([makeBookmark("t1"), makeBookmark("t2")])
+
+  // The model answers, but finds no topic in either bookmark.
+  const first = makeStubProvider([[]])
+  const firstResult = await runAutoTagPipeline({ createLlmProvider: () => first.provider })
+
+  assert.deepEqual(first.calls[0]?.tweetIds, ["t1", "t2"])
+  assert.equal(firstResult.suggestedCount, 0)
+
+  // Both were analyzed, so the next run has nothing left to do instead of
+  // re-sending the same two bookmarks.
+  const second = makeStubProvider([[]])
+  const secondResult = await runAutoTagPipeline({ createLlmProvider: () => second.provider })
+
+  assert.equal(second.calls.length, 0)
+  assert.equal(secondResult.outcome, "no-candidates")
+  assert.equal(secondResult.candidateCount, 0)
+})
+
+// Same failure shape as the skipped bookmark: the model did answer, but the
+// run's own rules threw the answer away, leaving no suggestion row behind.
+test("bookmarks whose only tags were blocked or over budget are not re-analyzed", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed" })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await createTag({ name: "AI" })
+  await upsertBookmarks([makeBookmark("t1"), makeBookmark("t2")])
+
+  const settings = await getSettings()
+  await saveSettings({
+    ...settings,
+    autoTag: { ...settings.autoTag, blockedTagKeys: ["crypto"] }
+  })
+
+  const first = makeStubProvider([
+    [
+      { tweetId: "t1", tags: [{ name: "crypto", confidence: 0.9 }] },
+      { tweetId: "t2", tags: [{ name: "nothing-known", confidence: 0.9 }] }
+    ]
+  ])
+  const firstResult = await runAutoTagPipeline({ createLlmProvider: () => first.provider })
+
+  assert.equal(first.calls.length, 1)
+  assert.equal(firstResult.suggestedCount, 0)
+  // t1 lost its tag to the block list, t2 to the closed vocabulary.
+  assert.equal(firstResult.blockedDroppedCount, 1)
+  assert.equal(firstResult.budgetDroppedCount, 1)
+
+  const second = makeStubProvider([[]])
+  await runAutoTagPipeline({ createLlmProvider: () => second.provider })
+
+  assert.equal(second.calls.length, 0)
+})
+
+// The ledger stores a verdict for a specific question. Change the question and
+// the stored answer stops counting, which is how a prompt fix or a model swap
+// reaches bookmarks that were judged under the old one.
+test("a stored verdict is retried once the model, text or prompt version changes", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed" })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await createTag({ name: "AI" })
+  await upsertBookmarks([makeBookmark("t1")])
+
+  const first = makeStubProvider([[]])
+  await runAutoTagPipeline({ createLlmProvider: () => first.provider })
+  assert.equal(first.calls.length, 1)
+
+  // Same question again: no re-analysis.
+  const repeat = makeStubProvider([[]])
+  await runAutoTagPipeline({ createLlmProvider: () => repeat.provider })
+  assert.equal(repeat.calls.length, 0)
+
+  // Edited text is a different question.
+  await upsertBookmarks([makeBookmark("t1", { text: "a completely different post" })])
+  const afterEdit = makeStubProvider([[]])
+  await runAutoTagPipeline({ createLlmProvider: () => afterEdit.provider })
+  assert.equal(afterEdit.calls.length, 1)
+
+  // So is a different model.
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed", model: "another-model" })
+  const afterModelSwap = makeStubProvider([[]])
+  await runAutoTagPipeline({ createLlmProvider: () => afterModelSwap.provider })
+  assert.equal(afterModelSwap.calls.length, 1)
+})
+
+// Upgrade path: libraries tagged before the ledger existed have suggestion rows
+// but no ledger entries, and must not all be re-sent on the first run after the
+// update.
+test("pre-ledger llm suggestions still retire a bookmark from the queue", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed" })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await createTag({ name: "AI" })
+  await upsertBookmarks([makeBookmark("t1")])
+
+  // A suggestion from a previous version, with no matching ledger row.
+  await insertNewTagSuggestions([
+    createTagSuggestion({ bookmarkId: "t1", tagName: "AI", source: "llm", confidence: 0.8 })!
+  ])
+  await clearLlmAnalysis()
+
+  const { calls } = makeStubProvider([[]])
+  const provider = makeStubProvider([[]])
+  const result = await runAutoTagPipeline({ createLlmProvider: () => provider.provider })
+
+  assert.equal(calls.length, 0)
+  assert.equal(provider.calls.length, 0)
+  assert.equal(result.outcome, "no-candidates")
 })

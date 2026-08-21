@@ -65,6 +65,27 @@ export interface TagSuggestionRecord {
   resolvedAt?: string
 }
 
+// Why the LLM produced nothing for a bookmark. Only "tagged" leaves suggestion
+// rows behind, which is exactly why the other three need their own record: a
+// bookmark the model deliberately skipped is still a bookmark it has seen.
+export type LlmAnalysisOutcome = "tagged" | "no-topic" | "all-blocked" | "budget-dropped"
+
+// One row per bookmark the LLM has looked at. This is the ledger that makes a
+// run idempotent; without it "already analyzed" was inferred from suggestion
+// rows and every zero-result bookmark was re-sent forever.
+export interface LlmAnalysisRecord {
+  bookmarkId: string
+  analyzedAt: string
+  // Invalidation inputs. A verdict is only reusable while the question is
+  // unchanged: a new prompt, a different model, or edited bookmark text all
+  // make the stored answer stale and the bookmark eligible again.
+  promptVersion: number
+  model: string
+  contentHash: string
+  outcome: LlmAnalysisOutcome
+  tagCount: number
+}
+
 export interface SavedViewRecord {
   id: string
   name: string

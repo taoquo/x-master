@@ -7,6 +7,13 @@ import {
 import { broadcastAutoTagProgress } from "../runtime/autotagProgress.ts"
 import { backfillHashtagsFromRawPayloads } from "../storage/backfillHashtags.ts"
 import { getAllBookmarks } from "../storage/bookmarksStore.ts"
+import {
+  createLlmAnalysisRecord,
+  getAllLlmAnalysis,
+  hashAnalyzedContent,
+  isAnalysisReusable,
+  putLlmAnalysisRecords
+} from "../storage/llmAnalysisStore.ts"
 import { getSecrets } from "../storage/secrets.ts"
 import {
   beginAutoTagRunState,
@@ -18,7 +25,13 @@ import { createTagSuggestion, getAllTagSuggestions, insertNewTagSuggestions } fr
 import { getAllBookmarkTags, getAllTags } from "../storage/tagsStore.ts"
 import { canonicalTagKey } from "../tags/canonical.ts"
 import { HEALTHY_TAG_COUNT_MAX } from "../tags/health.ts"
-import type { AutoTagRunOutcome, BookmarkRecord, TagSuggestionRecord } from "../types.ts"
+import type {
+  AutoTagRunOutcome,
+  BookmarkRecord,
+  LlmAnalysisOutcome,
+  LlmAnalysisRecord,
+  TagSuggestionRecord
+} from "../types.ts"
 
 export interface AutoTagRunResult {
   ran: boolean
@@ -54,12 +67,12 @@ export const DEFAULT_LLM_RUN_BUDGET_MS = 8 * 60 * 1000
 interface LlmStepInput {
   bookmarks: BookmarkRecord[]
   taggedBookmarkIds: Set<string>
-  // Bookmarks the LLM already looked at, in any suggestion status. Excluding
-  // them stops a run from re-analyzing the same newest batch forever (rejected
-  // suggestions used to keep the window pinned to the head of the library).
-  // Heuristic suggestions are deliberately NOT part of this set: hashtag and
-  // author rules cover most of the library, and treating them as "analyzed"
-  // starved the LLM step down to zero candidates.
+  // Bookmarks whose stored LLM verdict is still valid. Unlike the old set this
+  // is not inferred from suggestion rows: a bookmark the model looked at and
+  // deliberately skipped has no suggestion, yet it has certainly been analyzed.
+  // Heuristic suggestions are still deliberately NOT part of this set, because
+  // hashtag and author rules cover most of the library and treating them as
+  // "analyzed" starved the LLM step down to zero candidates.
   llmAnalyzedBookmarkIds: Set<string>
   // Bookmarks a rule already suggested a tag for. They stay eligible, but the
   // per-run window prefers bookmarks nothing has touched yet.
@@ -84,6 +97,13 @@ interface LlmStepInput {
   // persisted run state, so the same round-trip refreshes the heartbeat and
   // reads back any cancel the options page requested.
   shouldCancel?: (progress: { processed: number; total: number }) => boolean | Promise<boolean>
+  // Records what the model decided about every bookmark in a finished batch,
+  // including the ones it produced nothing for. Without this the zero-result
+  // bookmarks stayed at the head of the queue and were re-sent every run.
+  persistAnalysis?: (records: LlmAnalysisRecord[]) => Promise<unknown>
+  // Identifies the verdicts this run produces, so a later run can tell whether
+  // a stored verdict still answers the current question.
+  model?: string
 }
 
 // LLM step: serially feeds batches of still-untagged bookmarks to the
@@ -205,8 +225,18 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
     processedCount += batch.length
 
     const batchSuggestions: TagSuggestionRecord[] = []
+    // Every bookmark in a finished batch gets a verdict, even the ones the model
+    // ignored entirely. "The model saw this and said nothing" is a real answer
+    // and has to be recorded, otherwise it is indistinguishable from "never
+    // looked at" and gets re-sent on every later run.
+    const batchVerdicts = new Map<string, { tagged: number; blocked: number; budgetDropped: number }>()
+    for (const bookmark of batch) {
+      batchVerdicts.set(bookmark.tweetId, { tagged: 0, blocked: 0, budgetDropped: 0 })
+    }
 
     for (const result of results) {
+      const verdict = batchVerdicts.get(result.tweetId)
+
       for (const tag of result.tags) {
         const key = canonicalTagKey(tag.name)
         if (!key) {
@@ -215,6 +245,9 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
 
         if (blockedKeys.has(key)) {
           blockedDroppedCount += 1
+          if (verdict) {
+            verdict.blocked += 1
+          }
           continue
         }
 
@@ -223,6 +256,9 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
         if (!known) {
           if (!input.allowNewTags || remainingNewTagBudget <= 0) {
             budgetDroppedCount += 1
+            if (verdict) {
+              verdict.budgetDropped += 1
+            }
             continue
           }
 
@@ -240,6 +276,9 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
         if (suggestion) {
           suggestions.push(suggestion)
           batchSuggestions.push(suggestion)
+          if (verdict) {
+            verdict.tagged += 1
+          }
 
           if (known) {
             known.count += 1
@@ -253,6 +292,36 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
     if (input.persistBatch && batchSuggestions.length) {
       const persisted = await input.persistBatch(batchSuggestions)
       insertedCount += persisted.insertedCount
+    }
+
+    if (input.persistAnalysis) {
+      const textByTweetId = new Map(batch.map((bookmark) => [bookmark.tweetId, bookmark.text]))
+      const records: LlmAnalysisRecord[] = []
+
+      for (const [tweetId, verdict] of batchVerdicts) {
+        // A dropped tag is reported rather than hidden behind "no topic": the
+        // model did find a subject, the run's own rules refused it, and the
+        // ledger has to say which so the outcome stays explainable.
+        const outcome: LlmAnalysisOutcome = verdict.tagged
+          ? "tagged"
+          : verdict.blocked
+            ? "all-blocked"
+            : verdict.budgetDropped
+              ? "budget-dropped"
+              : "no-topic"
+
+        records.push(
+          createLlmAnalysisRecord({
+            bookmarkId: tweetId,
+            model: input.model ?? "",
+            contentHash: hashAnalyzedContent(textByTweetId.get(tweetId) ?? ""),
+            outcome,
+            tagCount: verdict.tagged
+          })
+        )
+      }
+
+      await input.persistAnalysis(records)
     }
 
     broadcastAutoTagProgress({ phase: "llm", processed: processedCount, total: candidates.length })
@@ -366,11 +435,12 @@ export async function runAutoTagPipeline(options?: {
 
   await backfillHashtagsFromRawPayloads()
 
-  const [bookmarks, tags, bookmarkTags, suggestions] = await Promise.all([
+  const [bookmarks, tags, bookmarkTags, suggestions, llmAnalysis] = await Promise.all([
     getAllBookmarks(),
     getAllTags(),
     getAllBookmarkTags(),
-    getAllTagSuggestions()
+    getAllTagSuggestions(),
+    getAllLlmAnalysis()
   ])
 
   broadcastAutoTagProgress({ phase: "heuristics", processed: 0, total: bookmarks.length })
@@ -418,12 +488,32 @@ export async function runAutoTagPipeline(options?: {
         : createOpenAiCompatibleProvider({ settings: llmSettings, apiKey: llmApiKey })
 
       const taggedBookmarkIds = new Set(bookmarkTags.map((bookmarkTag) => bookmarkTag.bookmarkId))
-      // Only previous LLM verdicts retire a bookmark from the LLM queue.
-      // Heuristic (hashtag/author/keyword) suggestions must not, otherwise the
-      // rule step consumes every candidate and the LLM never runs.
+      // The ledger, not the suggestion rows, decides what has been analyzed. A
+      // bookmark the model deliberately skipped leaves no suggestion behind, so
+      // inferring from suggestions kept re-sending exactly those bookmarks on
+      // every run while newer ones never reached the candidate window.
+      //
+      // A stored verdict is only reused while it still answers the current
+      // question: same prompt version, same model, same text.
+      const analysisByBookmarkId = new Map(llmAnalysis.map((record) => [record.bookmarkId, record]))
       const llmAnalyzedBookmarkIds = new Set(
-        suggestions.filter((suggestion) => suggestion.source === "llm").map((suggestion) => suggestion.bookmarkId)
+        bookmarks
+          .filter((bookmark) =>
+            isAnalysisReusable(analysisByBookmarkId.get(bookmark.tweetId), {
+              model: llmSettings.model,
+              contentHash: hashAnalyzedContent(bookmark.text)
+            })
+          )
+          .map((bookmark) => bookmark.tweetId)
       )
+      // Bookmarks carrying an LLM suggestion from before the ledger existed are
+      // still analyzed; without this every pre-upgrade library would be re-sent
+      // in full on the first run after the update.
+      for (const suggestion of suggestions) {
+        if (suggestion.source === "llm") {
+          llmAnalyzedBookmarkIds.add(suggestion.bookmarkId)
+        }
+      }
       const ruleSuggestedBookmarkIds = new Set(
         [...suggestions, ...heuristicSuggestions]
           .filter((suggestion) => suggestion.source !== "llm")
@@ -459,6 +549,8 @@ export async function runAutoTagPipeline(options?: {
           maxBookmarksPerRun: llmSettings.maxBookmarksPerRun,
           provider,
           persistBatch: insertNewTagSuggestions,
+          persistAnalysis: putLlmAnalysisRecords,
+          model: llmSettings.model,
           budgetMs: options?.llmBudgetMs,
           ...(options?.now ? { now: options.now } : {}),
           // One round-trip per batch boundary: refresh the heartbeat and read

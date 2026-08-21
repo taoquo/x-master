@@ -2,6 +2,7 @@ import type { BookmarkRecord, SiteTweetDraft } from "../types.ts"
 import {
   BOOKMARKS_STORE,
   BOOKMARK_TAGS_STORE,
+  LLM_ANALYSIS_STORE,
   RAW_PAYLOADS_STORE,
   getBookmarksDb,
   requestToPromise,
@@ -121,13 +122,20 @@ export async function upsertBookmarkSnapshot(snapshot: SiteTweetDraft): Promise<
 
 export async function removeBookmarkSnapshot(bookmarkId: string) {
   const db = await getBookmarksDb()
-  const transaction = db.transaction([BOOKMARKS_STORE, BOOKMARK_TAGS_STORE, RAW_PAYLOADS_STORE], "readwrite")
+  // The analysis ledger is keyed by bookmark, so it has to be cleaned up with
+  // the bookmark. A row left behind would claim a re-added bookmark was already
+  // analyzed and keep it out of the queue forever.
+  const transaction = db.transaction(
+    [BOOKMARKS_STORE, BOOKMARK_TAGS_STORE, RAW_PAYLOADS_STORE, LLM_ANALYSIS_STORE],
+    "readwrite"
+  )
   const bookmarksStore = transaction.objectStore(BOOKMARKS_STORE)
   const bookmarkTagsStore = transaction.objectStore(BOOKMARK_TAGS_STORE)
   const relatedBookmarkTags = (await requestToPromise(bookmarkTagsStore.index("bookmarkId").getAll(bookmarkId))) as BookmarkTagRecord[]
 
   bookmarksStore.delete(bookmarkId)
   transaction.objectStore(RAW_PAYLOADS_STORE).delete(bookmarkId)
+  transaction.objectStore(LLM_ANALYSIS_STORE).delete(bookmarkId)
 
   for (const bookmarkTag of relatedBookmarkTags) {
     bookmarkTagsStore.delete(bookmarkTag.id)

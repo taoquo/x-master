@@ -1,11 +1,16 @@
 const DB_NAME = "x-bookmark-manager"
-const DB_VERSION = 8
+const DB_VERSION = 9
 const BOOKMARKS_STORE = "bookmarks"
 const TAGS_STORE = "tags"
 const BOOKMARK_TAGS_STORE = "bookmark-tags"
 const SYNC_RUNS_STORE = "sync-runs"
 const RAW_PAYLOADS_STORE = "raw-payloads"
 const TAG_SUGGESTIONS_STORE = "tag-suggestions"
+// Ledger of what the LLM has already looked at. "Analyzed" used to be inferred
+// from suggestion rows, which only exist when the model actually returned a
+// usable tag, so every bookmark it deliberately skipped was re-sent on every
+// later run and kept newer bookmarks out of the candidate window.
+const LLM_ANALYSIS_STORE = "llm-analysis"
 const LEGACY_KNOWLEDGE_CARDS_STORE = "knowledge-cards"
 const LEGACY_LISTS_STORE = "folders"
 const LEGACY_BOOKMARK_LISTS_STORE = "bookmark-folders"
@@ -66,6 +71,10 @@ function openBookmarksDb() {
         const tagSuggestionsStore = db.createObjectStore(TAG_SUGGESTIONS_STORE, { keyPath: "id" })
         tagSuggestionsStore.createIndex("bookmarkId", "bookmarkId", { unique: false })
         tagSuggestionsStore.createIndex("status", "status", { unique: false })
+      }
+
+      if (!db.objectStoreNames.contains(LLM_ANALYSIS_STORE)) {
+        db.createObjectStore(LLM_ANALYSIS_STORE, { keyPath: "bookmarkId" })
       }
     }
 
@@ -194,7 +203,15 @@ export async function resetBookmarksDb() {
 export async function clearBookmarksDbStores() {
   const db = await getBookmarksDb()
   const transaction = db.transaction(
-    [BOOKMARKS_STORE, TAGS_STORE, BOOKMARK_TAGS_STORE, SYNC_RUNS_STORE, RAW_PAYLOADS_STORE, TAG_SUGGESTIONS_STORE],
+    [
+      BOOKMARKS_STORE,
+      TAGS_STORE,
+      BOOKMARK_TAGS_STORE,
+      SYNC_RUNS_STORE,
+      RAW_PAYLOADS_STORE,
+      TAG_SUGGESTIONS_STORE,
+      LLM_ANALYSIS_STORE
+    ],
     "readwrite"
   )
 
@@ -212,6 +229,7 @@ export {
   SYNC_RUNS_STORE,
   RAW_PAYLOADS_STORE,
   TAG_SUGGESTIONS_STORE,
+  LLM_ANALYSIS_STORE,
   DB_NAME,
   DB_VERSION
 }
