@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import {
   buildPrompt,
   createOpenAiCompatibleProvider,
+  parseRetryAfterMs,
   REQUEST_TIMEOUT_ERROR,
   resolveApiBaseUrl,
   testLlmConnection
@@ -159,7 +160,7 @@ test("provider retries once after a failed request", async () => {
   assert.equal(suggestions.length, 1)
 })
 
-test("provider backs off on 429 and gives up after the retry", async () => {
+test("provider retries a rate limit twice with a growing backoff", async () => {
   let calls = 0
   const sleeps: number[] = []
   const provider = createOpenAiCompatibleProvider({
@@ -174,7 +175,7 @@ test("provider backs off on 429 and gives up after the retry", async () => {
     }
   })
 
-  // The provider now surfaces the failure so the pipeline can count and report it.
+  // The provider surfaces the failure so the pipeline can count and report it.
   await assert.rejects(
     provider.suggestTags({
       bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
@@ -184,8 +185,46 @@ test("provider backs off on 429 and gives up after the retry", async () => {
     /HTTP 429/
   )
 
-  assert.equal(calls, 2)
-  assert.deepEqual(sleeps, [2000])
+  // Rate limits are the failure most likely to pass on a later attempt, so they
+  // get their own budget and the wait grows instead of repeating a flat 2s.
+  assert.equal(calls, 3)
+  assert.deepEqual(sleeps, [2000, 4000])
+})
+
+test("provider waits exactly as long as a Retry-After header asks", async () => {
+  const sleeps: number[] = []
+  let calls = 0
+  const provider = createOpenAiCompatibleProvider({
+    settings: SETTINGS,
+    apiKey: "sk-test",
+    sleep: async (ms) => {
+      sleeps.push(ms)
+    },
+    fetchImpl: async () => {
+      calls += 1
+      if (calls === 1) {
+        return {
+          ok: false,
+          status: 429,
+          headers: { get: (name: string) => (name.toLowerCase() === "retry-after" ? "7" : null) },
+          json: async () => ({}),
+          text: async () => ""
+        } as unknown as Response
+      }
+
+      return chatResponse([{ tweetId: "t1", tags: [{ name: "AI", confidence: 0.6 }] }])
+    }
+  })
+
+  const suggestions = await provider.suggestTags({
+    bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+    vocabulary: [{ name: "AI", count: 4 }],
+    allowNewTags: false
+  })
+
+  // The provider said 7 seconds, so guessing 2 would only cause another 429.
+  assert.deepEqual(sleeps, [7000])
+  assert.equal(suggestions.length, 1)
 })
 
 test("provider drops a gateway-rejected temperature and retries", async () => {
@@ -277,7 +316,7 @@ test("provider drops response_format then temperature before giving up", async (
   assert.equal(suggestions.length, 1)
 })
 
-test("provider stops after one blind retry on an unexplained 400", async () => {
+test("an unexplained 400 gets exactly one blind probe", async () => {
   let calls = 0
   const provider = createOpenAiCompatibleProvider({
     settings: SETTINGS,
@@ -298,9 +337,56 @@ test("provider stops after one blind retry on an unexplained 400", async () => {
     /quota exhausted/
   )
 
-  // The error names no parameter, so both optional parameters are dropped in
-  // turn; a 4xx with nothing left to drop ends the attempt.
-  assert.equal(calls, 3)
+  // The error names no parameter, so one probe drops json mode in case the
+  // gateway simply refused it silently. A second probe would only bury the
+  // gateway's own reason under the answer to a question nobody asked.
+  assert.equal(calls, 2)
+})
+
+test("a settled 4xx is reported verbatim without probing parameters", async () => {
+  for (const status of [401, 402, 403, 404, 405]) {
+    let calls = 0
+    const provider = createOpenAiCompatibleProvider({
+      settings: SETTINGS,
+      apiKey: "sk-test",
+      sleep: async () => {},
+      fetchImpl: async () => {
+        calls += 1
+        return errorResponse(status, "invalid api key")
+      }
+    })
+
+    await assert.rejects(
+      provider.suggestTags({
+        bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+        vocabulary: [{ name: "AI", count: 4 }],
+        allowNewTags: false
+      }),
+      /invalid api key/,
+      `status ${status} should surface the gateway message`
+    )
+
+    // No parameter change can fix authentication, quota, an unknown model or a
+    // wrong route, and a retry would replace the real reason with a later one.
+    assert.equal(calls, 1, `status ${status} should not be retried`)
+  }
+})
+
+test("parseRetryAfterMs accepts seconds and dates and rejects nonsense", () => {
+  const now = Date.parse("2026-01-01T00:00:00.000Z")
+
+  assert.equal(parseRetryAfterMs("5", now), 5000)
+  assert.equal(parseRetryAfterMs(" 5 ", now), 5000)
+  assert.equal(parseRetryAfterMs("0", now), 0)
+  assert.equal(parseRetryAfterMs("-3", now), 0)
+  assert.equal(parseRetryAfterMs("2026-01-01T00:00:08.000Z", now), 8000)
+  // A date already in the past means "retry now", not "wait forever".
+  assert.equal(parseRetryAfterMs("2025-01-01T00:00:00.000Z", now), 0)
+  // A hostile header must not be able to stall the run.
+  assert.equal(parseRetryAfterMs("99999", now), 30_000)
+  assert.equal(parseRetryAfterMs(null, now), null)
+  assert.equal(parseRetryAfterMs("", now), null)
+  assert.equal(parseRetryAfterMs("soon", now), null)
 })
 
 test("provider skips the request in closed mode with an empty vocabulary", async () => {

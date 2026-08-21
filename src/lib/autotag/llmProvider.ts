@@ -69,6 +69,11 @@ async function fetchWithTimeout(
 
 const MAX_TEXT_LENGTH = 500
 const RATE_LIMIT_BACKOFF_MS = 2000
+// A rate-limited gateway usually needs far more than one 2s pause, so the wait
+// grows per hit. Capped because an overloaded provider must not be allowed to
+// spend the whole run's wall-clock budget inside a single batch.
+const MAX_RATE_LIMIT_BACKOFF_MS = 30_000
+const RATE_LIMIT_RETRIES = 2
 const MAX_ERROR_DETAIL_LENGTH = 200
 // A gateway that accepts the connection and never answers used to hang the
 // whole run: the await never settles, the pipeline never reaches finishRun, and
@@ -284,37 +289,94 @@ function delay(ms: number, sleep?: (ms: number) => Promise<void>) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
+// Providers say how long to wait; guessing when they already told us is how a
+// retry storm starts. Accepts both forms the header allows (delay seconds and an
+// HTTP date) and ignores anything unparsable or absurd.
+export function parseRetryAfterMs(value: string | null | undefined, nowMs: number): number | null {
+  const raw = (value ?? "").trim()
+  if (!raw) {
+    return null
+  }
+
+  const seconds = Number(raw)
+  if (Number.isFinite(seconds)) {
+    return seconds <= 0 ? 0 : Math.min(seconds * 1000, MAX_RATE_LIMIT_BACKOFF_MS)
+  }
+
+  const dateMs = Date.parse(raw)
+  if (!Number.isFinite(dateMs)) {
+    return null
+  }
+
+  return Math.min(Math.max(0, dateMs - nowMs), MAX_RATE_LIMIT_BACKOFF_MS)
+}
+
+// Exponential per rate-limit hit, and the provider's own Retry-After always wins
+// when it sends one.
+function resolveRateLimitBackoffMs(retryAfterMs: number | null, hits: number) {
+  if (retryAfterMs !== null) {
+    return retryAfterMs
+  }
+
+  return Math.min(RATE_LIMIT_BACKOFF_MS * 2 ** hits, MAX_RATE_LIMIT_BACKOFF_MS)
+}
+
 // Shared chat/completions call used by tag suggestion batches and by the
 // vocabulary review. Optional parameters are dropped one by one when the
 // gateway rejects them, with a backoff on 429.
-//
-// Returns true when an optional parameter named by the error was dropped, so
-// the caller knows the next request differs from the one that just failed.
 export type ChatCapabilities = { jsonMode: boolean; temperature: boolean }
 
 export function createChatCapabilities(): ChatCapabilities {
   return { jsonMode: true, temperature: true }
 }
 
-function dropRejectedOption(sendOptions: ChatCapabilities, error: string) {
+// A gateway refusing the caller, the model or the route will not change its mind
+// because the next request carries one parameter less. Probing these burned two
+// extra requests and, worse, replaced the real reason ("invalid api key") with
+// whatever the degraded request happened to answer.
+function isSettledStatus(status: number) {
+  return status === 401 || status === 402 || status === 403 || status === 404 || status === 405
+}
+
+// Drops exactly the parameter the error names. Only when the gateway names
+// nothing does a single blind probe happen, because gateways really do answer
+// unsupported parameters with a bare 400 - but every extra blind attempt after
+// the first is just noise that hides the original error.
+function dropRejectedOption(
+  sendOptions: ChatCapabilities,
+  error: string,
+  allowBlindProbe: boolean
+): { dropped: boolean; wasBlindProbe: boolean } {
   const detail = error.toLowerCase()
 
   if (sendOptions.temperature && detail.includes("temperature")) {
     sendOptions.temperature = false
-    return true
+    return { dropped: true, wasBlindProbe: false }
   }
 
-  if (sendOptions.jsonMode && (detail.includes("response_format") || !detail.includes("temperature"))) {
+  if (
+    sendOptions.jsonMode &&
+    (detail.includes("response_format") || detail.includes("json_object") || detail.includes("json mode"))
+  ) {
     sendOptions.jsonMode = false
-    return true
+    return { dropped: true, wasBlindProbe: false }
   }
 
-  if (sendOptions.temperature) {
-    sendOptions.temperature = false
-    return true
+  if (allowBlindProbe) {
+    // json mode first: it is the parameter OpenAI-compatible proxies reject most
+    // often, and unlike temperature it changes the response shape.
+    if (sendOptions.jsonMode) {
+      sendOptions.jsonMode = false
+      return { dropped: true, wasBlindProbe: true }
+    }
+
+    if (sendOptions.temperature) {
+      sendOptions.temperature = false
+      return { dropped: true, wasBlindProbe: true }
+    }
   }
 
-  return false
+  return { dropped: false, wasBlindProbe: false }
 }
 
 export async function requestChatJson(options: {
@@ -338,6 +400,8 @@ export async function requestChatJson(options: {
     rateLimited: boolean
     badRequest: boolean
     timedOut: boolean
+    status: number
+    retryAfterMs: number | null
     content: string
     error?: string
   }> {
@@ -366,12 +430,16 @@ export async function requestChatJson(options: {
         rateLimited: false,
         badRequest: false,
         timedOut: attempt.timedOut,
+        status: 0,
+        retryAfterMs: null,
         content: "",
         error: attempt.error
       }
     }
 
     const response = attempt.response
+    // Fake responses in tests carry no headers, so every access stays optional.
+    const retryAfterMs = parseRetryAfterMs(response.headers?.get?.("retry-after"), Date.now())
 
     if (response.status === 429) {
       return {
@@ -379,6 +447,8 @@ export async function requestChatJson(options: {
         rateLimited: true,
         badRequest: false,
         timedOut: false,
+        status: response.status,
+        retryAfterMs,
         content: "",
         error: `HTTP ${response.status}`
       }
@@ -390,6 +460,8 @@ export async function requestChatJson(options: {
         rateLimited: false,
         badRequest: response.status >= 400 && response.status < 500,
         timedOut: false,
+        status: response.status,
+        retryAfterMs,
         content: "",
         error: await readErrorDetail(response)
       }
@@ -404,6 +476,8 @@ export async function requestChatJson(options: {
       rateLimited: false,
       badRequest: false,
       timedOut: false,
+      status: response.status,
+      retryAfterMs: null,
       content: payload.choices?.[0]?.message?.content ?? ""
     }
   }
@@ -421,17 +495,27 @@ export async function requestChatJson(options: {
   // failing request each time and could exhaust the retry budget on its own.
   const sendOptions = options.capabilities ?? createChatCapabilities()
 
-  // Transient failures (5xx, network, rate limiting) get exactly one blind
-  // retry; dropping a rejected parameter buys an extra attempt on top of that
-  // budget because the next request is genuinely different.
+  // Transient failures (5xx, network, timeout) get exactly one blind retry;
+  // dropping a rejected parameter buys an extra attempt on top of that budget
+  // because the next request is genuinely different.
   let blindRetriesLeft = 1
+  // Rate limits get their own budget with a real backoff: they are the most
+  // common gateway failure and the one most likely to succeed on a later try.
+  let rateLimitRetriesLeft = RATE_LIMIT_RETRIES
+  let rateLimitHits = 0
+  // One unexplained 400 is worth probing, because some gateways reject an
+  // unsupported parameter without naming it. More than one just buries the
+  // original error under whatever the degraded requests answered.
+  let blindProbesLeft = 1
 
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
     let result: {
       ok: boolean
       rateLimited: boolean
       badRequest: boolean
       timedOut: boolean
+      status: number
+      retryAfterMs: number | null
       content: string
       error?: string
     }
@@ -443,6 +527,8 @@ export async function requestChatJson(options: {
         rateLimited: false,
         badRequest: false,
         timedOut: false,
+        status: 0,
+        retryAfterMs: null,
         content: "",
         error: error instanceof Error ? error.message : String(error)
       }
@@ -455,19 +541,46 @@ export async function requestChatJson(options: {
     lastError = result.error ?? lastError
     lastTimedOut = result.timedOut
 
-    const dropped = result.badRequest ? dropRejectedOption(sendOptions, lastError) : false
+    const failure = { ok: false as const, content: "", error: lastError, ...(lastTimedOut ? { timedOut: true } : {}) }
 
-    if (!dropped) {
-      // A 4xx with nothing left to drop is a settled verdict (bad key, quota,
-      // unknown model); only transient failures deserve the blind retry.
-      if (result.badRequest || blindRetriesLeft <= 0) {
-        return { ok: false, content: "", error: lastError, ...(lastTimedOut ? { timedOut: true } : {}) }
+    if (result.rateLimited) {
+      if (rateLimitRetriesLeft <= 0) {
+        return failure
       }
 
-      blindRetriesLeft -= 1
+      rateLimitRetriesLeft -= 1
+      await delay(resolveRateLimitBackoffMs(result.retryAfterMs, rateLimitHits), options.sleep)
+      rateLimitHits += 1
+      continue
     }
 
-    await delay(result.rateLimited ? RATE_LIMIT_BACKOFF_MS : 0, options.sleep)
+    if (result.badRequest) {
+      // Authentication, quota, unknown model, wrong route: no parameter change
+      // can fix these, and retrying replaces the gateway's own words with the
+      // answer to a question the user never asked.
+      if (isSettledStatus(result.status)) {
+        return failure
+      }
+
+      const { dropped, wasBlindProbe } = dropRejectedOption(sendOptions, lastError, blindProbesLeft > 0)
+
+      if (wasBlindProbe) {
+        blindProbesLeft -= 1
+      }
+
+      if (!dropped) {
+        return failure
+      }
+
+      continue
+    }
+
+    // Transient: 5xx, network error, timeout.
+    if (blindRetriesLeft <= 0) {
+      return failure
+    }
+
+    blindRetriesLeft -= 1
   }
 
   return { ok: false, content: "", error: lastError, ...(lastTimedOut ? { timedOut: true } : {}) }
