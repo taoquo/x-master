@@ -1,6 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { createBackgroundMessageHandler } from "../../src/background/index.ts"
+import { KEEP_ALIVE_ALARM } from "../../src/lib/runtime/keepAlive.ts"
 import { AUTO_TAG_RUN_STALE_MS } from "../../src/lib/storage/settings.ts"
 import {
   AUTOTAG_CANCEL_MESSAGE,
@@ -242,4 +243,54 @@ test("autotag/cancel records the request through the injected handler", async ()
 
   assert.equal(cancelCalls, 1)
   assert.deepEqual(result, { cancelRequested: true })
+})
+
+// An MV3 worker is terminated after ~30s idle. A batched run is mostly waiting,
+// and the gaps between batches (a backoff sleeping on setTimeout, the storage
+// write between batches) do not count as activity, so without a keepalive the
+// worker can be recycled mid-run and take the run with it.
+test("a run holds a keepalive alarm until it finishes", async () => {
+  const created: string[] = []
+  const cleared: string[] = []
+  let releaseRun: () => void = () => {}
+  const runGate = new Promise<void>((resolve) => {
+    releaseRun = resolve
+  })
+
+  ;(globalThis as typeof globalThis & { chrome: any }).chrome = {
+    alarms: {
+      create: (name: string) => {
+        created.push(name)
+      },
+      clear: async (name: string) => {
+        cleared.push(name)
+        return true
+      },
+      onAlarm: { addListener: () => {} }
+    }
+  }
+
+  try {
+    const handler = createBackgroundMessageHandler({
+      loadWorkspaceData: async () => makeWorkspaceData(),
+      resetData: async () => ({ success: true }),
+      runSync: async () => ({}),
+      runAutoTag: async () => {
+        await runGate
+      }
+    })
+
+    await handler({ type: AUTOTAG_RUN_MESSAGE })
+
+    assert.deepEqual(created, [KEEP_ALIVE_ALARM])
+    assert.deepEqual(cleared, [], "the keepalive must outlive the batches, not the trigger")
+
+    releaseRun()
+    await flushBackgroundTasks()
+
+    // Held for exactly as long as the run, so an idle worker is not kept awake.
+    assert.deepEqual(cleared, [KEEP_ALIVE_ALARM])
+  } finally {
+    delete (globalThis as unknown as Record<string, unknown>).chrome
+  }
 })

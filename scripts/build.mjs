@@ -32,7 +32,7 @@ async function writeStaticFiles() {
         manifest_version: 3,
         name,
         version,
-        permissions: ["cookies", "storage"],
+        permissions: ["alarms", "cookies", "storage"],
         host_permissions: ["https://x.com/*"],
         optional_host_permissions: ["https://*/*"],
         icons: {

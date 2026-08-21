@@ -8,6 +8,7 @@ import {
   rejectTagSuggestion
 } from "../lib/autotag/suggestionActions.ts"
 import { removeBookmarkSnapshot, upsertBookmarkSnapshot } from "../lib/storage/bookmarksStore.ts"
+import { startKeepAlive, stopKeepAlive } from "../lib/runtime/keepAlive.ts"
 import { resetLocalData } from "../lib/storage/resetLocalData.ts"
 import { getSecrets } from "../lib/storage/secrets.ts"
 import {
@@ -124,6 +125,9 @@ export function createBackgroundMessageHandler({
 
     const takeoverOf = autoTagRunStartedAt
     autoTagRunStartedAt = startedAt
+    // A batched run is mostly waiting, and the gaps between batches do not keep
+    // an MV3 worker alive on their own, so hold a keepalive for the whole run.
+    startKeepAlive()
     // Fire-and-forget like sync: suggestions are persisted by the pipeline and
     // progress is broadcast, so the message channel is released immediately.
     void (async () => {
@@ -133,6 +137,7 @@ export function createBackgroundMessageHandler({
         // Auto-tagging is best-effort; a failed run leaves no partial state
         // beyond already-persisted suggestions, which are safe to keep.
       } finally {
+        stopKeepAlive()
         // Only the run that currently owns the lock may release it, otherwise a
         // wedged predecessor finishing late would unlock its own replacement.
         if (autoTagRunStartedAt === startedAt) {
@@ -159,6 +164,9 @@ export function createBackgroundMessageHandler({
       }
 
       isSyncRunning = true
+      // A paged sync has the same shape as an auto-tag run: long, mostly
+      // waiting, and fatal to lose halfway through.
+      startKeepAlive()
       // Run the sync in the background instead of holding the message channel
       // open for the whole run. Progress and errors are persisted by the sync
       // itself (lastSyncSummary + sync runs), so callers poll that state.
@@ -172,6 +180,7 @@ export function createBackgroundMessageHandler({
         } catch (error) {
           await persistSyncErrorFallback(error)
         } finally {
+          stopKeepAlive()
           isSyncRunning = false
         }
       })()
