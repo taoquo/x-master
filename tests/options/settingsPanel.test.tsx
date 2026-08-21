@@ -379,3 +379,75 @@ test("data safety section exposes labelled export, restore, and reset actions", 
     dom.window.confirm = originalConfirm
   }
 })
+
+// A run that stopped early is a partial success. The panel must say what was
+// kept and what is left, otherwise it reads like a plain failure and the user
+// has no idea that simply running again continues the work.
+test("a timed-out run reports what it kept and what is left", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  const current = await getSettings()
+  await saveSettings({
+    ...current,
+    lastAutoTagRun: {
+      finishedAt: "2026-08-21T00:00:00.000Z",
+      outcome: "timed-out",
+      suggestedCount: 12,
+      pendingCount: 12,
+      candidateCount: 400,
+      llmProcessedCount: 60,
+      llmBatchCount: 6,
+      llmFailedBatchCount: 0,
+      newTagBudget: 1,
+      vocabularySize: 30,
+      blockedTagKeyCount: 0,
+      blockedDroppedCount: 0,
+      budgetDroppedCount: 0,
+      unprocessedCount: 140
+    }
+  })
+
+  const { container, dom } = render(<OptionsApp />)
+  await settle()
+
+  await click(dom, findByTestId(container, "footer-settings-toggle"))
+  await click(dom, findByTestId(container, "settings-nav-autotag"))
+
+  const result = findByTestId(container, "settings-autotag-result")
+  assert.ok(result)
+  const text = result.textContent ?? ""
+  assert.ok(text.includes("12"), "the kept suggestions should be named")
+  assert.ok(text.includes("140"), "the leftover candidates should be named")
+})
+
+// The cancel button only exists while a run is in flight, and it must reach the
+// background worker rather than just resetting local UI state.
+test("a running analysis can be stopped from the panel", async () => {
+  let cancelCalls = 0
+  installChromeRuntimeHarness({
+    // Never settles, so the panel stays in its running state for the assertion.
+    runAutoTag: () => new Promise<void>(() => {}),
+    cancelAutoTag: async () => {
+      cancelCalls += 1
+      return true
+    }
+  })
+  await resetBookmarksDb()
+
+  const { container, dom } = render(<OptionsApp />)
+  await settle()
+
+  await click(dom, findByTestId(container, "footer-settings-toggle"))
+  await click(dom, findByTestId(container, "settings-nav-autotag"))
+
+  // No run in flight yet, so there is nothing to stop.
+  assert.equal(findByTestId(container, "settings-autotag-cancel"), null)
+
+  await click(dom, findByTestId(container, "settings-autotag-run-now"))
+
+  const cancel = findByTestId(container, "settings-autotag-cancel")
+  assert.ok(cancel, "the cancel button should appear while a run is in flight")
+
+  await click(dom, cancel)
+  assert.equal(cancelCalls, 1)
+})

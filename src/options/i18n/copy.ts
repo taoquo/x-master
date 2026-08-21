@@ -259,6 +259,12 @@ export function getOptionsCopy(locale: Locale) {
       settingsAutoTagResultBudgetExhausted:
         "模型给出的都是新标签，但本次的新标签额度已用完，因此没有新增建议。把词表模式改成「允许创建新标签」，或先确认几个建议把词表建起来。",
       settingsAutoTagResultBudgetDropped: "本次有 {dropped} 条建议因新标签额度不足被丢弃。",
+      settingsAutoTagResultTimedOut:
+        "本次运行达到时间上限后停止，已保存 {suggested} 条建议，还有 {remaining} 条书签没来得及分析。再运行一次即可继续。",
+      settingsAutoTagResultCancelled:
+        "本次运行已被取消，已保存 {suggested} 条建议，还有 {remaining} 条书签没有分析。再运行一次即可继续。",
+      settingsAutoTagCancel: "停止本次分析",
+      settingsAutoTagCancelRequested: "已请求停止，当前批次结束后会停下来。",
       settingsClearBlockedTags: "清空屏蔽名单",
       settingsClearBlockedTagsDone: "屏蔽名单已清空。",
       settingsAutoTagVocabularyFull: "标签数量已达健康上限，本次不会创建新标签。",
@@ -548,6 +554,12 @@ export function getOptionsCopy(locale: Locale) {
     settingsAutoTagResultBudgetExhausted:
       "The model only proposed new tag names, but this run had no new-tag budget left, so nothing was suggested. Switch the vocabulary mode to allow new tags, or accept a few suggestions first to seed the vocabulary.",
     settingsAutoTagResultBudgetDropped: "{dropped} suggestions were dropped because the new-tag budget ran out.",
+    settingsAutoTagResultTimedOut:
+      "This run stopped at its time limit. {suggested} suggestions were saved and {remaining} bookmarks were not reached. Run again to continue.",
+    settingsAutoTagResultCancelled:
+      "This run was cancelled. {suggested} suggestions were saved and {remaining} bookmarks were not analyzed. Run again to continue.",
+    settingsAutoTagCancel: "Stop this run",
+    settingsAutoTagCancelRequested: "Stop requested. The run ends after the current batch.",
     settingsClearBlockedTags: "Clear block list",
     settingsClearBlockedTagsDone: "Block list cleared.",
     settingsAutoTagVocabularyFull: "The tag library reached its healthy size, so this run cannot mint new tags.",

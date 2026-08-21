@@ -6,10 +6,14 @@ type StorageListener = (changes: Record<string, { newValue?: unknown }>, areaNam
 
 export function installChromeRuntimeHarness({
   runSync,
+  runAutoTag,
+  cancelAutoTag,
   testLlmConnection,
   reviewTagVocabulary
 }: {
   runSync?: () => Promise<{ fetchedCount: number; insertedCount: number; updatedCount: number; failedCount: number }>
+  runAutoTag?: () => Promise<unknown>
+  cancelAutoTag?: () => Promise<boolean>
   testLlmConnection?: () => Promise<{ ok: boolean; error?: string }>
   reviewTagVocabulary?: () => Promise<{
     ok: boolean
@@ -30,6 +34,8 @@ export function installChromeRuntimeHarness({
     },
     ...(testLlmConnection ? { testLlmConnection } : {}),
     ...(reviewTagVocabulary ? { reviewTagVocabulary } : {}),
+    ...(runAutoTag ? { runAutoTag } : {}),
+    ...(cancelAutoTag ? { cancelAutoTag } : {}),
     runSync:
       runSync ??
       (async () => ({

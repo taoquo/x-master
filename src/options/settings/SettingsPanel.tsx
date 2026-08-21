@@ -3,7 +3,7 @@ import type { AutoTagRunSummary, ExtensionSettings, KeywordTagRule, Locale, Them
 import { SETTINGS_STORAGE_KEY, getSettings, updateSettings } from "../../lib/storage/settings.ts"
 import { getSecrets, saveSecrets } from "../../lib/storage/secrets.ts"
 import { clearBlockedTagKeys } from "../../lib/tags/tagActions.ts"
-import { AUTOTAG_RUN_MESSAGE, LLM_TEST_CONNECTION_MESSAGE } from "../../lib/runtime/messages.ts"
+import { AUTOTAG_CANCEL_MESSAGE, AUTOTAG_RUN_MESSAGE, LLM_TEST_CONNECTION_MESSAGE } from "../../lib/runtime/messages.ts"
 import { subscribeAutoTagProgress, type AutoTagProgress } from "../../lib/runtime/autotagProgress.ts"
 import { AppIcon } from "../../ui/icons.tsx"
 import type { OptionsCopy } from "../i18n/copy.ts"
@@ -47,6 +47,18 @@ function describeAutoTagOutcome(summary: AutoTagRunSummary, copy: OptionsCopy): 
   if (summary.outcome === "empty-vocabulary") return copy.settingsAutoTagResultEmptyVocabulary
   if (summary.outcome === "all-blocked") return copy.settingsAutoTagResultAllBlocked
   if (summary.outcome === "budget-exhausted") return copy.settingsAutoTagResultBudgetExhausted
+  // Stopping early is a partial success: say what was kept and what is left, so
+  // the instruction is "run again" rather than "something is broken".
+  if (summary.outcome === "timed-out") {
+    return copy.settingsAutoTagResultTimedOut
+      .replace("{suggested}", String(summary.suggestedCount))
+      .replace("{remaining}", String(summary.unprocessedCount ?? 0))
+  }
+  if (summary.outcome === "cancelled") {
+    return copy.settingsAutoTagResultCancelled
+      .replace("{suggested}", String(summary.suggestedCount))
+      .replace("{remaining}", String(summary.unprocessedCount ?? 0))
+  }
   if (summary.outcome === "llm-disabled") return copy.settingsAutoTagResultLlmDisabled
   if (summary.outcome === "missing-api-key") return copy.settingsAutoTagResultMissingKey
   if (summary.outcome === "failed") {
@@ -364,6 +376,18 @@ export function SettingsPanel({
     setAutoTagRunMessage(copy.settingsAutoTagRunTimeout)
   }
 
+  // Only records the request: the run stops at its next batch boundary so the
+  // suggestions it already wrote are kept. The existing poll loop then picks up
+  // the "cancelled" summary like any other outcome.
+  async function cancelAutoTagRun() {
+    if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) {
+      return
+    }
+
+    await chrome.runtime.sendMessage({ type: AUTOTAG_CANCEL_MESSAGE })
+    setAutoTagRunMessage(copy.settingsAutoTagCancelRequested)
+  }
+
   function handleBufferPagesChange(rawValue: string) {
     if (!settings) {
       return
@@ -560,6 +584,18 @@ export function SettingsPanel({
                         onClick={() => void runAutoTagNow()}>
                         {isAutoTagRunning ? copy.settingsAutoTagProgress : copy.settingsRunAutoTagNow}
                       </button>
+                      {/* Only reachable while a run is in flight: a run that is
+                          taking too long must be stoppable without reloading
+                          the extension. */}
+                      {isAutoTagRunning ? (
+                        <button
+                          type="button"
+                          data-testid="settings-autotag-cancel"
+                          className="chip-button"
+                          onClick={() => void cancelAutoTagRun()}>
+                          {copy.settingsAutoTagCancel}
+                        </button>
+                      ) : null}
                     </div>
                     <InlineMessage message={autoTagRunMessage} tone="info" />
                     {autoTagProgress ? (
