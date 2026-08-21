@@ -6,7 +6,14 @@ import { resolveNewTagBudget, runAutoTagPipeline } from "../../src/lib/autotag/p
 import { getAllBookmarks, upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
 import { saveSecrets } from "../../src/lib/storage/secrets.ts"
-import { createDefaultAutoTagSettings, getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
+import {
+  AUTO_TAG_RUN_STALE_MS,
+  createDefaultAutoTagSettings,
+  getSettings,
+  isAutoTagRunStateStale,
+  requestAutoTagRunCancel,
+  saveSettings
+} from "../../src/lib/storage/settings.ts"
 import { getAllTagSuggestions } from "../../src/lib/storage/suggestionsStore.ts"
 import { attachTagToBookmark, createTag } from "../../src/lib/storage/tagsStore.ts"
 import type { BookmarkRecord } from "../../src/lib/types.ts"
@@ -67,7 +74,8 @@ test("runAutoTagPipeline is a no-op when auto-tagging is disabled", async () => 
     vocabularySize: 0,
     blockedTagKeyCount: 0,
     blockedDroppedCount: 0,
-    budgetDroppedCount: 0
+    budgetDroppedCount: 0,
+    unprocessedCount: 0
   })
   assert.equal((await getAllTagSuggestions()).length, 0)
 })
@@ -464,4 +472,102 @@ test("closed vocabulary runs normally once the library has a tag", async () => {
   assert.equal(calls[0]?.allowNewTags, false)
   assert.equal(result.outcome, "ok")
   assert.equal(result.suggestedCount, 1)
+})
+
+// Regression: a run that stopped early used to report nothing at all, because
+// only a run that reached finishRun ever wrote a summary. A stopped run is a
+// partial success and must say so, otherwise the user cannot tell it apart from
+// a run that had nothing left to do.
+test("a run that exhausts its wall-clock budget reports timed-out and keeps the batches it finished", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed" })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await createTag({ name: "AI" })
+  await upsertBookmarks([makeBookmark("t1"), makeBookmark("t2"), makeBookmark("t3"), makeBookmark("t4")])
+
+  // Deadline lands after the first batch: batch one runs, batch two never starts.
+  let clock = 0
+  const { provider, calls } = makeStubProvider([
+    [{ tweetId: "t1", tags: [{ name: "AI", confidence: 0.8 }] }],
+    [{ tweetId: "t3", tags: [{ name: "AI", confidence: 0.8 }] }]
+  ])
+
+  const result = await runAutoTagPipeline({
+    createLlmProvider: () => provider,
+    llmBudgetMs: 100,
+    now: () => (clock += 90)
+  })
+
+  assert.equal(calls.length, 1)
+  assert.equal(result.outcome, "timed-out")
+  assert.equal(result.llmProcessedCount, 2)
+  // The two candidates it never reached are what makes this "run again", not
+  // "nothing left to do".
+  assert.equal(result.unprocessedCount, 2)
+  // Whatever the finished batch produced is kept.
+  assert.equal(result.suggestedCount, 1)
+
+  const summary = (await getSettings()).lastAutoTagRun
+  assert.equal(summary?.outcome, "timed-out")
+  assert.equal(summary?.unprocessedCount, 2)
+})
+
+test("a cancelled run stops at the next batch boundary and reports cancelled", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed" })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await createTag({ name: "AI" })
+  await upsertBookmarks([makeBookmark("t1"), makeBookmark("t2"), makeBookmark("t3"), makeBookmark("t4")])
+
+  const { provider, calls } = makeStubProvider([
+    [{ tweetId: "t1", tags: [{ name: "AI", confidence: 0.8 }] }],
+    [{ tweetId: "t3", tags: [{ name: "AI", confidence: 0.8 }] }]
+  ])
+
+  // The options page requests the cancel while batch one is in flight.
+  const originalSuggestTags = provider.suggestTags.bind(provider)
+  provider.suggestTags = async (input) => {
+    const suggestions = await originalSuggestTags(input)
+    await requestAutoTagRunCancel()
+    return suggestions
+  }
+
+  const result = await runAutoTagPipeline({ createLlmProvider: () => provider })
+
+  // Batch one completed and persisted before the cancel was observed.
+  assert.equal(calls.length, 1)
+  assert.equal(result.outcome, "cancelled")
+  assert.equal(result.suggestedCount, 1)
+  assert.equal(result.unprocessedCount, 2)
+  assert.equal((await getSettings()).lastAutoTagRun?.outcome, "cancelled")
+})
+
+// The run state is the only trace an interrupted run leaves behind, so it must
+// be published before the first request and cleared by finishRun.
+test("a finished run clears the in-flight run state", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed" })
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await createTag({ name: "AI" })
+  await upsertBookmarks([makeBookmark("t1")])
+
+  const { provider } = makeStubProvider([[{ tweetId: "t1", tags: [{ name: "AI", confidence: 0.8 }] }]])
+  await runAutoTagPipeline({ createLlmProvider: () => provider })
+
+  assert.equal((await getSettings()).autoTagRunState, undefined)
+})
+
+test("isAutoTagRunStateStale only trusts a moving heartbeat", () => {
+  const startedAt = "2026-01-01T00:00:00.000Z"
+  const base = Date.parse(startedAt)
+  const state = { startedAt, updatedAt: startedAt, phase: "llm" as const, processed: 1, total: 4 }
+
+  assert.equal(isAutoTagRunStateStale(undefined), false)
+  assert.equal(isAutoTagRunStateStale(state, base + 1000), false)
+  assert.equal(isAutoTagRunStateStale(state, base + AUTO_TAG_RUN_STALE_MS + 1), true)
+  // An unparsable heartbeat cannot be trusted to be recent.
+  assert.equal(isAutoTagRunStateStale({ ...state, updatedAt: "not-a-date" }, base), true)
 })

@@ -1,7 +1,9 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { createBackgroundMessageHandler } from "../../src/background/index.ts"
+import { AUTO_TAG_RUN_STALE_MS } from "../../src/lib/storage/settings.ts"
 import {
+  AUTOTAG_CANCEL_MESSAGE,
   AUTOTAG_RUN_MESSAGE,
   RUN_SYNC_MESSAGE,
   SUGGESTIONS_ACCEPT_BULK_MESSAGE,
@@ -176,4 +178,68 @@ test("the vocabulary review message answers synchronously from the injected hand
     response.merges.map((plan) => plan.targetTagId),
     ["t1"]
   )
+})
+
+// Regression: the lock used to be a bare boolean cleared only by the run's own
+// finally block. A wedged run therefore held it forever and every later trigger
+// answered "already running", with no way back short of reloading the extension.
+test("a wedged auto-tag run is taken over once it goes stale", async () => {
+  let runCount = 0
+  let clock = 1_000_000
+
+  const handler = createBackgroundMessageHandler({
+    loadWorkspaceData: async () => makeWorkspaceData(),
+    resetData: async () => ({ success: true }),
+    runSync: async () => ({}),
+    now: () => clock,
+    // Never settles: exactly the shape of a hung gateway request.
+    runAutoTag: () => {
+      runCount += 1
+      return new Promise<void>(() => {})
+    }
+  })
+
+  const first = (await handler({ type: AUTOTAG_RUN_MESSAGE })) as { started: boolean }
+  assert.equal(first.started, true)
+
+  const blocked = (await handler({ type: AUTOTAG_RUN_MESSAGE })) as {
+    started: boolean
+    alreadyRunning?: boolean
+  }
+  assert.equal(blocked.started, false)
+  assert.equal(blocked.alreadyRunning, true)
+  assert.equal(runCount, 1)
+
+  // The wedged run is still holding the lock, but its start is now older than
+  // the stale window, so a new run may take over.
+  clock += AUTO_TAG_RUN_STALE_MS + 1
+
+  const takeover = (await handler({ type: AUTOTAG_RUN_MESSAGE })) as {
+    started: boolean
+    tookOverStaleRun?: boolean
+  }
+
+  assert.equal(takeover.started, true)
+  assert.equal(takeover.tookOverStaleRun, true)
+  assert.equal(runCount, 2)
+})
+
+test("autotag/cancel records the request through the injected handler", async () => {
+  let cancelCalls = 0
+
+  const handler = createBackgroundMessageHandler({
+    loadWorkspaceData: async () => makeWorkspaceData(),
+    resetData: async () => ({ success: true }),
+    runSync: async () => ({}),
+    runAutoTag: async () => {},
+    cancelAutoTag: async () => {
+      cancelCalls += 1
+      return true
+    }
+  })
+
+  const result = (await handler({ type: AUTOTAG_CANCEL_MESSAGE })) as { cancelRequested: boolean }
+
+  assert.equal(cancelCalls, 1)
+  assert.deepEqual(result, { cancelRequested: true })
 })

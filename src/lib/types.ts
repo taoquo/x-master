@@ -180,6 +180,13 @@ export type AutoTagRunOutcome =
   // The model answered, but every tag it proposed was new and the run had no
   // new-tag budget left. Also a "successful" run that stores nothing.
   | "budget-exhausted"
+  // The run hit its wall-clock budget before it worked through the candidate
+  // window. Batches already persisted are kept; this is a partial success, not
+  // a failure, and it must stay distinguishable from both so the user knows to
+  // simply run again rather than go hunting for a broken gateway.
+  | "timed-out"
+  // The user asked the run to stop. Same partial-success shape as "timed-out".
+  | "cancelled"
   | "failed"
 
 export interface AutoTagRunSummary {
@@ -200,7 +207,28 @@ export interface AutoTagRunSummary {
   blockedDroppedCount?: number
   // Suggestions dropped because the run had no new-tag budget left.
   budgetDroppedCount?: number
+  // Candidates the run never reached because it stopped early (deadline or
+  // cancel). Non-zero means "run again to continue", which is a very different
+  // instruction from every other zero-result outcome.
+  unprocessedCount?: number
   error?: string
+}
+
+// Live state of an in-flight run, persisted so an interrupted run leaves a
+// trace. Without it a run killed mid-flight (service worker recycled, browser
+// closed) wrote nothing at all and the panel just showed the previous result
+// while looking frozen.
+export interface AutoTagRunState {
+  startedAt: string
+  // Heartbeat, refreshed after every batch. A state whose heartbeat stopped
+  // moving is how a dead run is told apart from a slow one.
+  updatedAt: string
+  phase: "heuristics" | "llm"
+  processed: number
+  total: number
+  // Set by the options page; read back by the pipeline after each batch, which
+  // is why the heartbeat write and the cancel read are the same round-trip.
+  cancelRequested?: boolean
 }
 
 export interface ExtensionSettings {
@@ -217,6 +245,7 @@ export interface ExtensionSettings {
   savedViews: SavedViewRecord[]
   autoTag: AutoTagSettings
   lastAutoTagRun?: AutoTagRunSummary
+  autoTagRunState?: AutoTagRunState
 }
 
 export interface WorkspaceData {

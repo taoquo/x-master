@@ -8,7 +8,12 @@ import { broadcastAutoTagProgress } from "../runtime/autotagProgress.ts"
 import { backfillHashtagsFromRawPayloads } from "../storage/backfillHashtags.ts"
 import { getAllBookmarks } from "../storage/bookmarksStore.ts"
 import { getSecrets } from "../storage/secrets.ts"
-import { getSettings, updateSettings } from "../storage/settings.ts"
+import {
+  beginAutoTagRunState,
+  getSettings,
+  touchAutoTagRunState,
+  updateSettings
+} from "../storage/settings.ts"
 import { createTagSuggestion, getAllTagSuggestions, insertNewTagSuggestions } from "../storage/suggestionsStore.ts"
 import { getAllBookmarkTags, getAllTags } from "../storage/tagsStore.ts"
 import { canonicalTagKey } from "../tags/canonical.ts"
@@ -34,8 +39,17 @@ export interface AutoTagRunResult {
   // Suggestions dropped because the run had already spent its new-tag budget.
   // A large count means the guarded budget, not the model, ate the results.
   budgetDroppedCount: number
+  // Candidates the run never reached because it stopped early. Non-zero means
+  // "run again to continue" rather than "there is nothing left to do".
+  unprocessedCount: number
   error?: string
 }
+
+// Wall-clock budget for the LLM step. A run must always reach finishRun: every
+// outcome report, the cleared run state and the released background lock all
+// hang off it. Per-request timeouts bound one batch, this bounds the run, and
+// partial results are already persisted batch by batch.
+export const DEFAULT_LLM_RUN_BUDGET_MS = 8 * 60 * 1000
 
 interface LlmStepInput {
   bookmarks: BookmarkRecord[]
@@ -61,6 +75,15 @@ interface LlmStepInput {
   provider: AutoTagLlmProvider
   // Called after every batch so results survive a worker shutdown mid-run.
   persistBatch?: (suggestions: TagSuggestionRecord[]) => Promise<{ insertedCount: number }>
+  // Wall-clock budget for the whole step. Checked at batch boundaries, so the
+  // worst case is one in-flight batch past the deadline.
+  budgetMs?: number
+  now?: () => number
+  // Called at every batch boundary with the progress so far. Returning true
+  // stops the step and reports "cancelled". The pipeline wires this to the
+  // persisted run state, so the same round-trip refreshes the heartbeat and
+  // reads back any cancel the options page requested.
+  shouldCancel?: (progress: { processed: number; total: number }) => boolean | Promise<boolean>
 }
 
 // LLM step: serially feeds batches of still-untagged bookmarks to the
@@ -81,9 +104,12 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
   blockedDroppedCount: number
   // Tags the model returned that the new-tag budget rejected.
   budgetDroppedCount: number
+  // Candidates the step selected but never sent, because it stopped early.
+  unprocessedCount: number
   // Set when the step returned before issuing a single request, so the caller
-  // can tell "nothing left to analyze" apart from "nothing to analyze with".
-  stoppedReason?: "no-candidates" | "empty-vocabulary"
+  // can tell "nothing left to analyze" apart from "nothing to analyze with",
+  // plus the two early-stop reasons that leave work behind on purpose.
+  stoppedReason?: "no-candidates" | "empty-vocabulary" | "deadline" | "cancelled"
   lastError?: string
 }> {
   const eligible = input.bookmarks.filter(
@@ -110,6 +136,7 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
       insertedCount: 0,
       blockedDroppedCount: 0,
       budgetDroppedCount: 0,
+      unprocessedCount: candidates.length,
       stoppedReason: candidates.length ? "empty-vocabulary" : "no-candidates"
     }
   }
@@ -134,7 +161,24 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
   const blockedKeys = new Set(input.blockedTagKeys ?? [])
   let remainingNewTagBudget = input.allowNewTags ? input.newTagBudget ?? Number.POSITIVE_INFINITY : 0
 
+  const now = input.now ?? (() => Date.now())
+  const budgetMs = input.budgetMs ?? DEFAULT_LLM_RUN_BUDGET_MS
+  const deadlineAt = Number.isFinite(budgetMs) ? now() + budgetMs : Number.POSITIVE_INFINITY
+  let stoppedReason: "deadline" | "cancelled" | undefined
+
   for (let offset = 0; offset < candidates.length; offset += input.batchSize) {
+    // Checked before the request, never in the middle of one: a batch that is
+    // already in flight runs to completion so its results still get persisted.
+    if (input.shouldCancel && (await input.shouldCancel({ processed: processedCount, total: candidates.length }))) {
+      stoppedReason = "cancelled"
+      break
+    }
+
+    if (now() >= deadlineAt) {
+      stoppedReason = "deadline"
+      break
+    }
+
     const batch = candidates.slice(offset, offset + input.batchSize)
     batchCount += 1
 
@@ -223,6 +267,8 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
     insertedCount,
     blockedDroppedCount,
     budgetDroppedCount,
+    unprocessedCount: candidates.length - processedCount,
+    ...(stoppedReason ? { stoppedReason } : {}),
     ...(lastError ? { lastError } : {})
   }
 }
@@ -253,7 +299,8 @@ export function resolveNewTagBudget(mode: string, candidateCount: number, vocabu
 //
 // Every exit path goes through finishRun so the settings panel can always tell
 // the user what happened; a run that silently does nothing is the single
-// hardest thing to debug in this feature.
+// hardest thing to debug in this feature. finishRun also clears the in-flight
+// run state, which is what releases the panel from showing "running".
 async function finishRun(result: AutoTagRunResult): Promise<AutoTagRunResult> {
   let pendingCount = 0
   try {
@@ -264,6 +311,7 @@ async function finishRun(result: AutoTagRunResult): Promise<AutoTagRunResult> {
 
   try {
     await updateSettings({
+      autoTagRunState: undefined,
       lastAutoTagRun: {
         finishedAt: new Date().toISOString(),
         outcome: result.outcome,
@@ -278,6 +326,7 @@ async function finishRun(result: AutoTagRunResult): Promise<AutoTagRunResult> {
         blockedTagKeyCount: result.blockedTagKeyCount,
         blockedDroppedCount: result.blockedDroppedCount,
         budgetDroppedCount: result.budgetDroppedCount,
+        unprocessedCount: result.unprocessedCount,
         ...(result.error ? { error: result.error } : {})
       }
     })
@@ -290,6 +339,9 @@ async function finishRun(result: AutoTagRunResult): Promise<AutoTagRunResult> {
 
 export async function runAutoTagPipeline(options?: {
   createLlmProvider?: (input: { apiKey: string; baseUrl: string; model: string }) => AutoTagLlmProvider
+  // Wall-clock budget for the LLM step, exposed for tests.
+  llmBudgetMs?: number
+  now?: () => number
 }): Promise<AutoTagRunResult> {
   const settings = await getSettings()
 
@@ -307,7 +359,8 @@ export async function runAutoTagPipeline(options?: {
       vocabularySize: 0,
       blockedTagKeyCount: settings.autoTag.blockedTagKeys.length,
       blockedDroppedCount: 0,
-      budgetDroppedCount: 0
+      budgetDroppedCount: 0,
+      unprocessedCount: 0
     })
   }
 
@@ -321,6 +374,9 @@ export async function runAutoTagPipeline(options?: {
   ])
 
   broadcastAutoTagProgress({ phase: "heuristics", processed: 0, total: bookmarks.length })
+  // Published before the first request so a run killed mid-flight (worker
+  // recycled, browser closed) still leaves a trace instead of looking frozen.
+  await beginAutoTagRunState({ phase: "heuristics", total: bookmarks.length })
 
   const heuristicSuggestions = computeHeuristicSuggestions({
     bookmarks,
@@ -345,6 +401,7 @@ export async function runAutoTagPipeline(options?: {
   let newTagBudget = 0
   let llmBlockedDroppedCount = 0
   let llmBudgetDroppedCount = 0
+  let llmUnprocessedCount = 0
   let runError: string | undefined
 
   const llmSettings = settings.autoTag.llm
@@ -401,7 +458,20 @@ export async function runAutoTagPipeline(options?: {
           batchSize: llmSettings.batchSize,
           maxBookmarksPerRun: llmSettings.maxBookmarksPerRun,
           provider,
-          persistBatch: insertNewTagSuggestions
+          persistBatch: insertNewTagSuggestions,
+          budgetMs: options?.llmBudgetMs,
+          ...(options?.now ? { now: options.now } : {}),
+          // One round-trip per batch boundary: refresh the heartbeat and read
+          // back a cancel the options page may have requested.
+          shouldCancel: async (progress) => {
+            const state = await touchAutoTagRunState({
+              phase: "llm",
+              processed: progress.processed,
+              total: progress.total
+            }).catch(() => undefined)
+
+            return Boolean(state?.cancelRequested)
+          }
         })
 
         llmProcessedCount = llmResult.processedCount
@@ -412,6 +482,7 @@ export async function runAutoTagPipeline(options?: {
         llmSkippedCount = llmResult.suggestions.length - llmResult.insertedCount
         llmBlockedDroppedCount = llmResult.blockedDroppedCount
         llmBudgetDroppedCount = llmResult.budgetDroppedCount
+        llmUnprocessedCount = llmResult.unprocessedCount
 
         // A run that issued zero batches while candidates were waiting is never
         // "ok": either there was nothing left to analyze, or the vocabulary was
@@ -420,6 +491,12 @@ export async function runAutoTagPipeline(options?: {
           outcome = "empty-vocabulary"
         } else if (!candidateCount || llmResult.stoppedReason === "no-candidates") {
           outcome = "no-candidates"
+        } else if (llmResult.stoppedReason === "cancelled") {
+          // Partial success: batches already persisted stay, and the leftover
+          // count tells the user the queue is simply where they left it.
+          outcome = "cancelled"
+        } else if (llmResult.stoppedReason === "deadline") {
+          outcome = "timed-out"
         } else if (llmBatchCount > 0 && llmFailedBatchCount === llmBatchCount) {
           outcome = "failed"
           runError = llmResult.lastError ?? "all-batches-failed"
@@ -454,6 +531,7 @@ export async function runAutoTagPipeline(options?: {
     blockedTagKeyCount: settings.autoTag.blockedTagKeys.length,
     blockedDroppedCount: llmBlockedDroppedCount,
     budgetDroppedCount: llmBudgetDroppedCount,
+    unprocessedCount: llmUnprocessedCount,
     ...(runError ? { error: runError } : {})
   })
 }

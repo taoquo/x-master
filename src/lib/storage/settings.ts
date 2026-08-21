@@ -1,6 +1,7 @@
 import {
   createEmptySyncSummary,
   type AutoTagRunOutcome,
+  type AutoTagRunState,
   type AutoTagRunSummary,
   type AutoTagSettings,
   type ExtensionSettings,
@@ -209,8 +210,15 @@ const AUTO_TAG_RUN_OUTCOMES = new Set<AutoTagRunOutcome>([
   "empty-vocabulary",
   "all-blocked",
   "budget-exhausted",
+  "timed-out",
+  "cancelled",
   "failed"
 ])
+
+// A run that never reached finishRun leaves a stale state behind. Anything older
+// than this is treated as dead so the panel stops claiming a run is in flight
+// and the background worker lets a new run take over.
+export const AUTO_TAG_RUN_STALE_MS = 5 * 60 * 1000
 
 function normalizeCount(value: unknown) {
   const numeric = Number(value)
@@ -246,12 +254,53 @@ function normalizeAutoTagRunSummary(value: unknown): AutoTagRunSummary | undefin
     blockedTagKeyCount: normalizeCount(record.blockedTagKeyCount),
     blockedDroppedCount: normalizeCount(record.blockedDroppedCount),
     budgetDroppedCount: normalizeCount(record.budgetDroppedCount),
+    unprocessedCount: normalizeCount(record.unprocessedCount),
     ...(error ? { error } : {})
   }
 }
 
+// Same rule as the run summary: a malformed state is dropped rather than
+// defaulted, so "no run in flight" cannot be faked by a partial object.
+function normalizeAutoTagRunState(value: unknown): AutoTagRunState | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined
+  }
+
+  const record = value as Partial<AutoTagRunState>
+  const startedAt = String(record.startedAt ?? "").trim()
+  if (!startedAt) {
+    return undefined
+  }
+
+  return {
+    startedAt,
+    updatedAt: String(record.updatedAt ?? "").trim() || startedAt,
+    phase: record.phase === "llm" ? "llm" : "heuristics",
+    processed: normalizeCount(record.processed),
+    total: normalizeCount(record.total),
+    ...(record.cancelRequested ? { cancelRequested: true } : {})
+  }
+}
+
+// A heartbeat that stopped moving means the run died without reaching
+// finishRun: the service worker was recycled, the browser was closed, or the
+// run wedged. Callers use this to ignore the state instead of waiting forever.
+export function isAutoTagRunStateStale(state: AutoTagRunState | undefined, nowMs = Date.now()) {
+  if (!state) {
+    return false
+  }
+
+  const heartbeat = Date.parse(state.updatedAt)
+  if (!Number.isFinite(heartbeat)) {
+    return true
+  }
+
+  return nowMs - heartbeat > AUTO_TAG_RUN_STALE_MS
+}
+
 function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): ExtensionSettings {
   const lastAutoTagRun = normalizeAutoTagRunSummary(settings?.lastAutoTagRun)
+  const autoTagRunState = normalizeAutoTagRunState(settings?.autoTagRunState)
 
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
@@ -269,7 +318,8 @@ function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): Ex
     savedViews: normalizeSavedViews(settings?.savedViews),
     hashtagBackfillDone: Boolean(settings?.hashtagBackfillDone),
     autoTag: normalizeAutoTagSettings(settings?.autoTag),
-    ...(lastAutoTagRun ? { lastAutoTagRun } : {})
+    ...(lastAutoTagRun ? { lastAutoTagRun } : {}),
+    ...(autoTagRunState ? { autoTagRunState } : {})
   }
 }
 
@@ -356,4 +406,63 @@ export async function saveLastSyncSummary(summary: SyncSummary) {
 
 export async function resetSettings() {
   await saveSettings(createDefaultSettings())
+}
+
+// Publishes "a run is in flight" before the first request goes out, so a run
+// that dies mid-flight is still visible afterwards. Any stale state from a
+// previous dead run is replaced, and a pending cancel is cleared with it: that
+// cancel belonged to a run that is already gone.
+export async function beginAutoTagRunState(input: { phase: "heuristics" | "llm"; total: number }) {
+  const startedAt = new Date().toISOString()
+
+  return updateSettings({
+    autoTagRunState: {
+      startedAt,
+      updatedAt: startedAt,
+      phase: input.phase,
+      processed: 0,
+      total: Math.max(0, Math.trunc(input.total))
+    }
+  })
+}
+
+// One round-trip does double duty: it refreshes the heartbeat and returns the
+// state the options page may have written, which is how a cancel reaches a
+// running pipeline without a second read per batch.
+export async function touchAutoTagRunState(input: {
+  phase: "heuristics" | "llm"
+  processed: number
+  total: number
+}): Promise<AutoTagRunState | undefined> {
+  const next = await updateSettings((current) => {
+    if (!current.autoTagRunState) {
+      return {}
+    }
+
+    return {
+      autoTagRunState: {
+        ...current.autoTagRunState,
+        updatedAt: new Date().toISOString(),
+        phase: input.phase,
+        processed: Math.max(0, Math.trunc(input.processed)),
+        total: Math.max(0, Math.trunc(input.total))
+      }
+    }
+  })
+
+  return next.autoTagRunState
+}
+
+// A cancel only marks the persisted state; the pipeline stops at the next batch
+// boundary so suggestions already written are never lost.
+export async function requestAutoTagRunCancel() {
+  const next = await updateSettings((current) =>
+    current.autoTagRunState ? { autoTagRunState: { ...current.autoTagRunState, cancelRequested: true } } : {}
+  )
+
+  return Boolean(next.autoTagRunState?.cancelRequested)
+}
+
+export async function clearAutoTagRunState() {
+  await updateSettings({ autoTagRunState: undefined })
 }

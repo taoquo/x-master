@@ -10,7 +10,12 @@ import {
 import { removeBookmarkSnapshot, upsertBookmarkSnapshot } from "../lib/storage/bookmarksStore.ts"
 import { resetLocalData } from "../lib/storage/resetLocalData.ts"
 import { getSecrets } from "../lib/storage/secrets.ts"
-import { getSettings, saveLastSyncSummary } from "../lib/storage/settings.ts"
+import {
+  AUTO_TAG_RUN_STALE_MS,
+  getSettings,
+  requestAutoTagRunCancel,
+  saveLastSyncSummary
+} from "../lib/storage/settings.ts"
 import {
   attachTagToBookmark,
   createTag,
@@ -19,6 +24,7 @@ import {
   getAllTags
 } from "../lib/storage/tagsStore.ts"
 import {
+  AUTOTAG_CANCEL_MESSAGE,
   AUTOTAG_RUN_MESSAGE,
   LLM_TEST_CONNECTION_MESSAGE,
   LOAD_WORKSPACE_DATA_MESSAGE,
@@ -51,6 +57,10 @@ interface BackgroundDependencies {
   resetData: () => Promise<unknown>
   runSync: () => Promise<unknown>
   runAutoTag?: () => Promise<unknown>
+  cancelAutoTag?: () => Promise<boolean>
+  // Injectable clock: the stale-run takeover is a time-based rule, and a test
+  // cannot wait out the real stale window.
+  now?: () => number
   shouldAutoTagAfterSync?: () => Promise<boolean>
   acceptSuggestion?: (suggestionId: string) => Promise<TagSuggestionRecord | null>
   rejectSuggestion?: (suggestionId: string) => Promise<TagSuggestionRecord | null>
@@ -68,6 +78,7 @@ type BackgroundMessage =
   | { type: typeof RESET_LOCAL_DATA_MESSAGE }
   | { type: typeof RUN_SYNC_MESSAGE }
   | { type: typeof AUTOTAG_RUN_MESSAGE }
+  | { type: typeof AUTOTAG_CANCEL_MESSAGE }
   | { type: typeof SUGGESTIONS_ACCEPT_MESSAGE; suggestionId: string }
   | { type: typeof SUGGESTIONS_REJECT_MESSAGE; suggestionId: string }
   | { type: typeof SUGGESTIONS_ACCEPT_BULK_MESSAGE; suggestionIds: string[] }
@@ -83,6 +94,8 @@ export function createBackgroundMessageHandler({
   resetData,
   runSync,
   runAutoTag = runAutoTagPipeline,
+  cancelAutoTag = requestAutoTagRunCancel,
+  now = () => Date.now(),
   shouldAutoTagAfterSync = shouldAutoTagAfterSyncDefault,
   acceptSuggestion = acceptTagSuggestion,
   rejectSuggestion = rejectTagSuggestion,
@@ -95,14 +108,22 @@ export function createBackgroundMessageHandler({
   createSiteTweetTag = async ({ bookmarkId, name }) => createSiteTweetTagDefault({ bookmarkId, name })
 }: BackgroundDependencies) {
   let isSyncRunning = false
-  let isAutoTagRunning = false
+  // Holds the start time rather than a bare boolean. The old flag could only be
+  // cleared by the run's own finally block, so a wedged run held it forever and
+  // every later trigger answered "already running" with no way back short of
+  // reloading the extension. A run older than the stale window is presumed dead
+  // and may be taken over.
+  let autoTagRunStartedAt: number | null = null
 
   const startAutoTagRun = () => {
-    if (isAutoTagRunning) {
+    const startedAt = now()
+
+    if (autoTagRunStartedAt !== null && startedAt - autoTagRunStartedAt <= AUTO_TAG_RUN_STALE_MS) {
       return { started: false, alreadyRunning: true }
     }
 
-    isAutoTagRunning = true
+    const takeoverOf = autoTagRunStartedAt
+    autoTagRunStartedAt = startedAt
     // Fire-and-forget like sync: suggestions are persisted by the pipeline and
     // progress is broadcast, so the message channel is released immediately.
     void (async () => {
@@ -112,11 +133,15 @@ export function createBackgroundMessageHandler({
         // Auto-tagging is best-effort; a failed run leaves no partial state
         // beyond already-persisted suggestions, which are safe to keep.
       } finally {
-        isAutoTagRunning = false
+        // Only the run that currently owns the lock may release it, otherwise a
+        // wedged predecessor finishing late would unlock its own replacement.
+        if (autoTagRunStartedAt === startedAt) {
+          autoTagRunStartedAt = null
+        }
       }
     })()
 
-    return { started: true }
+    return { started: true, ...(takeoverOf !== null ? { tookOverStaleRun: true } : {}) }
   }
 
   return async function handleMessage(message: BackgroundMessage | { type: string; [key: string]: unknown }) {
@@ -156,6 +181,12 @@ export function createBackgroundMessageHandler({
 
     if (message.type === AUTOTAG_RUN_MESSAGE) {
       return startAutoTagRun()
+    }
+
+    if (message.type === AUTOTAG_CANCEL_MESSAGE) {
+      // The pipeline stops at the next batch boundary, so this only records the
+      // request; already-persisted suggestions are kept either way.
+      return { cancelRequested: await cancelAutoTag() }
     }
 
     if (message.type === SUGGESTIONS_ACCEPT_MESSAGE) {
