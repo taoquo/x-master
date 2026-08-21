@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import {
   buildPrompt,
   createOpenAiCompatibleProvider,
+  REQUEST_TIMEOUT_ERROR,
   resolveApiBaseUrl,
   testLlmConnection
 } from "../../src/lib/autotag/llmProvider.ts"
@@ -31,6 +32,81 @@ function errorResponse(status: number, message: string): Response {
     json: async () => ({ error: { message } })
   } as unknown as Response
 }
+
+// A gateway that accepts the connection and never answers. Only the abort
+// signal ends this request, which is exactly the case that used to hang a run
+// forever.
+function hangingFetch(onCall?: () => void) {
+  return (_url: string, init: RequestInit) =>
+    new Promise<Response>((_resolve, reject) => {
+      onCall?.()
+      init.signal?.addEventListener("abort", () => reject(new Error("The operation was aborted")))
+    })
+}
+
+test("provider abandons a hung request once the timeout passes", async () => {
+  let calls = 0
+  const provider = createOpenAiCompatibleProvider({
+    settings: SETTINGS,
+    apiKey: "sk-test",
+    sleep: async () => {},
+    timeoutMs: 5,
+    fetchImpl: hangingFetch(() => {
+      calls += 1
+    })
+  })
+
+  await assert.rejects(
+    provider.suggestTags({
+      bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+      vocabulary: [{ name: "AI", count: 4 }],
+      allowNewTags: false
+    }),
+    new RegExp(REQUEST_TIMEOUT_ERROR)
+  )
+
+  // A timeout is transient, so it spends the single blind retry and then stops
+  // instead of stalling the batch loop.
+  assert.equal(calls, 2)
+})
+
+test("provider recovers when only the first request hangs", async () => {
+  let calls = 0
+  const provider = createOpenAiCompatibleProvider({
+    settings: SETTINGS,
+    apiKey: "sk-test",
+    sleep: async () => {},
+    timeoutMs: 5,
+    fetchImpl: (url, init) => {
+      calls += 1
+      if (calls === 1) {
+        return hangingFetch()(url, init)
+      }
+
+      return Promise.resolve(chatResponse([{ tweetId: "t1", tags: [{ name: "AI", confidence: 0.9 }] }]))
+    }
+  })
+
+  const suggestions = await provider.suggestTags({
+    bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+    vocabulary: [{ name: "AI", count: 4 }],
+    allowNewTags: false
+  })
+
+  assert.equal(calls, 2)
+  assert.deepEqual(suggestions, [{ tweetId: "t1", tags: [{ name: "AI", confidence: 0.9 }] }])
+})
+
+test("testLlmConnection reports a timeout instead of hanging", async () => {
+  const result = await testLlmConnection({
+    settings: SETTINGS,
+    apiKey: "sk-test",
+    timeoutMs: 5,
+    fetchImpl: hangingFetch()
+  })
+
+  assert.deepEqual(result, { ok: false, error: REQUEST_TIMEOUT_ERROR })
+})
 
 test("provider posts batches to chat/completions and parses suggestions", async () => {
   const requests: Array<{ url: string; body: any }> = []

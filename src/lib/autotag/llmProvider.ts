@@ -32,9 +32,52 @@ export interface AutoTagLlmProvider {
 
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>
 
+// Aborts the request once the deadline passes and reports the abort as a
+// timeout. Environments without AbortController still get the deadline, they
+// just cannot release the socket early.
+async function fetchWithTimeout(
+  fetchImpl: FetchLike,
+  endpoint: string,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<{ ok: true; response: Response } | { ok: false; timedOut: boolean; error: string }> {
+  const controller = typeof AbortController === "undefined" ? null : new AbortController()
+  let timedOut = false
+
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller?.abort()
+  }, Math.max(1, timeoutMs))
+
+  try {
+    const response = await fetchImpl(endpoint, {
+      ...init,
+      ...(controller ? { signal: controller.signal } : {})
+    })
+
+    return { ok: true, response }
+  } catch (error) {
+    return {
+      ok: false,
+      timedOut,
+      error: timedOut ? REQUEST_TIMEOUT_ERROR : error instanceof Error ? error.message : String(error)
+    }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 const MAX_TEXT_LENGTH = 500
 const RATE_LIMIT_BACKOFF_MS = 2000
 const MAX_ERROR_DETAIL_LENGTH = 200
+// A gateway that accepts the connection and never answers used to hang the
+// whole run: the await never settles, the pipeline never reaches finishRun, and
+// the background lock stays held forever. Every request now carries its own
+// deadline so a dead socket costs one batch instead of the entire feature.
+export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000
+// Kept distinguishable from gateway errors on purpose: a timeout is a transient
+// network verdict worth one retry, a 4xx is a settled verdict about the request.
+export const REQUEST_TIMEOUT_ERROR = "request-timeout"
 // Hard cap enforced on the response: a model that ignores the prompt cannot
 // flood a bookmark with five near-synonyms.
 const MAX_TAGS_PER_BOOKMARK = 2
@@ -281,30 +324,64 @@ export async function requestChatJson(options: {
   fetchImpl?: FetchLike
   sleep?: (ms: number) => Promise<void>
   capabilities?: ChatCapabilities
-}): Promise<{ ok: boolean; content: string; error?: string }> {
+  timeoutMs?: number
+}): Promise<{ ok: boolean; content: string; error?: string; timedOut?: boolean }> {
   const fetchImpl: FetchLike = options.fetchImpl ?? ((input, init) => fetch(input, init))
   const endpoint = `${resolveApiBaseUrl(options.settings.baseUrl)}/chat/completions`
+  const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
 
   async function requestOnce(sendOptions: {
     jsonMode: boolean
     temperature: boolean
-  }): Promise<{ ok: boolean; rateLimited: boolean; badRequest: boolean; content: string; error?: string }> {
-    const response = await fetchImpl(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${options.apiKey}`
+  }): Promise<{
+    ok: boolean
+    rateLimited: boolean
+    badRequest: boolean
+    timedOut: boolean
+    content: string
+    error?: string
+  }> {
+    const attempt = await fetchWithTimeout(
+      fetchImpl,
+      endpoint,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${options.apiKey}`
+        },
+        body: JSON.stringify({
+          model: options.settings.model,
+          messages: [{ role: "user", content: options.prompt }],
+          ...(sendOptions.jsonMode ? { response_format: { type: "json_object" } } : {}),
+          ...(sendOptions.temperature ? { temperature: 0 } : {})
+        })
       },
-      body: JSON.stringify({
-        model: options.settings.model,
-        messages: [{ role: "user", content: options.prompt }],
-        ...(sendOptions.jsonMode ? { response_format: { type: "json_object" } } : {}),
-        ...(sendOptions.temperature ? { temperature: 0 } : {})
-      })
-    })
+      timeoutMs
+    )
+
+    if (!attempt.ok) {
+      return {
+        ok: false,
+        rateLimited: false,
+        badRequest: false,
+        timedOut: attempt.timedOut,
+        content: "",
+        error: attempt.error
+      }
+    }
+
+    const response = attempt.response
 
     if (response.status === 429) {
-      return { ok: false, rateLimited: true, badRequest: false, content: "", error: `HTTP ${response.status}` }
+      return {
+        ok: false,
+        rateLimited: true,
+        badRequest: false,
+        timedOut: false,
+        content: "",
+        error: `HTTP ${response.status}`
+      }
     }
 
     if (!response.ok) {
@@ -312,6 +389,7 @@ export async function requestChatJson(options: {
         ok: false,
         rateLimited: false,
         badRequest: response.status >= 400 && response.status < 500,
+        timedOut: false,
         content: "",
         error: await readErrorDetail(response)
       }
@@ -321,10 +399,17 @@ export async function requestChatJson(options: {
       choices?: Array<{ message?: { content?: string } }>
     }
 
-    return { ok: true, rateLimited: false, badRequest: false, content: payload.choices?.[0]?.message?.content ?? "" }
+    return {
+      ok: true,
+      rateLimited: false,
+      badRequest: false,
+      timedOut: false,
+      content: payload.choices?.[0]?.message?.content ?? ""
+    }
   }
 
   let lastError = "request-failed"
+  let lastTimedOut = false
 
   // Gateways that proxy non-OpenAI models reject optional parameters with a 4xx:
   // some refuse response_format, newer reasoning models refuse temperature. Each
@@ -342,7 +427,14 @@ export async function requestChatJson(options: {
   let blindRetriesLeft = 1
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    let result: { ok: boolean; rateLimited: boolean; badRequest: boolean; content: string; error?: string }
+    let result: {
+      ok: boolean
+      rateLimited: boolean
+      badRequest: boolean
+      timedOut: boolean
+      content: string
+      error?: string
+    }
     try {
       result = await requestOnce(sendOptions)
     } catch (error) {
@@ -350,6 +442,7 @@ export async function requestChatJson(options: {
         ok: false,
         rateLimited: false,
         badRequest: false,
+        timedOut: false,
         content: "",
         error: error instanceof Error ? error.message : String(error)
       }
@@ -360,6 +453,7 @@ export async function requestChatJson(options: {
     }
 
     lastError = result.error ?? lastError
+    lastTimedOut = result.timedOut
 
     const dropped = result.badRequest ? dropRejectedOption(sendOptions, lastError) : false
 
@@ -367,7 +461,7 @@ export async function requestChatJson(options: {
       // A 4xx with nothing left to drop is a settled verdict (bad key, quota,
       // unknown model); only transient failures deserve the blind retry.
       if (result.badRequest || blindRetriesLeft <= 0) {
-        return { ok: false, content: "", error: lastError }
+        return { ok: false, content: "", error: lastError, ...(lastTimedOut ? { timedOut: true } : {}) }
       }
 
       blindRetriesLeft -= 1
@@ -376,7 +470,7 @@ export async function requestChatJson(options: {
     await delay(result.rateLimited ? RATE_LIMIT_BACKOFF_MS : 0, options.sleep)
   }
 
-  return { ok: false, content: "", error: lastError }
+  return { ok: false, content: "", error: lastError, ...(lastTimedOut ? { timedOut: true } : {}) }
 }
 
 // OpenAI-compatible chat/completions provider. One implementation covers
@@ -388,6 +482,7 @@ export function createOpenAiCompatibleProvider(options: {
   apiKey: string
   fetchImpl?: FetchLike
   sleep?: (ms: number) => Promise<void>
+  timeoutMs?: number
 }): AutoTagLlmProvider {
   // One capability probe per provider instance, reused by every batch.
   const capabilities = createChatCapabilities()
@@ -410,6 +505,7 @@ export function createOpenAiCompatibleProvider(options: {
         prompt,
         fetchImpl: options.fetchImpl,
         sleep: options.sleep,
+        timeoutMs: options.timeoutMs,
         capabilities
       })
 
@@ -436,22 +532,27 @@ export async function testLlmConnection(options: {
   settings: Pick<AutoTagLlmSettings, "baseUrl" | "model">
   apiKey: string
   fetchImpl?: FetchLike
+  timeoutMs?: number
 }): Promise<{ ok: boolean; error?: string }> {
   const fetchImpl: FetchLike = options.fetchImpl ?? ((input, init) => fetch(input, init))
   const endpoint = `${resolveApiBaseUrl(options.settings.baseUrl)}/models`
 
-  try {
-    const response = await fetchImpl(endpoint, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${options.apiKey}` }
-    })
+  // The settings panel awaits this button, so a hung gateway must not leave the
+  // spinner running forever either.
+  const attempt = await fetchWithTimeout(
+    fetchImpl,
+    endpoint,
+    { method: "GET", headers: { Authorization: `Bearer ${options.apiKey}` } },
+    options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+  )
 
-    if (!response.ok) {
-      return { ok: false, error: await readErrorDetail(response) }
-    }
-
-    return { ok: true }
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  if (!attempt.ok) {
+    return { ok: false, error: attempt.error }
   }
+
+  if (!attempt.response.ok) {
+    return { ok: false, error: await readErrorDetail(attempt.response) }
+  }
+
+  return { ok: true }
 }
