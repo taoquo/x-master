@@ -3,61 +3,18 @@ import type {
   BookmarkRecord,
   BookmarkTagRecord,
   Locale,
-  TagRecord
+  TagRecord,
+  TagSuggestionRecord
 } from "../../lib/types.ts"
 import { SurfaceCard } from "../../ui/components.tsx"
 import { AppIcon } from "../../ui/icons.tsx"
-
-type DetailCopy = {
-  detailsTitle: string
-  openOnX: string
-  bookmarkFocus: string
-  noBookmarkSelectedDescription: string
-  timeLabel: string
-  savedTime: string
-  timelineTitle: string
-  publishedAt: string
-  savedAt: string
-  summaryTitle: string
-  mediaTitle: string
-  closePreview: string
-  previousMedia: string
-  nextMedia: string
-  tagsTitle: string
-  noTagsYet: string
-  addTag: string
-  selectTag: string
-  createTagLabel: string
-  createTagPrompt: string
-  copyLink: string
-  done: string
-  noLinkToCopy: string
-}
+import type { OptionsCopy } from "../i18n/copy.ts"
+// The shared formatter caches its Intl instance; the private copy this replaced
+// built a new one on every call, twice per render.
+import { formatTimestamp } from "../utils.ts"
 
 function createFieldId(scope: string, name: string) {
   return `${scope}-${name}`
-}
-
-function getSectionOverline(locale: Locale, zhLabel: string, enLabel: string) {
-  return locale === "zh-CN" ? zhLabel : enLabel
-}
-
-function formatTimestamp(value: string | undefined, locale: Locale) {
-  if (!value) {
-    return locale === "zh-CN" ? "尚未同步" : "Not synced yet"
-  }
-
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat(locale, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(parsed)
 }
 
 function isVideoMediaType(type: string | undefined) {
@@ -90,13 +47,11 @@ function getSourceLink(bookmark: BookmarkRecord) {
 
 function BookmarkMediaSection({
   bookmark,
-  locale,
   copy,
   onPreview
 }: {
   bookmark: BookmarkRecord
-  locale: Locale
-  copy: DetailCopy
+  copy: OptionsCopy
   onPreview: (mediaUrl: string) => void
 }) {
   const primaryMedia = bookmark.media?.[0]
@@ -111,7 +66,7 @@ function BookmarkMediaSection({
   return (
     <section data-testid="inspector-media-section" className="options-inspector-section options-inspector-divider options-detail-media-section options-detail-media-flow">
       <div className="options-detail-section-overline options-detail-media-head">
-        <span>{getSectionOverline(locale, copy.mediaTitle, "Media")}</span>
+        <span>{copy.mediaTitle}</span>
         {bookmark.media && bookmark.media.length > 1 ? <span className="options-detail-media-meta">{bookmark.media.length}</span> : null}
       </div>
       {isVideo ? (
@@ -152,7 +107,7 @@ function BookmarkMediaSection({
   )
 }
 
-function EmptyInspectorState({ copy }: { copy: DetailCopy }) {
+function EmptyInspectorState({ copy }: { copy: OptionsCopy }) {
   return (
     <SurfaceCard chrome="bare" className="options-inspector-shell xl:h-[100dvh]">
       <div
@@ -175,7 +130,7 @@ function DetailFocusHeader({
   onClose
 }: {
   bookmark: BookmarkRecord
-  copy: DetailCopy
+  copy: OptionsCopy
   authorInitials: string
   sourceLink: string | null
   onClose: () => void
@@ -232,7 +187,7 @@ function DetailTimelineSection({
   detailTimestamp,
   savedTimestamp
 }: {
-  copy: DetailCopy
+  copy: OptionsCopy
   detailTimestamp: string
   savedTimestamp: string
 }) {
@@ -268,7 +223,7 @@ function DetailSummarySection({
   copy,
   text
 }: {
-  copy: DetailCopy
+  copy: OptionsCopy
   text: string
 }) {
   return (
@@ -287,7 +242,7 @@ function DetailFooterActions({
   onCopyLink,
   onDone
 }: {
-  copy: DetailCopy
+  copy: OptionsCopy
   onCopyLink: () => void
   onDone: () => void
 }) {
@@ -321,7 +276,7 @@ function DetailTagEntry({
   onDraftTagNameChange,
   onSubmitTag
 }: {
-  copy: DetailCopy
+  copy: OptionsCopy
   availableTagOptions: TagRecord[]
   draftTagName: string
   isSubmittingTag: boolean
@@ -425,31 +380,35 @@ function DetailTagEntry({
 }
 
 function DetailTagsSection({
-  locale,
   copy,
   currentTags,
   availableTagOptions,
   draftTagName,
   isSubmittingTag,
   tagOptionsListId,
+  pendingSuggestions,
   onDraftTagNameChange,
   onSubmitTag,
-  onDetachTag
+  onDetachTag,
+  onAcceptSuggestion,
+  onRejectSuggestion
 }: {
-  locale: Locale
-  copy: DetailCopy
+  copy: OptionsCopy
   currentTags: TagRecord[]
   availableTagOptions: TagRecord[]
   draftTagName: string
   isSubmittingTag: boolean
   tagOptionsListId: string
+  pendingSuggestions: TagSuggestionRecord[]
   onDraftTagNameChange: (name: string) => void
   onSubmitTag: (name?: string) => Promise<void>
   onDetachTag: (tagId: string) => Promise<void>
+  onAcceptSuggestion: (suggestionId: string) => void
+  onRejectSuggestion: (suggestionId: string) => void
 }) {
   return (
     <section data-testid="inspector-tags-section" className="options-inspector-section options-inspector-divider options-detail-tags-section">
-      <div className="options-detail-section-overline">{getSectionOverline(locale, copy.tagsTitle, "Tags")}</div>
+      <div className="options-detail-section-overline">{copy.tagsTitle}</div>
       <div className="options-detail-tags-row">
         <div className="options-detail-tag-group options-detail-tag-group-current">
           <div data-testid="current-tags" className="options-detail-current-tags flex flex-wrap gap-2">
@@ -463,6 +422,33 @@ function DetailTagsSection({
                 <span>{tag.name}</span>
                 <AppIcon name="close" size={12} />
               </button>
+            ))}
+            {/* Pending suggestions get the same dashed chip as the result card,
+                so accepting or rejecting is possible without leaving the
+                inspector. */}
+            {pendingSuggestions.map((suggestion) => (
+              <span
+                key={suggestion.id}
+                data-testid="inspector-suggestion-chip"
+                data-suggestion-id={suggestion.id}
+                className="options-card-tag options-card-tag-suggestion">
+                <button
+                  type="button"
+                  data-testid="inspector-suggestion-accept"
+                  aria-label={`${copy.acceptSuggestionLabel} ${suggestion.tagName}`}
+                  className="options-card-tag-suggestion-accept"
+                  onClick={() => onAcceptSuggestion(suggestion.id)}>
+                  {suggestion.tagName}
+                </button>
+                <button
+                  type="button"
+                  data-testid="inspector-suggestion-reject"
+                  aria-label={`${copy.rejectSuggestionLabel} ${suggestion.tagName}`}
+                  className="options-card-tag-suggestion-reject"
+                  onClick={() => onRejectSuggestion(suggestion.id)}>
+                  <AppIcon name="close" size={10} />
+                </button>
+              </span>
             ))}
             <DetailTagEntry
               copy={copy}
@@ -494,7 +480,7 @@ function DetailMediaLightbox({
   onPrev,
   onNext
 }: {
-  copy: DetailCopy
+  copy: OptionsCopy
   previewMediaUrl: string
   previewMediaIsVideo: boolean
   previewMediaPosterUrl: string | null
@@ -599,19 +585,25 @@ export function BookmarkInspector({
   bookmarkTags,
   locale,
   copy,
+  pendingSuggestions = [],
   onAttachTag,
   onDetachTag,
   onCreateTag,
+  onAcceptSuggestion = () => {},
+  onRejectSuggestion = () => {},
   onClose
 }: {
   bookmark: BookmarkRecord | null
   tags: TagRecord[]
   bookmarkTags: BookmarkTagRecord[]
   locale: Locale
-  copy: DetailCopy
+  copy: OptionsCopy
+  pendingSuggestions?: TagSuggestionRecord[]
   onAttachTag: (tagId: string) => Promise<void>
   onDetachTag: (tagId: string) => Promise<void>
   onCreateTag: (name: string) => Promise<TagRecord | undefined | void>
+  onAcceptSuggestion?: (suggestionId: string) => void
+  onRejectSuggestion?: (suggestionId: string) => void
   onClose: () => void
 }) {
   const [draftTagName, setDraftTagName] = useState("")
@@ -891,7 +883,6 @@ export function BookmarkInspector({
             <DetailSummarySection copy={copy} text={bookmark.text} />
             <BookmarkMediaSection
               bookmark={bookmark}
-              locale={locale}
               copy={copy}
               onPreview={handleOpenPreview}
             />
@@ -903,16 +894,18 @@ export function BookmarkInspector({
               savedTimestamp={savedTimestamp}
             />
             <DetailTagsSection
-              locale={locale}
               copy={copy}
               currentTags={currentTags}
               availableTagOptions={availableTagOptions}
               draftTagName={draftTagName}
               isSubmittingTag={isSubmittingTag}
               tagOptionsListId={tagOptionsListId}
+              pendingSuggestions={pendingSuggestions}
               onDraftTagNameChange={setDraftTagName}
               onSubmitTag={handleSubmitTag}
               onDetachTag={onDetachTag}
+              onAcceptSuggestion={onAcceptSuggestion}
+              onRejectSuggestion={onRejectSuggestion}
             />
             <DetailFooterActions
               copy={copy}

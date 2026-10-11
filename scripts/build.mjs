@@ -172,7 +172,10 @@ function createBuildOptions(entryPoint, outfile, format) {
     jsx: "automatic",
     platform: "browser",
     target: "chrome120",
-    sourcemap: true,
+    // Source maps are a development aid only: shipping them in the packaged
+    // extension would add megabytes of .map files to the store upload and hand
+    // readers a verbatim copy of the source.
+    sourcemap: watchMode,
     tsconfig: path.join(appDir, "tsconfig.json"),
     define: {
       "process.env.NODE_ENV": JSON.stringify(watchMode ? "development" : "production")

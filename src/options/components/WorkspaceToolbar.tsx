@@ -1,13 +1,11 @@
 import React from "react"
-import type { Locale } from "../../lib/types.ts"
 import type { BookmarkSortOrder } from "../../lib/search/searchBookmarks.ts"
 import { AppIcon } from "../../ui/icons.tsx"
 import type { OptionsCopy } from "../i18n/copy.ts"
-import { cn, getNextSortOrder, getSectionOverline, getSortLabel } from "../utils.ts"
+import { cn, getNextSortOrder, getSortLabel } from "../utils.ts"
 import { InlineMessage, TextInputField } from "./common.tsx"
 
 export function WorkspaceToolbar({
-  locale,
   copy,
   loadError,
   currentScopeLabel,
@@ -28,7 +26,6 @@ export function WorkspaceToolbar({
   activeRefinementChips,
   clearRefinement
 }: {
-  locale: Locale
   copy: OptionsCopy
   loadError: string | null
   currentScopeLabel: string
@@ -56,7 +53,7 @@ export function WorkspaceToolbar({
       <div className="options-main-header-top">
         <div className="options-main-header-row">
           <div className="options-main-header-copy min-w-0">
-            <div className="options-overline">{getSectionOverline(locale, copy.libraryTitle, "Archive")}</div>
+            <div className="options-overline">{copy.libraryTitle}</div>
             <h2 className="options-display-title-sm mt-3 truncate font-bold">{currentScopeLabel}</h2>
           </div>
           <div className="options-main-header-summary text-right">

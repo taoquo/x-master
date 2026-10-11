@@ -53,11 +53,12 @@ export function TagGraphView({
   const neighbourTagIds = focusedTagId
     ? getGraphNeighbourTagIds(model.edges, focusedTagId)
     : new Set<string>()
-  const focusedNode = focusedTagId
-    ? model.nodes.find((node) => node.tagId === focusedTagId)
-    : undefined
+  // Built before the lookups below: the edge pass used to call model.nodes.find
+  // twice per edge, which is O(E x N) on a view whose whole point is to stay
+  // usable on a large library.
   const nodeById = new Map(model.nodes.map((node) => [node.tagId, node]))
   const authorNodeByHandle = new Map(model.authorNodes.map((node) => [node.authorHandle, node]))
+  const focusedNode = focusedTagId ? nodeById.get(focusedTagId) : undefined
   // With a tag focused, only that tag's authors stay lit; otherwise the author
   // ring adds noise instead of explanation.
   const focusedAuthorHandles = focusedTagId
@@ -106,8 +107,8 @@ export function TagGraphView({
           aria-label={copy.graphAriaLabel}>
           <g className="options-tag-graph-edges">
             {model.edges.map((edge) => {
-              const source = model.nodes.find((node) => node.tagId === edge.sourceTagId)
-              const target = model.nodes.find((node) => node.tagId === edge.targetTagId)
+              const source = nodeById.get(edge.sourceTagId)
+              const target = nodeById.get(edge.targetTagId)
               if (!source || !target) {
                 return null
               }

@@ -27,6 +27,10 @@ export interface AutoTagLlmProvider {
     // Max number of brand new tags the model may introduce for this batch.
     // Ignored when allowNewTags is false.
     newTagBudget?: number
+    // Absolute epoch-ms wall clock for the whole call. No attempt starts after
+    // it, no attempt may run past it, and backoff sleeps are clamped to it, so
+    // one batch can never outlive the run budget.
+    deadlineMs?: number
   }): Promise<LlmTagSuggestion[]>
 }
 
@@ -80,6 +84,10 @@ const MAX_ERROR_DETAIL_LENGTH = 200
 // the background lock stays held forever. Every request now carries its own
 // deadline so a dead socket costs one batch instead of the entire feature.
 export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000
+// Reported when the run's wall-clock budget is spent before/while a request
+// could be attempted. Distinct from a socket timeout so the run summary can tell
+// "the gateway is slow" from "we ran out of run".
+export const DEADLINE_EXCEEDED_ERROR = "run-deadline-exceeded"
 // Kept distinguishable from gateway errors on purpose: a timeout is a transient
 // network verdict worth one retry, a 4xx is a settled verdict about the request.
 export const REQUEST_TIMEOUT_ERROR = "request-timeout"
@@ -387,15 +395,27 @@ export async function requestChatJson(options: {
   sleep?: (ms: number) => Promise<void>
   capabilities?: ChatCapabilities
   timeoutMs?: number
+  // Absolute epoch-ms wall clock for the whole call. The pipeline's budget used
+  // to be checked only at batch boundaries, so a single slow batch (5 attempts x
+  // the request timeout, plus rate-limit backoff) could outlive Chrome's
+  // per-invocation limit and get the worker killed before finishRun.
+  deadlineMs?: number
+  now?: () => number
 }): Promise<{ ok: boolean; content: string; error?: string; timedOut?: boolean }> {
   const fetchImpl: FetchLike = options.fetchImpl ?? ((input, init) => fetch(input, init))
   const endpoint = `${resolveApiBaseUrl(options.settings.baseUrl)}/chat/completions`
   const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+  const now = options.now ?? (() => Date.now())
+  const remainingBudgetMs = () =>
+    options.deadlineMs === undefined ? Number.POSITIVE_INFINITY : options.deadlineMs - now()
 
-  async function requestOnce(sendOptions: {
-    jsonMode: boolean
-    temperature: boolean
-  }): Promise<{
+  async function requestOnce(
+    sendOptions: {
+      jsonMode: boolean
+      temperature: boolean
+    },
+    attemptTimeoutMs: number
+  ): Promise<{
     ok: boolean
     rateLimited: boolean
     badRequest: boolean
@@ -421,7 +441,7 @@ export async function requestChatJson(options: {
           ...(sendOptions.temperature ? { temperature: 0 } : {})
         })
       },
-      timeoutMs
+      attemptTimeoutMs
     )
 
     if (!attempt.ok) {
@@ -509,6 +529,14 @@ export async function requestChatJson(options: {
   let blindProbesLeft = 1
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
+    // The deadline is absolute, so it also covers the retries and backoffs below.
+    // Without this check the loop could keep going long after the run budget was
+    // spent, which is exactly how a run outlived the worker.
+    const remainingMs = remainingBudgetMs()
+    if (remainingMs <= 0) {
+      return { ok: false, content: "", error: DEADLINE_EXCEEDED_ERROR, timedOut: true }
+    }
+
     let result: {
       ok: boolean
       rateLimited: boolean
@@ -520,7 +548,7 @@ export async function requestChatJson(options: {
       error?: string
     }
     try {
-      result = await requestOnce(sendOptions)
+      result = await requestOnce(sendOptions, Math.max(1, Math.min(timeoutMs, remainingMs)))
     } catch (error) {
       result = {
         ok: false,
@@ -549,7 +577,12 @@ export async function requestChatJson(options: {
       }
 
       rateLimitRetriesLeft -= 1
-      await delay(resolveRateLimitBackoffMs(result.retryAfterMs, rateLimitHits), options.sleep)
+      // Clamped so a backoff cannot sleep past the deadline; the loop's own
+      // check then reports the deadline instead of starting another request.
+      await delay(
+        Math.min(resolveRateLimitBackoffMs(result.retryAfterMs, rateLimitHits), Math.max(0, remainingBudgetMs())),
+        options.sleep
+      )
       rateLimitHits += 1
       continue
     }
@@ -619,6 +652,7 @@ export function createOpenAiCompatibleProvider(options: {
         fetchImpl: options.fetchImpl,
         sleep: options.sleep,
         timeoutMs: options.timeoutMs,
+        deadlineMs: input.deadlineMs,
         capabilities
       })
 

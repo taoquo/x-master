@@ -2,9 +2,12 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import {
   buildGraphViewModel,
+  DEFAULT_GRAPH_AUTHOR_LIMIT,
   getGraphNeighbourTagIds,
+  selectScopedBookmarkTags,
   type GraphScope
 } from "../../src/options/graph/graphModel.ts"
+import { buildTagRelationGraph } from "../../src/lib/graph/tagRelations.ts"
 import type { BookmarkRecord, BookmarkTagRecord, TagRecord } from "../../src/lib/types.ts"
 
 const createdAt = "2026-03-15T00:00:00.000Z"
@@ -223,4 +226,65 @@ test("getGraphNeighbourTagIds collects both edge directions", () => {
   )
 
   assert.deepEqual([...neighbours].sort(), ["tag-b", "tag-c"])
+})
+
+// The caller memoises the expensive relation graph separately from the
+// search-dependent view model, so passing a prebuilt graph has to produce exactly
+// what building it internally would — and has to actually be the graph that is
+// used, or the memo would be pointless.
+test("buildGraphViewModel uses the prebuilt graph when one is passed", () => {
+  const tags = [tag("tag-a", "AI"), tag("tag-b", "Rust"), tag("tag-c", "Agents")]
+  const bookmarkTags = [
+    relation("tweet-1", "tag-a"),
+    relation("tweet-1", "tag-c"),
+    relation("tweet-2", "tag-b")
+  ]
+  const bookmarks = [bookmark("tweet-1", "alice"), bookmark("tweet-2", "bob")]
+  const graphScope = scope({ searchQuery: "a", activeAuthorHandles: ["alice"] })
+
+  const direct = buildGraphViewModel({
+    tags,
+    bookmarkTags,
+    bookmarks,
+    scope: graphScope,
+    includeAuthors: true
+  })
+
+  const graph = buildTagRelationGraph({
+    tags,
+    bookmarkTags: selectScopedBookmarkTags({
+      bookmarks,
+      bookmarkTags,
+      activeAuthorHandles: graphScope.activeAuthorHandles
+    }),
+    bookmarks,
+    options: { includeAuthors: true, maxAuthors: DEFAULT_GRAPH_AUTHOR_LIMIT }
+  })
+
+  assert.deepEqual(
+    buildGraphViewModel({ tags, bookmarkTags, bookmarks, scope: graphScope, includeAuthors: true, graph }),
+    direct
+  )
+
+  // A prebuilt graph that could not have come from this input proves the argument
+  // is honoured rather than quietly rebuilt from the other parameters.
+  const extraTag = tag("tag-z", "Extra")
+  const graphWithExtra = buildTagRelationGraph({
+    tags: [...tags, extraTag],
+    bookmarkTags,
+    bookmarks,
+    options: { includeAuthors: true, maxAuthors: DEFAULT_GRAPH_AUTHOR_LIMIT }
+  })
+
+  const fromExtra = buildGraphViewModel({
+    tags,
+    bookmarkTags,
+    bookmarks,
+    scope: graphScope,
+    includeAuthors: true,
+    graph: graphWithExtra
+  })
+
+  assert.equal(fromExtra.nodes.some((node) => node.tagId === "tag-z"), true)
+  assert.equal(direct.nodes.some((node) => node.tagId === "tag-z"), false)
 })

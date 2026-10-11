@@ -4,6 +4,7 @@ import {
   getKeepAliveHolderCount,
   KEEP_ALIVE_ALARM,
   KEEP_ALIVE_PERIOD_IN_MINUTES,
+  releaseKeepAliveForAbandonedRun,
   startKeepAlive,
   stopKeepAlive
 } from "../../src/lib/runtime/keepAlive.ts"
@@ -126,4 +127,57 @@ test("a missing onAlarm hook does not stop the alarm from being created", () => 
 
   assert.doesNotThrow(() => startKeepAlive())
   assert.deepEqual(created, [{ name: KEEP_ALIVE_ALARM, periodInMinutes: KEEP_ALIVE_PERIOD_IN_MINUTES }])
+})
+
+// A wedged run never reaches its own finally block, so nothing ever releases the
+// holder it took. Left alone, the holder count never returns to zero and the
+// periodic alarm wakes the worker every 30s for the life of the worker.
+test("abandoning a wedged run releases its leaked holder and clears the alarm", () => {
+  const { cleared } = installAlarmsMock()
+
+  startKeepAlive()
+  assert.equal(getKeepAliveHolderCount(), 1)
+
+  releaseKeepAliveForAbandonedRun()
+
+  assert.equal(getKeepAliveHolderCount(), 0)
+  assert.deepEqual(cleared, [KEEP_ALIVE_ALARM])
+})
+
+test("a run starting while a clear is in flight still ends up protected", async () => {
+  const events: string[] = []
+  let releaseClear: () => void = () => {}
+  const clearGate = new Promise<void>((resolve) => {
+    releaseClear = resolve
+  })
+
+  ;(globalThis as typeof globalThis & { chrome: any }).chrome = {
+    alarms: {
+      create: () => {
+        events.push("create")
+      },
+      clear: async () => {
+        // Resolves only when the test lets it, which is the ordering that used to
+        // leave the new run unprotected.
+        await clearGate
+        events.push("clear")
+        return true
+      },
+      onAlarm: { addListener: () => {} }
+    }
+  }
+
+  startKeepAlive()
+  stopKeepAlive()
+  // The clear is pending; a new run arrives in the same task.
+  startKeepAlive()
+
+  releaseClear()
+  await clearGate
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  // The late clear deleted the alarm the new run had armed, so the keepalive must
+  // re-arm it: otherwise that run can be killed in the next 30 second idle gap.
+  assert.deepEqual(events, ["create", "create", "clear", "create"])
+  assert.equal(events[events.length - 1], "create")
 })

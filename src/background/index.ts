@@ -8,12 +8,16 @@ import {
   rejectTagSuggestion
 } from "../lib/autotag/suggestionActions.ts"
 import { removeBookmarkSnapshot, upsertBookmarkSnapshot } from "../lib/storage/bookmarksStore.ts"
-import { startKeepAlive, stopKeepAlive } from "../lib/runtime/keepAlive.ts"
+import { backfillHashtagsFromRawPayloads } from "../lib/storage/backfillHashtags.ts"
+import { releaseKeepAliveForAbandonedRun, startKeepAlive, stopKeepAlive } from "../lib/runtime/keepAlive.ts"
 import { resetLocalData } from "../lib/storage/resetLocalData.ts"
 import { getSecrets } from "../lib/storage/secrets.ts"
 import {
+  AUTO_TAG_RUN_LIVENESS_MS,
   AUTO_TAG_RUN_STALE_MS,
+  clearAutoTagRunState,
   getSettings,
+  isAutoTagRunActive,
   requestAutoTagRunCancel,
   saveLastSyncSummary
 } from "../lib/storage/settings.ts"
@@ -63,6 +67,11 @@ interface BackgroundDependencies {
   // cannot wait out the real stale window.
   now?: () => number
   shouldAutoTagAfterSync?: () => Promise<boolean>
+  // One-time hashtag backfill. It used to run inside the auto-tag pipeline,
+  // behind the "auto-tag is enabled" early return, so a fresh install with the
+  // feature off (the default) never backfilled at all. It is a data migration
+  // rather than an auto-tag concern, so it runs off the sync path instead.
+  backfillHashtags?: () => Promise<unknown>
   acceptSuggestion?: (suggestionId: string) => Promise<TagSuggestionRecord | null>
   rejectSuggestion?: (suggestionId: string) => Promise<TagSuggestionRecord | null>
   acceptSuggestionsBulk?: (suggestionIds: string[]) => Promise<{ acceptedCount: number }>
@@ -98,6 +107,7 @@ export function createBackgroundMessageHandler({
   cancelAutoTag = requestAutoTagRunCancel,
   now = () => Date.now(),
   shouldAutoTagAfterSync = shouldAutoTagAfterSyncDefault,
+  backfillHashtags = backfillHashtagsFromRawPayloads,
   acceptSuggestion = acceptTagSuggestion,
   rejectSuggestion = rejectTagSuggestion,
   acceptSuggestionsBulk = acceptTagSuggestionsBulk,
@@ -109,6 +119,7 @@ export function createBackgroundMessageHandler({
   createSiteTweetTag = async ({ bookmarkId, name }) => createSiteTweetTagDefault({ bookmarkId, name })
 }: BackgroundDependencies) {
   let isSyncRunning = false
+  let syncRunStartedAt: number | null = null
   // Holds the start time rather than a bare boolean. The old flag could only be
   // cleared by the run's own finally block, so a wedged run held it forever and
   // every later trigger answered "already running" with no way back short of
@@ -116,15 +127,42 @@ export function createBackgroundMessageHandler({
   // and may be taken over.
   let autoTagRunStartedAt: number | null = null
 
-  const startAutoTagRun = () => {
+  // A run that is genuinely alive keeps refreshing its persisted heartbeat once
+  // per batch. The in-memory timestamp cannot see a run left behind by an earlier
+  // worker generation, and on its own it wrongly declared a healthy but slow run
+  // dead and started a second one on top of it — two pipelines spending on the
+  // same bookmarks and fighting over one run state.
+  const hasLivePersistedRun = async (atMs: number) => {
+    try {
+      const persisted = await getSettings()
+      // The liveness window, not the UI stale window: a run dead enough to take
+      // over must not be able to refuse new runs for the full five minutes.
+      return isAutoTagRunActive(persisted.autoTagRunState, atMs, AUTO_TAG_RUN_LIVENESS_MS)
+    } catch {
+      // Unreadable settings cannot prove a run is alive, so fall back to the
+      // in-memory answer rather than blocking every future run.
+      return false
+    }
+  }
+
+  const startAutoTagRun = async () => {
     const startedAt = now()
 
     if (autoTagRunStartedAt !== null && startedAt - autoTagRunStartedAt <= AUTO_TAG_RUN_STALE_MS) {
       return { started: false, alreadyRunning: true }
     }
 
+    if (await hasLivePersistedRun(startedAt)) {
+      return { started: false, alreadyRunning: true }
+    }
+
     const takeoverOf = autoTagRunStartedAt
     autoTagRunStartedAt = startedAt
+    // The predecessor is abandoned: its `finally` will never release the holder
+    // it took, so the alarm would otherwise stay armed for the life of the worker.
+    if (takeoverOf !== null) {
+      releaseKeepAliveForAbandonedRun()
+    }
     // A batched run is mostly waiting, and the gaps between batches do not keep
     // an MV3 worker alive on their own, so hold a keepalive for the whole run.
     startKeepAlive()
@@ -155,15 +193,40 @@ export function createBackgroundMessageHandler({
     }
 
     if (message.type === RESET_LOCAL_DATA_MESSAGE) {
+      // Stop owning the runs before clearing: a live pipeline or sync keeps
+      // writing into the stores that are about to be emptied, which is how a
+      // reset used to refill tag-suggestions/llm-analysis and resurrect run
+      // state for bookmarks that no longer existed. Clearing the persisted run
+      // state is what tells the pipeline it lost ownership, and it stops at its
+      // next batch boundary.
+      autoTagRunStartedAt = null
+      syncRunStartedAt = null
+      isSyncRunning = false
+      releaseKeepAliveForAbandonedRun()
+      try {
+        await clearAutoTagRunState()
+      } catch {
+        // Best-effort: the reset itself is what the caller asked for.
+      }
+
       return resetData()
     }
 
     if (message.type === RUN_SYNC_MESSAGE) {
-      if (isSyncRunning) {
+      // Same escape hatch as auto-tagging. A sync with no takeover rule answered
+      // "already running" forever once one hung, with no way back short of
+      // reloading the extension.
+      if (isSyncRunning && syncRunStartedAt !== null && now() - syncRunStartedAt <= AUTO_TAG_RUN_STALE_MS) {
         return { started: false, alreadyRunning: true }
       }
 
+      const takeoverOf = isSyncRunning ? syncRunStartedAt : null
       isSyncRunning = true
+      syncRunStartedAt = now()
+      const syncStartedAtSnapshot = syncRunStartedAt
+      if (takeoverOf !== null) {
+        releaseKeepAliveForAbandonedRun()
+      }
       // A paged sync has the same shape as an auto-tag run: long, mostly
       // waiting, and fatal to lose halfway through.
       startKeepAlive()
@@ -174,18 +237,31 @@ export function createBackgroundMessageHandler({
         try {
           await runSync()
 
+          // Backfill before the auto-tag gate: the hashtag rule needs the data
+          // even when this run does not trigger auto-tagging.
+          try {
+            await backfillHashtags()
+          } catch {
+            // Best-effort migration; the sync result is what the caller waits for.
+          }
+
           if (await shouldAutoTagAfterSync()) {
-            startAutoTagRun()
+            await startAutoTagRun()
           }
         } catch (error) {
           await persistSyncErrorFallback(error)
         } finally {
           stopKeepAlive()
-          isSyncRunning = false
+          // Only the run that owns the flag may clear it, so a superseded sync
+          // finishing late cannot unlock its replacement.
+          if (syncRunStartedAt === syncStartedAtSnapshot) {
+            isSyncRunning = false
+            syncRunStartedAt = null
+          }
         }
       })()
 
-      return { started: true }
+      return { started: true, ...(takeoverOf !== null ? { tookOverStaleRun: true } : {}) }
     }
 
     if (message.type === AUTOTAG_RUN_MESSAGE) {
@@ -313,6 +389,38 @@ async function persistSyncErrorFallback(error: unknown) {
     })
   } catch {
     // Nothing left to report to; polling clients will hit their timeout.
+  }
+}
+
+// Called once when the service worker starts. A sync or an auto-tag run only ever
+// lives inside the worker that began it, so anything still marked "in flight" at
+// startup belongs to a worker that is already gone. Left alone, the sync summary
+// stayed "running" forever and every popup looked like a live sync until its ten
+// minute poll gave up, and the run state kept claiming a run was in flight.
+export async function reconcileInterruptedRuns() {
+  try {
+    const settings = await getSettings()
+
+    if (settings.lastSyncSummary.status === "running") {
+      await saveLastSyncSummary({
+        status: "error",
+        fetchedCount: 0,
+        insertedCount: 0,
+        updatedCount: 0,
+        failedCount: 0,
+        lastSyncedAt: new Date().toISOString(),
+        errorKind: "interrupted"
+      })
+    }
+
+    if (settings.autoTagRunState) {
+      // Clearing it frees the run immediately instead of waiting out the liveness
+      // window, and tells the popup to drop its last progress frame.
+      await clearAutoTagRunState()
+    }
+  } catch {
+    // Startup is best-effort: a failure here must not stop the worker from
+    // serving messages.
   }
 }
 

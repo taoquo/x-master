@@ -220,6 +220,13 @@ const AUTO_TAG_RUN_OUTCOMES = new Set<AutoTagRunOutcome>([
 // and the background worker lets a new run take over.
 export const AUTO_TAG_RUN_STALE_MS = 5 * 60 * 1000
 
+// How long a silent heartbeat still counts as "alive" when deciding whether a new
+// run may take the state over. A live run refreshes it once per batch and a batch
+// is capped below this (DEFAULT_LLM_BATCH_BUDGET_MS), so a longer silence means
+// the run is gone. Deliberately shorter than the UI-facing stale window: using
+// that one here would let a dead run refuse new runs for a full five minutes.
+export const AUTO_TAG_RUN_LIVENESS_MS = 2.5 * 60 * 1000
+
 function normalizeCount(value: unknown) {
   const numeric = Number(value)
   return Number.isFinite(numeric) ? Math.trunc(numeric) : 0
@@ -272,7 +279,10 @@ function normalizeAutoTagRunState(value: unknown): AutoTagRunState | undefined {
     return undefined
   }
 
+  const runId = typeof record.runId === "string" ? record.runId.trim() : ""
+
   return {
+    ...(runId ? { runId } : {}),
     startedAt,
     updatedAt: String(record.updatedAt ?? "").trim() || startedAt,
     phase: record.phase === "llm" ? "llm" : "heuristics",
@@ -285,7 +295,11 @@ function normalizeAutoTagRunState(value: unknown): AutoTagRunState | undefined {
 // A heartbeat that stopped moving means the run died without reaching
 // finishRun: the service worker was recycled, the browser was closed, or the
 // run wedged. Callers use this to ignore the state instead of waiting forever.
-export function isAutoTagRunStateStale(state: AutoTagRunState | undefined, nowMs = Date.now()) {
+export function isAutoTagRunStateStale(
+  state: AutoTagRunState | undefined,
+  nowMs = Date.now(),
+  staleAfterMs = AUTO_TAG_RUN_STALE_MS
+) {
   if (!state) {
     return false
   }
@@ -295,7 +309,23 @@ export function isAutoTagRunStateStale(state: AutoTagRunState | undefined, nowMs
     return true
   }
 
-  return nowMs - heartbeat > AUTO_TAG_RUN_STALE_MS
+  return nowMs - heartbeat > staleAfterMs
+}
+
+// "A run is really in flight right now." The absence of a state means finished
+// (finishRun clears it), and a frozen heartbeat means the worker died, so both
+// read as not-running. This is the only terminal signal a run produces: the
+// progress messages are broadcast-only and never announce completion.
+//
+// `staleAfterMs` lets the takeover decision use the shorter liveness window while
+// the UI keeps the longer one: the two questions differ, because a run that is
+// dead enough to take over is not necessarily stale enough to stop reporting.
+export function isAutoTagRunActive(
+  state: AutoTagRunState | undefined,
+  nowMs = Date.now(),
+  staleAfterMs = AUTO_TAG_RUN_STALE_MS
+) {
+  return Boolean(state) && !isAutoTagRunStateStale(state, nowMs, staleAfterMs)
 }
 
 function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): ExtensionSettings {
@@ -412,11 +442,19 @@ export async function resetSettings() {
 // that dies mid-flight is still visible afterwards. Any stale state from a
 // previous dead run is replaced, and a pending cancel is cleared with it: that
 // cancel belonged to a run that is already gone.
-export async function beginAutoTagRunState(input: { phase: "heuristics" | "llm"; total: number }) {
+//
+// Returns the state it published, whose runId is the run's identity for every
+// later write. A takeover replaces the state, and the superseded run must then
+// stop writing rather than clobber its replacement.
+export async function beginAutoTagRunState(input: {
+  phase: "heuristics" | "llm"
+  total: number
+}): Promise<AutoTagRunState | undefined> {
   const startedAt = new Date().toISOString()
-
-  return updateSettings({
+  const runId = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  const next = await updateSettings({
     autoTagRunState: {
+      runId,
       startedAt,
       updatedAt: startedAt,
       phase: input.phase,
@@ -424,24 +462,37 @@ export async function beginAutoTagRunState(input: { phase: "heuristics" | "llm";
       total: Math.max(0, Math.trunc(input.total))
     }
   })
+
+  return next.autoTagRunState
 }
 
 // One round-trip does double duty: it refreshes the heartbeat and returns the
 // state the options page may have written, which is how a cancel reaches a
 // running pipeline without a second read per batch.
+//
+// It is scoped to the run that owns the state. A takeover installs a different
+// runId, so a superseded run stops refreshing someone else's heartbeat, stops
+// reading someone else's cancel flag, and is told to stop.
 export async function touchAutoTagRunState(input: {
+  runId: string | undefined
   phase: "heuristics" | "llm"
   processed: number
   total: number
-}): Promise<AutoTagRunState | undefined> {
+}): Promise<{ state: AutoTagRunState | undefined; ownsState: boolean }> {
+  let ownsState = false
+
   const next = await updateSettings((current) => {
-    if (!current.autoTagRunState) {
+    const state = current.autoTagRunState
+
+    if (state === undefined || state.runId !== input.runId) {
+      ownsState = false
       return {}
     }
 
+    ownsState = true
     return {
       autoTagRunState: {
-        ...current.autoTagRunState,
+        ...state,
         updatedAt: new Date().toISOString(),
         phase: input.phase,
         processed: Math.max(0, Math.trunc(input.processed)),
@@ -450,7 +501,7 @@ export async function touchAutoTagRunState(input: {
     }
   })
 
-  return next.autoTagRunState
+  return { state: next.autoTagRunState, ownsState }
 }
 
 // A cancel only marks the persisted state; the pipeline stops at the next batch
@@ -461,6 +512,32 @@ export async function requestAutoTagRunCancel() {
   )
 
   return Boolean(next.autoTagRunState?.cancelRequested)
+}
+
+// Clears the in-flight state and records the outcome, but only for the run that
+// owns the state. A run superseded by a takeover must stay silent: clearing here
+// would hide the run that replaced it (and leave it looking uncancellable),
+// while its own report describes work that was thrown away.
+export async function finishAutoTagRun(input: {
+  runId: string | undefined
+  summary: AutoTagRunSummary
+}): Promise<{ reported: boolean }> {
+  let reported = false
+
+  await updateSettings((current) => {
+    const state = current.autoTagRunState
+    // No state at all means nothing is live, so reporting is always safe. With a
+    // state present, only its owner may clear it.
+    reported = state === undefined || (input.runId !== undefined && state.runId === input.runId)
+
+    if (!reported) {
+      return {}
+    }
+
+    return { autoTagRunState: undefined, lastAutoTagRun: input.summary }
+  })
+
+  return { reported }
 }
 
 export async function clearAutoTagRunState() {

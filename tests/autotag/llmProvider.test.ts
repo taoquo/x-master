@@ -3,11 +3,15 @@ import assert from "node:assert/strict"
 import {
   buildPrompt,
   createOpenAiCompatibleProvider,
+  DEADLINE_EXCEEDED_ERROR,
   parseRetryAfterMs,
+  requestChatJson,
   REQUEST_TIMEOUT_ERROR,
   resolveApiBaseUrl,
   testLlmConnection
 } from "../../src/lib/autotag/llmProvider.ts"
+import { DEFAULT_LLM_BATCH_BUDGET_MS, DEFAULT_LLM_RUN_BUDGET_MS } from "../../src/lib/autotag/pipeline.ts"
+import { AUTO_TAG_RUN_LIVENESS_MS, AUTO_TAG_RUN_STALE_MS } from "../../src/lib/storage/settings.ts"
 
 const SETTINGS = { baseUrl: "https://api.example.com/v1/", model: "test-model" }
 
@@ -44,6 +48,123 @@ function hangingFetch(onCall?: () => void) {
       init.signal?.addEventListener("abort", () => reject(new Error("The operation was aborted")))
     })
 }
+
+test("the run budget stays below Chrome's per-invocation service worker limit", () => {
+  // An MV3 worker is force-terminated at roughly five minutes and no keepalive
+  // resets that, so a budget at or above it lets the worker die before finishRun
+  // and leaves the run state stuck on "running". This used to be 8 minutes.
+  const chromePerInvocationLimitMs = 5 * 60 * 1000
+  assert.ok(
+    DEFAULT_LLM_RUN_BUDGET_MS < chromePerInvocationLimitMs,
+    `run budget ${DEFAULT_LLM_RUN_BUDGET_MS}ms must stay under ${chromePerInvocationLimitMs}ms`
+  )
+  // The heartbeat is refreshed once per batch, so a batch must stay shorter than
+  // the window that decides whether a run is alive, and that window must in turn
+  // be shorter than the UI-facing stale window (otherwise a dead run could refuse
+  // new runs for five minutes).
+  assert.ok(DEFAULT_LLM_BATCH_BUDGET_MS < AUTO_TAG_RUN_LIVENESS_MS)
+  assert.ok(AUTO_TAG_RUN_LIVENESS_MS < AUTO_TAG_RUN_STALE_MS)
+})
+
+test("requestChatJson refuses to start an attempt once the deadline has passed", async () => {
+  let calls = 0
+
+  const result = await requestChatJson({
+    settings: SETTINGS,
+    apiKey: "sk-test",
+    prompt: "hello",
+    fetchImpl: async () => {
+      calls += 1
+      return chatResponse([])
+    },
+    now: () => 1_000,
+    deadlineMs: 999
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.error, DEADLINE_EXCEEDED_ERROR)
+  // The point of the check: no request is issued at all.
+  assert.equal(calls, 0)
+})
+
+test("a deadline stops rate-limit retries from running past the budget", async () => {
+  let calls = 0
+  const sleeps: number[] = []
+  let clock = 0
+
+  const result = await requestChatJson({
+    settings: SETTINGS,
+    apiKey: "sk-test",
+    prompt: "hello",
+    fetchImpl: async () => {
+      calls += 1
+      return jsonResponse(429, {})
+    },
+    sleep: async (ms) => {
+      sleeps.push(ms)
+      clock += ms
+    },
+    now: () => clock,
+    deadlineMs: 1_000
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.error, DEADLINE_EXCEEDED_ERROR)
+  // Without the deadline the 429 budget alone allows three attempts. The first
+  // backoff (2s) is clamped to the 1s that is left, and the next check stops the
+  // loop instead of starting attempt two.
+  assert.equal(calls, 1)
+  assert.deepEqual(sleeps, [1_000])
+})
+
+test("a deadline shortens an attempt's timeout instead of running to the request timeout", async () => {
+  let calls = 0
+  const startedAt = Date.now()
+
+  const result = await requestChatJson({
+    settings: SETTINGS,
+    apiKey: "sk-test",
+    prompt: "hello",
+    fetchImpl: hangingFetch(() => {
+      calls += 1
+    }),
+    // The request timeout alone would hold the worker for a full minute.
+    timeoutMs: 60_000,
+    deadlineMs: Date.now() + 20
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.timedOut, true)
+  assert.equal(calls, 1)
+  // Clamped to the ~20ms budget rather than the 60s request timeout.
+  assert.ok(Date.now() - startedAt < 5_000, "the attempt must not run to the full request timeout")
+})
+
+test("the provider passes the batch deadline through to the request", async () => {
+  let calls = 0
+  const provider = createOpenAiCompatibleProvider({
+    settings: SETTINGS,
+    apiKey: "sk-test",
+    sleep: async () => {},
+    fetchImpl: async () => {
+      calls += 1
+      return chatResponse([])
+    }
+  })
+
+  await assert.rejects(
+    provider.suggestTags({
+      bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "hello" }],
+      vocabulary: [{ name: "AI", count: 1 }],
+      allowNewTags: false,
+      deadlineMs: Date.now() - 1
+    }),
+    new RegExp(DEADLINE_EXCEEDED_ERROR)
+  )
+
+  // An expired batch deadline must not spend a request.
+  assert.equal(calls, 0)
+})
 
 test("provider abandons a hung request once the timeout passes", async () => {
   let calls = 0

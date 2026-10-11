@@ -36,6 +36,10 @@ function getAlarms(): AlarmsApi | null {
 let listenerAttached = false
 // Reference counted so overlapping callers cannot cancel each other's keepalive.
 let holders = 0
+// Bumped on every create/abandon. A clear is asynchronous while create is not,
+// so a clear that resolves after a newer create must not be allowed to leave the
+// newer run unprotected.
+let alarmGeneration = 0
 
 function attachListenerOnce(alarms: AlarmsApi) {
   if (listenerAttached || !alarms.onAlarm?.addListener) {
@@ -61,6 +65,7 @@ export function startKeepAlive() {
   }
 
   attachListenerOnce(alarms)
+  alarmGeneration += 1
   alarms.create(KEEP_ALIVE_ALARM, { periodInMinutes: KEEP_ALIVE_PERIOD_IN_MINUTES })
 }
 
@@ -76,10 +81,41 @@ export function stopKeepAlive() {
     return
   }
 
+  const generation = alarmGeneration
+
   try {
-    void alarms.clear(KEEP_ALIVE_ALARM)
+    void Promise.resolve(alarms.clear(KEEP_ALIVE_ALARM))
+      .then(() => {
+        // A new run armed the alarm while this clear was in flight. Honouring the
+        // newer intent means re-arming, otherwise the run that just started runs
+        // unprotected and can be killed in the next 30 second idle gap.
+        if (generation !== alarmGeneration && holders > 0) {
+          alarms.create(KEEP_ALIVE_ALARM, { periodInMinutes: KEEP_ALIVE_PERIOD_IN_MINUTES })
+        }
+      })
+      .catch(() => {})
   } catch {
     // Clearing is best-effort: a stray periodic alarm only wakes an idle worker.
+  }
+}
+
+// A wedged run never reaches its own `finally`, so its holder is never released
+// and the periodic alarm keeps waking the worker forever. Taking over such a run
+// abandons it explicitly, which is the only way the holder count comes back down.
+export function releaseKeepAliveForAbandonedRun() {
+  const alarms = getAlarms()
+  if (!alarms) {
+    return
+  }
+
+  holders = 0
+  // Invalidates any in-flight clear's re-arm check: nobody holds the alarm now.
+  alarmGeneration += 1
+
+  try {
+    void Promise.resolve(alarms.clear(KEEP_ALIVE_ALARM)).catch(() => {})
+  } catch {
+    // Best-effort, same as stopKeepAlive.
   }
 }
 

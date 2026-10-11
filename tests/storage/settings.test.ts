@@ -1,6 +1,15 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { getSettings, saveSettings, updateSettings } from "../../src/lib/storage/settings.ts"
+import {
+  AUTO_TAG_RUN_STALE_MS,
+  beginAutoTagRunState,
+  finishAutoTagRun,
+  getSettings,
+  isAutoTagRunActive,
+  saveSettings,
+  touchAutoTagRunState,
+  updateSettings
+} from "../../src/lib/storage/settings.ts"
 import { createEmptySyncSummary } from "../../src/lib/types.ts"
 
 function installChromeStorageMock(options: { writeDelayMs?: number } = {}) {
@@ -380,4 +389,165 @@ test("updateSettings accepts a function patch that sees the latest snapshot", as
   const settings = await getSettings()
 
   assert.deepEqual(settings.autoTag.blockedTagKeys.sort(), ["one", "two"])
+})
+
+test("a nested function patch does not revert a sibling changed meanwhile", async () => {
+  const mock = installChromeStorageMock({ writeDelayMs: 5 })
+  mock.setStoredValue({
+    schemaVersion: 6,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: createEmptySyncSummary()
+  })
+
+  // The panel used to build its patch from a React snapshot: it spread the
+  // autoTag object it had loaded, so anything written between that load and this
+  // write was reverted. Two interleaved snapshot writes demonstrate the loss.
+  const snapshot = await getSettings()
+  await updateSettings((current) => ({
+    autoTag: { ...current.autoTag, heuristics: { ...current.autoTag.heuristics, useHashtags: false } }
+  }))
+  await updateSettings((current) => ({
+    autoTag: { ...current.autoTag, llm: { ...current.autoTag.llm, enabled: true } }
+  }))
+
+  const settings = await getSettings()
+
+  assert.equal(settings.autoTag.heuristics.useHashtags, false)
+  assert.equal(settings.autoTag.llm.enabled, true)
+  // The snapshot the panel read at mount is deliberately not what the patch is
+  // built from any more, so this assertion pins that the stale copy is unused.
+  assert.equal(snapshot.autoTag.llm.enabled, false)
+})
+
+test("isAutoTagRunActive distinguishes a live run from a finished or dead one", () => {
+  const now = Date.parse("2026-08-21T00:10:00.000Z")
+  const state = (updatedAt: string) => ({
+    runId: "run-1",
+    startedAt: updatedAt,
+    updatedAt,
+    phase: "llm" as const,
+    processed: 1,
+    total: 2
+  })
+
+  // Absent means finished: finishRun clears the state, so this is the terminal
+  // signal the popup folds into the progress stream.
+  assert.equal(isAutoTagRunActive(undefined, now), false)
+  // A heartbeat inside the window means a run is genuinely in flight.
+  assert.equal(isAutoTagRunActive(state(new Date(now - 1_000).toISOString()), now), true)
+  // A frozen heartbeat means the worker died holding the run.
+  assert.equal(
+    isAutoTagRunActive(state(new Date(now - AUTO_TAG_RUN_STALE_MS - 1).toISOString()), now),
+    false
+  )
+  assert.equal(isAutoTagRunActive(state("not-a-date"), now), false)
+})
+
+test("finishAutoTagRun refuses to touch a state owned by another run", async () => {
+  const mock = installChromeStorageMock()
+  mock.setStoredValue(undefined)
+
+  const started = await beginAutoTagRunState({ phase: "llm", total: 10 })
+  assert.ok(started?.runId)
+
+  // A takeover installs a different runId over the same state.
+  const winner = await beginAutoTagRunState({ phase: "llm", total: 10 })
+  assert.ok(winner?.runId)
+  assert.notEqual(winner?.runId, started?.runId)
+
+  // The superseded run now finishes. It must not clear the winner's state, which
+  // would make the live run look finished and leave it uncancellable, and it must
+  // not publish its own discarded result as the latest one.
+  const superseded = await finishAutoTagRun({
+    runId: started?.runId,
+    summary: {
+      finishedAt: new Date().toISOString(),
+      outcome: "cancelled",
+      suggestedCount: 1,
+      pendingCount: 1,
+      candidateCount: 1,
+      llmProcessedCount: 1,
+      llmBatchCount: 1,
+      llmFailedBatchCount: 0,
+      newTagBudget: 0,
+      vocabularySize: 0,
+      blockedTagKeyCount: 0,
+      blockedDroppedCount: 0,
+      budgetDroppedCount: 0,
+      unprocessedCount: 0
+    }
+  })
+
+  assert.equal(superseded.reported, false)
+
+  const settings = await getSettings()
+  assert.equal(settings.autoTagRunState?.runId, winner?.runId)
+  assert.equal(settings.lastAutoTagRun, undefined)
+})
+
+test("finishAutoTagRun reports and clears the state it owns", async () => {
+  const mock = installChromeStorageMock()
+  mock.setStoredValue(undefined)
+
+  const started = await beginAutoTagRunState({ phase: "heuristics", total: 4 })
+  assert.ok(started?.runId)
+
+  const finished = await finishAutoTagRun({
+    runId: started?.runId,
+    summary: {
+      finishedAt: "2026-08-21T00:00:00.000Z",
+      outcome: "ok",
+      suggestedCount: 2,
+      pendingCount: 2,
+      candidateCount: 4,
+      llmProcessedCount: 0,
+      llmBatchCount: 0,
+      llmFailedBatchCount: 0,
+      newTagBudget: 0,
+      vocabularySize: 1,
+      blockedTagKeyCount: 0,
+      blockedDroppedCount: 0,
+      budgetDroppedCount: 0,
+      unprocessedCount: 0
+    }
+  })
+
+  assert.equal(finished.reported, true)
+
+  const settings = await getSettings()
+  assert.equal(settings.autoTagRunState, undefined)
+  assert.equal(settings.lastAutoTagRun?.outcome, "ok")
+})
+
+test("touchAutoTagRunState tells a superseded run it lost the state", async () => {
+  const mock = installChromeStorageMock()
+  mock.setStoredValue(undefined)
+
+  const started = await beginAutoTagRunState({ phase: "llm", total: 8 })
+  assert.ok(started?.runId)
+
+  const own = await touchAutoTagRunState({
+    runId: started?.runId,
+    phase: "llm",
+    processed: 2,
+    total: 8
+  })
+  assert.equal(own.ownsState, true)
+  assert.equal(own.state?.processed, 2)
+
+  // A takeover replaces the state; the previous owner must be told to stop
+  // rather than keep refreshing (and reading the cancel flag of) someone else's
+  // state.
+  const winner = await beginAutoTagRunState({ phase: "llm", total: 8 })
+  const lost = await touchAutoTagRunState({
+    runId: started?.runId,
+    phase: "llm",
+    processed: 3,
+    total: 8
+  })
+
+  assert.equal(lost.ownsState, false)
+  assert.equal(lost.state?.runId, winner?.runId)
+  assert.equal(lost.state?.processed, 0)
 })

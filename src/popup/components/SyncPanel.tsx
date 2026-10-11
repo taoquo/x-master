@@ -35,11 +35,12 @@ function getPopupCopy(locale: Locale) {
       updated: "更新",
       failed: "失败",
       syncing: "同步中...",
+      syncingProgress: "同步中... {pages} 页 · {items} 条",
       syncNow: "立即同步",
       error: "错误",
       status: {
         idle: "空闲",
-        running: "进行中",
+        running: "同步中",
         success: "成功",
         partial_success: "部分成功",
         error: "错误"
@@ -56,11 +57,12 @@ function getPopupCopy(locale: Locale) {
     updated: "Updated",
     failed: "Failed",
     syncing: "Syncing...",
+    syncingProgress: "Syncing... {pages} pages · {items} items",
     syncNow: "Sync now",
     error: "Error",
     status: {
       idle: "idle",
-      running: "running",
+      running: "Syncing",
       success: "success",
       partial_success: "partial success",
       error: "error"
@@ -135,7 +137,7 @@ export function SyncPanel({
           className="primary-button popup-sync-button folio-primary-action options-theme-elevated w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
           <AppIcon name="sync" size={16} className={isSyncing ? "animate-spin" : undefined} />
           <span>
-            {isSyncing ? (syncProgress ? formatSyncProgressLabel(locale, syncProgress) : copy.syncing) : copy.syncNow}
+            {isSyncing ? (syncProgress ? formatSyncProgressLabel(copy.syncingProgress, syncProgress) : copy.syncing) : copy.syncNow}
           </span>
         </button>
       </div>

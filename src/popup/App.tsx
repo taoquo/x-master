@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { loadWorkspaceData } from "../lib/runtime/popupClient.ts"
 import { runSyncAndWait } from "../lib/runtime/syncStatus.ts"
 import { subscribeSyncProgress, type SyncProgress } from "../lib/runtime/syncProgress.ts"
-import type { Locale, WorkspaceData } from "../lib/types.ts"
+import { subscribeAutoTagProgress, type AutoTagProgress } from "../lib/runtime/autotagProgress.ts"
+import { getSettings, isAutoTagRunActive } from "../lib/storage/settings.ts"
+import type { AutoTagRunState, AutoTagRunSummary, Locale, WorkspaceData } from "../lib/types.ts"
 import { createEmptySyncSummary } from "../lib/types.ts"
 import { createEmptyWorkspaceStats } from "../lib/workspace/stats.ts"
 import { ExtensionUiProvider, useExtensionUi } from "../ui/provider.tsx"
@@ -40,9 +42,11 @@ function getPopupAppCopy(locale: Locale) {
       totalBookmarks: "总书签数",
       unclassified: "未分类",
       openManager: "打开管理器",
+      analyzing: "正在分析标签",
+      pendingTags: "待确认标签",
       status: {
         idle: "空闲",
-        running: "进行中",
+        running: "同步中",
         success: "成功",
         partial_success: "部分成功",
         error: "错误"
@@ -58,9 +62,11 @@ function getPopupAppCopy(locale: Locale) {
     totalBookmarks: "Total bookmarks",
     unclassified: "Unclassified",
     openManager: "Open manager",
+    analyzing: "Analyzing tags",
+    pendingTags: "Pending tags",
     status: {
       idle: "idle",
-      running: "running",
+      running: "Syncing",
       success: "success",
       partial_success: "partial success",
       error: "error"
@@ -74,6 +80,9 @@ function PopupScreen() {
   const [data, setData] = useState<WorkspaceData>(createEmptyWorkspaceData())
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null)
+  const [autoTagProgress, setAutoTagProgress] = useState<AutoTagProgress | null>(null)
+  // Signature of the last finished run this popup has already accounted for.
+  const lastAutoTagRunRef = useRef<string | null>(null)
 
   async function refreshData() {
     const nextData = await loadWorkspaceData()
@@ -85,6 +94,65 @@ function PopupScreen() {
   }, [])
 
   useEffect(() => subscribeSyncProgress(setSyncProgress), [])
+  // Auto-tag progress is broadcast from the background worker and outlives the
+  // popup, so the popup only sees the frames that happen while it is open.
+  useEffect(() => subscribeAutoTagProgress(setAutoTagProgress), [])
+
+  // Those broadcasts have no terminal frame, so progress used to freeze on the
+  // last one it saw — "Analyzing tags 47/47" forever, indistinguishable from a
+  // live run. The persisted run state is the missing completion signal:
+  // finishRun clears it, and a frozen heartbeat means the worker died. The same
+  // observation is what makes the pending count correct: suggestions are written
+  // by the background run *after* the sync the popup awaited, so the count read
+  // at mount is stale by the time they land.
+  useEffect(() => {
+    let cancelled = false
+
+    function applyLoadedSettings(runState: AutoTagRunState | undefined, lastRun: AutoTagRunSummary | undefined) {
+      if (cancelled) {
+        return
+      }
+
+      const isRunning = isAutoTagRunActive(runState)
+      if (!isRunning) {
+        setAutoTagProgress(null)
+      }
+
+      const runSignature = lastRun ? JSON.stringify(lastRun) : null
+      if (lastAutoTagRunRef.current !== null && lastAutoTagRunRef.current !== runSignature) {
+        void refreshData()
+      }
+      lastAutoTagRunRef.current = runSignature
+    }
+
+    function readSettings() {
+      void getSettings()
+        .then((loaded) => applyLoadedSettings(loaded.autoTagRunState, loaded.lastAutoTagRun))
+        .catch(() => {})
+    }
+
+    readSettings()
+
+    if (typeof chrome === "undefined" || !chrome.storage?.onChanged?.addListener) {
+      return () => {
+        cancelled = true
+      }
+    }
+
+    // Settings live under a single storage key, so any write lands here; the
+    // values are what tell us whether a run is live and whether one just ended.
+    const listener = (_changes: Record<string, unknown>, areaName: string) => {
+      if (areaName === "local") {
+        readSettings()
+      }
+    }
+
+    chrome.storage.onChanged.addListener(listener)
+    return () => {
+      cancelled = true
+      chrome.storage.onChanged.removeListener(listener)
+    }
+  }, [])
 
   async function handleSync() {
     setSyncProgress(null)
@@ -143,6 +211,24 @@ function PopupScreen() {
                 </div>
               </div>
             </div>
+
+            {autoTagProgress ? (
+              <div data-testid="popup-autotag-progress" className="popup-autotag-progress">
+                <AppIcon name="tag" size={14} />
+                <span>
+                  {copy.analyzing} {autoTagProgress.processed}/{autoTagProgress.total}
+                </span>
+              </div>
+            ) : null}
+
+            {data.stats.pendingSuggestionCount ? (
+              <div data-testid="popup-pending-suggestions" className="popup-pending-suggestions">
+                <AppIcon name="tag" size={14} />
+                <span>
+                  {copy.pendingTags} · {data.stats.pendingSuggestionCount}
+                </span>
+              </div>
+            ) : null}
 
             <div data-testid="popup-actions-panel" className="flex gap-2">
               <button type="button" onClick={openManager} className="glass-button popup-action-button folio-secondary-action options-theme-elevated flex-1 justify-center">

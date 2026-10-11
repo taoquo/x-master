@@ -17,8 +17,7 @@ import {
   createFieldId,
   ENABLE_SAVED_VIEWS_UI,
   formatSyncErrorSummary,
-  getNextThemePreference,
-  getSectionOverline
+  getNextThemePreference
 } from "../utils.ts"
 import { FieldBlock, InlineMessage, TextInputField } from "./common.tsx"
 import { DataSafetyPanel } from "./DataSafetyPanel.tsx"
@@ -196,11 +195,15 @@ export function WorkspaceSidebar({
   const renameTagInputRef = useRef<HTMLInputElement | null>(null)
   const draftTagBlurIntentRef = useRef<"idle" | "submit" | "cancel">("idle")
   const renameTagBlurIntentRef = useRef<"idle" | "submit" | "cancel">("idle")
-  const { items: visibleAuthorItems, shouldShowToggle: shouldShowAuthorToggle } = getVisibleAuthorSidebarItems({
-    authorItems,
-    searchQuery: authorSearchQuery,
-    expanded: authorsExpanded
-  })
+  const { items: visibleAuthorItems, shouldShowToggle: shouldShowAuthorToggle } = useMemo(
+    () =>
+      getVisibleAuthorSidebarItems({
+        authorItems,
+        searchQuery: authorSearchQuery,
+        expanded: authorsExpanded
+      }),
+    [authorItems, authorSearchQuery, authorsExpanded]
+  )
   const isAllBookmarksSelected = activeTagIds.includes("all") && activeAuthorHandles.length === 0
   const authorSearchId = createFieldId("authors", "search")
   const tagSearchId = createFieldId("tags", "sidebar-search")
@@ -214,11 +217,17 @@ export function WorkspaceSidebar({
       }, new Map<string, number>()),
     [workspace.bookmarkTags]
   )
-  const { items: visibleSidebarTags, shouldShowToggle: shouldShowTagToggle } = getVisibleSidebarTags({
-    tags: workspace.tags,
-    searchQuery: tagSearchQuery,
-    expanded: tagsExpanded
-  })
+  // Matching the whole tag library is linear in its size, so keep it off the
+  // render path until the search text or the expansion state actually changes.
+  const { items: visibleSidebarTags, shouldShowToggle: shouldShowTagToggle } = useMemo(
+    () =>
+      getVisibleSidebarTags({
+        tags: workspace.tags,
+        searchQuery: tagSearchQuery,
+        expanded: tagsExpanded
+      }),
+    [workspace.tags, tagSearchQuery, tagsExpanded]
+  )
   const tagSelectionCount = activeTagIds.includes("all") ? 0 : activeTagIds.length
   const authorSelectionCount = activeAuthorHandles.length
 
@@ -330,8 +339,8 @@ export function WorkspaceSidebar({
       <section data-testid="sidebar-status-section" className="options-sidebar-hero">
         <div className="options-sidebar-hero-head">
           <div className="options-sidebar-hero-meta">
-            <div className="options-overline">{getSectionOverline(locale, "工作区", "Workspace")}</div>
-            <StatusBadge status={workspace.summary.status} />
+            <div className="options-overline">{copy.workspaceBadge}</div>
+            <StatusBadge status={workspace.summary.status} label={copy.statusLabels[workspace.summary.status]} />
           </div>
         </div>
 
@@ -362,7 +371,7 @@ export function WorkspaceSidebar({
             <span>
               {workspace.isSyncing
                 ? workspace.syncProgress
-                  ? formatSyncProgressLabel(locale, workspace.syncProgress)
+                  ? formatSyncProgressLabel(copy.syncingProgress, workspace.syncProgress)
                   : copy.syncing
                 : copy.syncNow}
             </span>
@@ -377,7 +386,7 @@ export function WorkspaceSidebar({
           <section data-testid="sidebar-tags-section" className="options-sidebar-group">
             <div className="options-sidebar-section-head">
               <div data-testid="sidebar-tags-title" className="options-sidebar-title-group">
-                <span className="options-overline">{getSectionOverline(locale, "标签", "Tags")}</span>
+                <span className="options-overline">{copy.tagsTitle}</span>
                 <button
                   type="button"
                   data-testid="sidebar-create-tag"
@@ -400,6 +409,7 @@ export function WorkspaceSidebar({
                 type="button"
                 data-testid="sidebar-tags-toggle"
                 aria-expanded={!isTagsCollapsed}
+                aria-label={`${isTagsCollapsed ? copy.expandSection : copy.collapseSection} ${copy.tagsTitle}`}
                 className="options-sidebar-section-toggle"
                 onClick={onToggleTagsCollapsed}>
                 <span className="options-sidebar-section-toggle-trailing">
@@ -658,6 +668,7 @@ export function WorkspaceSidebar({
                 type="button"
                 data-testid="sidebar-authors-toggle-header"
                 aria-expanded={!isAuthorsCollapsed}
+                aria-label={`${isAuthorsCollapsed ? copy.expandSection : copy.collapseSection} ${copy.authorsTitle}`}
                 className="options-sidebar-section-toggle"
                 onClick={onToggleAuthorsCollapsed}>
                 <span className="options-sidebar-section-toggle-trailing">

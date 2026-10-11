@@ -69,6 +69,17 @@ export async function insertNewTagSuggestions(suggestions: TagSuggestionRecord[]
   return { insertedCount }
 }
 
+export async function getTagSuggestion(suggestionId: string): Promise<TagSuggestionRecord | null> {
+  const db = await getBookmarksDb()
+  const transaction = db.transaction(TAG_SUGGESTIONS_STORE, "readonly")
+  const suggestion = (await requestToPromise(
+    transaction.objectStore(TAG_SUGGESTIONS_STORE).get(suggestionId)
+  )) as TagSuggestionRecord | undefined
+  await transactionDone(transaction)
+
+  return suggestion ?? null
+}
+
 export async function resolveTagSuggestion(suggestionId: string, status: "accepted" | "rejected") {
   const db = await getBookmarksDb()
   const transaction = db.transaction(TAG_SUGGESTIONS_STORE, "readwrite")
@@ -91,29 +102,13 @@ export async function resolveTagSuggestion(suggestionId: string, status: "accept
   return resolved
 }
 
-export async function removeSuggestionsForBookmark(bookmarkId: string) {
-  const db = await getBookmarksDb()
-  const transaction = db.transaction(TAG_SUGGESTIONS_STORE, "readwrite")
-  const store = transaction.objectStore(TAG_SUGGESTIONS_STORE)
-  const index = store.index("bookmarkId")
-  const keys = await requestToPromise(index.getAllKeys(bookmarkId))
-
-  for (const key of keys) {
-    store.delete(key)
-  }
-
-  await transactionDone(transaction)
-}
-
 // Used when a tag is deleted: every pending suggestion for that name becomes
 // "rejected" so the tag cannot be resurrected by accepting a stale suggestion,
 // and the rejected records keep acting as a negative cache for the rule engine.
-export async function rejectPendingSuggestionsByTagName(tagName: string) {
-  return rejectPendingSuggestionsByTagNames([tagName])
-}
-
-// Batch version: bulk tag deletion would otherwise scan the whole suggestions
-// store once per deleted tag.
+//
+// Batched from the start: the single-name wrapper this replaced was never called,
+// and bulk deletion would otherwise scan the whole suggestions store once per
+// deleted tag.
 export async function rejectPendingSuggestionsByTagNames(tagNames: string[]) {
   const keys = new Set(tagNames.map((tagName) => canonicalTagKey(tagName)).filter(Boolean))
   if (!keys.size) {

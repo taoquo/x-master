@@ -3,6 +3,10 @@ export const SYNC_ERROR_KINDS = [
   "rate_limited",
   "network_error",
   "x_schema_changed",
+  // The worker was recycled mid-sync, so the run died without reporting. Not
+  // "unknown": nothing is wrong with X or the network, the sync simply never
+  // finished and retrying is the whole remedy.
+  "interrupted",
   "unknown"
 ] as const
 
@@ -59,6 +63,7 @@ export function getSyncErrorSummary(kind: SyncErrorKind, locale: "zh-CN" | "en" 
       rate_limited: "X 暂时限制了同步请求，请稍后再试。",
       network_error: "网络请求失败，请检查网络连接后重试。",
       x_schema_changed: "X 页面或 API 结构已变化，请更新扩展后再同步。",
+      interrupted: "上次同步被中断（浏览器回收了后台进程），请重新同步。",
       unknown: "同步失败，请重试。"
     },
     en: {
@@ -66,6 +71,7 @@ export function getSyncErrorSummary(kind: SyncErrorKind, locale: "zh-CN" | "en" 
       rate_limited: "X is rate limiting sync requests. Try again later.",
       network_error: "Network request failed. Check your connection, then retry.",
       x_schema_changed: "X page or API structure changed. Update the extension, then sync.",
+      interrupted: "The last sync was interrupted (the browser recycled the background worker). Sync again.",
       unknown: "Sync failed. Please retry."
     }
   }

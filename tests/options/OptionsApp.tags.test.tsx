@@ -282,6 +282,61 @@ test("OptionsApp applies the selected llm vocabulary proposals", async () => {
   assert.match(cards.map((card) => card.textContent ?? "").join(" "), /design system/)
 })
 
+test("a failing proposal does not discard the rest of the approved plan", async () => {
+  const plans: {
+    merges: Array<{ targetTagId: string; targetName: string; sourceTagIds: string[]; sourceNames: string[] }>
+    renames: Array<{ tagId: string; from: string; to: string }>
+  } = { merges: [], renames: [] }
+
+  const { agentTag, designTag, researchTag } = await seedTagWorkspace({
+    reviewTagVocabulary: async () => ({ ok: true, merges: plans.merges, renames: plans.renames })
+  })
+
+  plans.merges = [
+    {
+      targetTagId: agentTag.id,
+      targetName: agentTag.name,
+      sourceTagIds: [researchTag.id],
+      sourceNames: [researchTag.name]
+    }
+  ]
+  // The second plan renames onto an existing tag's name, which the store refuses.
+  // It used to abort the loop: the first rename applied, the rest of the approved
+  // plan was silently dropped, and the panel closed as if everything had worked.
+  plans.renames = [
+    { tagId: designTag.id, from: designTag.name, to: "design system" },
+    { tagId: designTag.id, from: "design system", to: agentTag.name }
+  ]
+
+  const { container, dom } = render(React.createElement(OptionsApp))
+  await settle()
+  await enterTagManagement(container, dom)
+
+  const reviewButton = findByTestId(container, "tag-review-vocabulary") as HTMLButtonElement | null
+  assert.ok(reviewButton)
+  await act(async () => {
+    reviewButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  const applyButton = findByTestId(container, "tag-review-apply") as HTMLButtonElement | null
+  assert.ok(applyButton)
+  await act(async () => {
+    applyButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }))
+  })
+  await settle()
+
+  // The merge and the first rename landed.
+  const names = Array.from(container.querySelectorAll("[data-tag-card]")).map((card) => card.textContent ?? "")
+  assert.match(names.join(" "), /design system/)
+  assert.doesNotMatch(names.join(" "), /\bResearch\b/)
+
+  // The panel stays open and says what failed, so the remainder can be retried.
+  const panel = findByTestId(container, "tag-review-panel")
+  assert.ok(panel, "a failed apply must not close the review panel")
+  assert.match(panel?.textContent ?? "", /already uses/)
+})
+
 test("OptionsApp reports a failed vocabulary review without touching the tags", async () => {
   await seedTagWorkspace({
     reviewTagVocabulary: async () => ({ ok: false, error: "missing-api-key", merges: [], renames: [] })

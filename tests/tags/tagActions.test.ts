@@ -140,3 +140,20 @@ test("clearBlockedTagKeys empties the whole block list", async () => {
   await clearBlockedTagKeys()
   assert.deepEqual((await getSettings()).autoTag.blockedTagKeys, [])
 })
+
+test("deleteTagsPermanently does not block a name supplied for an id that no longer exists", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+
+  // The UI passes names from a workspace snapshot that can be stale. Trusting them
+  // blocked the name of a tag that was still in the library, so auto-tagging never
+  // suggested that concept again while the tag sat there.
+  const live = await createTag({ name: "Rust" })
+
+  const result = await deleteTagsPermanently([{ tagId: "tag-from-a-stale-ui", tagName: "Rust" }])
+
+  assert.deepEqual(result.deletedTagIds, [])
+  assert.deepEqual(result.blockedTagKeys, [])
+  assert.deepEqual((await getSettings()).autoTag.blockedTagKeys, [])
+  assert.equal((await getAllTags()).some((tag) => tag.id === live.id), true)
+})

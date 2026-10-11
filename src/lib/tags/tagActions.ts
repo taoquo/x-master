@@ -25,6 +25,14 @@ export async function deleteTagPermanently({
 // scan and one settings write no matter how many tags the user selected. The
 // tag manager's bulk delete used to run the single-tag path in a loop, which
 // cost three round trips per tag.
+//
+// Note for future readers: this runs in the options-page realm and writes
+// tag-suggestions there, while the auto-tag pipeline writes the same store from the
+// background worker. The two are not serialized. That is tolerable because both
+// operations are idempotent (rejecting by name, skipping existing ids) and because
+// a restore or reset clears the run state so a live pipeline stops at its next
+// batch boundary — but it is why `suggestions/*` writes go through the worker
+// while this one does not.
 export async function deleteTagsPermanently(
   targets: Array<{ tagId: string; tagName?: string }>
 ): Promise<{ deletedTagIds: string[]; blockedTagKeys: string[] }> {
@@ -33,18 +41,18 @@ export async function deleteTagsPermanently(
     return { deletedTagIds: [], blockedTagKeys: [] }
   }
 
-  const needsLookup = [...uniqueTargets.values()].some((target) => !target.tagName)
-  const nameById = needsLookup ? new Map((await getAllTags()).map((tag) => [tag.id, tag.name])) : new Map<string, string>()
-  const resolvedNames: string[] = []
+  // Names are resolved from storage, never from the caller. The UI supplies them
+  // from a workspace snapshot that can be stale, and a stale id used to block the
+  // name of a tag that still existed — which silently stopped auto-tagging from
+  // ever suggesting that concept again while the tag sat in the library.
+  const tagsBefore = await getAllTags()
+  const nameById = new Map(tagsBefore.map((tag) => [tag.id, tag.name]))
+  const existingIds = [...uniqueTargets.keys()].filter((tagId) => nameById.has(tagId))
 
-  for (const target of uniqueTargets.values()) {
-    const name = target.tagName ?? nameById.get(target.tagId)
-    if (name) {
-      resolvedNames.push(name)
-    }
-  }
-
-  const { deletedTagIds } = await deleteTags([...uniqueTargets.keys()])
+  const { deletedTagIds } = await deleteTags(existingIds)
+  const resolvedNames = deletedTagIds
+    .map((tagId) => nameById.get(tagId))
+    .filter((name): name is string => Boolean(name))
 
   if (!resolvedNames.length) {
     return { deletedTagIds, blockedTagKeys: [] }

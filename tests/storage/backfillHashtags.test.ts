@@ -5,6 +5,7 @@ import { backfillHashtagsFromRawPayloads } from "../../src/lib/storage/backfillH
 import { getAllBookmarks, upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
 import { upsertRawPayloads } from "../../src/lib/storage/rawPayloadsStore.ts"
+import { saveSettings } from "../../src/lib/storage/settings.ts"
 
 function installChromeStorageMock() {
   let stored: Record<string, unknown> = {}
@@ -75,4 +76,32 @@ test("backfillHashtagsFromRawPayloads stores empty arrays when no raw payload ex
 
   const bookmarks = await getAllBookmarks()
   assert.deepEqual(bookmarks[0].hashtags, [])
+})
+
+test("the one-time flag does not block bookmarks that still lack hashtags", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+
+  // A profile that already completed the one-time pass, then restored a backup
+  // taken before the field existed: the flag says "done" while the bookmarks say
+  // "unknown". Trusting the flag alone left those bookmarks without hashtags
+  // forever, because this backfill is the only thing that can fill them in.
+  await saveSettings({ hashtagBackfillDone: true })
+  await upsertBookmarks([createBookmark("tweet-restored")])
+  await upsertRawPayloads([
+    {
+      tweetId: "tweet-restored",
+      payload: { legacy: { entities: { hashtags: [{ text: "AI" }] } } }
+    }
+  ])
+
+  const result = await backfillHashtagsFromRawPayloads()
+
+  assert.equal(result.skipped, false)
+  assert.equal(result.updatedCount, 1)
+  assert.deepEqual((await getAllBookmarks())[0].hashtags, ["AI"])
+
+  // Once nothing is unknown any more the flag governs again.
+  const secondRun = await backfillHashtagsFromRawPayloads()
+  assert.equal(secondRun.skipped, true)
 })

@@ -711,7 +711,10 @@ test("OptionsApp renders the english demo shell by default and hides legacy opti
   assert.ok(findByTestId(container, "library-workspace"))
   assert.equal(findByTestId(container, "workspace-detail-modal"), null)
   assert.match(container.textContent ?? "", /Workspace/)
-  assert.match(container.textContent ?? "", /Archive/)
+  // The toolbar overline used to be a hardcoded English literal ("Archive"),
+  // which is why it could not be translated; it now reads from the same copy key
+  // as the library title.
+  assert.match(container.textContent ?? "", /Library/)
   assert.match(container.textContent ?? "", /All bookmarks/)
   assert.match(container.textContent ?? "", /Filters/)
 

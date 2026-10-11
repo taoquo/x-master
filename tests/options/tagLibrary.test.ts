@@ -389,3 +389,15 @@ test("getVisibleSidebarTags caps the collapsed list and expands on search", () =
   )
   assert.equal(searched.shouldShowToggle, false)
 })
+
+test("getRemovableOrphanTagIds leaves tags that still have pending suggestions alone", () => {
+  const items = buildTagLibraryItems({
+    tags: [tag("tag-ai", "ai"), tag("tag-empty", "empty")],
+    bookmarkTags: [],
+    tagSuggestions: [suggestion("s1", "AI")]
+  })
+
+  // Sweeping the tag away also rejects those pending suggestions and blocks the
+  // name, so a tag the user is still triaging must not be "cleaned up".
+  assert.deepEqual(getRemovableOrphanTagIds(items), ["tag-empty"])
+})

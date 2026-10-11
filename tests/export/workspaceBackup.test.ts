@@ -5,7 +5,14 @@ import { getAllBookmarks, upsertBookmarks } from "../../src/lib/storage/bookmark
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
 import { createDefaultAutoTagSettings, getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
 import { createSyncRun, getLatestSyncRun } from "../../src/lib/storage/syncRunsStore.ts"
-import { getAllBookmarkTags, getAllTags } from "../../src/lib/storage/tagsStore.ts"
+import { createTag, getAllBookmarkTags, getAllTags } from "../../src/lib/storage/tagsStore.ts"
+import { deleteTagsPermanently } from "../../src/lib/tags/tagActions.ts"
+import { createTagSuggestion, getAllTagSuggestions, insertNewTagSuggestions } from "../../src/lib/storage/suggestionsStore.ts"
+import {
+  createLlmAnalysisRecord,
+  getAllLlmAnalysis,
+  putLlmAnalysisRecords
+} from "../../src/lib/storage/llmAnalysisStore.ts"
 import { createEmptySyncSummary, type ExtensionSettings } from "../../src/lib/types.ts"
 import {
   restoreWorkspaceBackup,
@@ -221,6 +228,53 @@ test("validateWorkspaceBackupText round-trips the optional tag parentId", async 
   assert.equal(tags.find((tag) => tag.id === "tag-agents")?.parentId, "tag-ai")
 })
 
+test("a backup round-trips bookmark hashtags", async () => {
+  const payload = createBackupPayload({
+    bookmarks: [
+      {
+        ...createBackupPayload().bookmarks[0],
+        hashtags: ["ai", "agents"]
+      }
+    ]
+  })
+
+  const result = validateWorkspaceBackupText(JSON.stringify(payload))
+
+  // Hashtags used to be exported but dropped on import, which permanently
+  // stripped them: raw payloads are not part of a backup, so the one-time
+  // backfill could not recover them.
+  assert.deepEqual(result.payload.bookmarks[0].hashtags, ["ai", "agents"])
+
+  await restoreWorkspaceBackup(result.payload)
+  const [stored] = await getAllBookmarks()
+
+  assert.deepEqual(stored?.hashtags, ["ai", "agents"])
+})
+
+test("validateWorkspaceBackupText keeps bookmarks without hashtags undefined", () => {
+  const result = validateWorkspaceBackupText(JSON.stringify(createBackupPayload()))
+
+  // Absent stays absent: an empty array would claim "this bookmark has no
+  // hashtags" and stop the backfill from ever filling it in.
+  assert.equal(result.payload.bookmarks[0].hashtags, undefined)
+})
+
+test("validateWorkspaceBackupText rejects non-string hashtags", () => {
+  const payload = createBackupPayload({
+    bookmarks: [
+      {
+        ...createBackupPayload().bookmarks[0],
+        hashtags: ["ai", 42]
+      } as unknown as WorkspaceExportPayload["bookmarks"][number]
+    ]
+  })
+
+  assert.throws(
+    () => validateWorkspaceBackupText(JSON.stringify(payload)),
+    /bookmarks\[0\]\.hashtags must contain only strings/
+  )
+})
+
 test("validateWorkspaceBackupText rejects a non-string tag parentId", () => {
   const payload = createBackupPayload({
     tags: [
@@ -313,6 +367,139 @@ test("restoreWorkspaceBackup overwrites local data with a validated backup", asy
   assert.equal(settings.savedViews.length, 1)
   assert.equal(settings.savedViews[0].name, "AI media")
   assert.equal(latestSyncRun?.id, "sync-1")
+})
+
+test("a workspace backup never carries the LLM API key", async () => {
+  await resetBookmarksDb()
+  const harness = installSettingsHarness()
+  await saveSettings(createSettings({ lastSyncSummary: createEmptySyncSummary() }))
+
+  // Seed a key through the same chrome.storage.local the export reads.
+  ;(globalThis as any).chrome.storage.local.get = async (key?: string) => {
+    if (key === "secrets") {
+      return { secrets: { llmApiKey: "sk-live-should-never-be-exported" } }
+    }
+
+    return { settings: harness.getStoredSettings() }
+  }
+
+  const { createWorkspaceExportPayload } = await import("../../src/lib/export/exportBookmarks.ts")
+  const workspace = {
+    bookmarks: [],
+    tags: [],
+    bookmarkTags: [],
+    tagSuggestions: [],
+    savedViews: [],
+    latestSyncRun: null,
+    summary: createEmptySyncSummary(),
+    stats: {
+      totalBookmarks: 0,
+      unclassifiedCount: 0,
+      pendingSuggestionCount: 0,
+      tagCounts: [],
+      topAuthors: []
+    }
+  }
+
+  const payload = createWorkspaceExportPayload({ workspace, settings: await getSettings() })
+  const serialized = JSON.stringify(payload)
+
+  // Spec §3.3: the key lives in its own storage key and must never reach a
+  // backup, in any field.
+  assert.equal(serialized.includes("sk-live-should-never-be-exported"), false)
+  assert.equal(serialized.includes("llmApiKey"), false)
+  assert.equal("secrets" in (payload as unknown as Record<string, unknown>), false)
+})
+
+test("an imported backup cannot inject a secrets key", async () => {
+  await resetBookmarksDb()
+  installSettingsHarness()
+
+  const payload = createBackupPayload() as unknown as Record<string, unknown>
+  payload.secrets = { llmApiKey: "sk-injected-from-a-tampered-backup" }
+
+  const result = validateWorkspaceBackupText(JSON.stringify(payload))
+
+  // The validator rebuilds a known field set, so an unknown key is dropped
+  // rather than carried into storage.
+  assert.equal("secrets" in (result.payload as unknown as Record<string, unknown>), false)
+  assert.equal(JSON.stringify(result.payload).includes("sk-injected-from-a-tampered-backup"), false)
+})
+
+test("restoreWorkspaceBackup drops suggestions and analysis rows for the replaced bookmarks", async () => {
+  await resetBookmarksDb()
+  installSettingsHarness()
+
+  // Rows derived from the bookmark set that is about to be replaced.
+  const orphan = createTagSuggestion({
+    bookmarkId: "ghost-1",
+    tagName: "Ghost",
+    source: "hashtag",
+    confidence: 0.9
+  })
+  assert.ok(orphan)
+  await insertNewTagSuggestions([orphan])
+  await putLlmAnalysisRecords([
+    createLlmAnalysisRecord({
+      bookmarkId: "ghost-2",
+      model: "test-model",
+      contentHash: "hash",
+      outcome: "no-topic",
+      tagCount: 0
+    })
+  ])
+
+  const validation = validateWorkspaceBackupText(JSON.stringify(createBackupPayload()))
+  await restoreWorkspaceBackup(validation.payload)
+
+  // A pending row nobody can resolve inflates the sidebar badge forever, and an
+  // analysis row claims a verdict for a bookmark the backup may not contain.
+  assert.deepEqual(await getAllTagSuggestions(), [])
+  assert.deepEqual(await getAllLlmAnalysis(), [])
+})
+
+test("restoreWorkspaceBackup clears the in-flight run state", async () => {
+  await resetBookmarksDb()
+  installSettingsHarness()
+  await saveSettings(
+    createSettings({
+      autoTagRunState: {
+        runId: "run-1",
+        startedAt: "2026-08-21T00:00:00.000Z",
+        updatedAt: new Date().toISOString(),
+        phase: "llm",
+        processed: 1,
+        total: 5
+      }
+    })
+  )
+
+  const validation = validateWorkspaceBackupText(JSON.stringify(createBackupPayload()))
+  await restoreWorkspaceBackup(validation.payload)
+
+  // The run was working against the bookmark set that just got replaced.
+  assert.equal((await getSettings()).autoTagRunState, undefined)
+})
+
+test("restoring a backup releases the tag names it brings back", async () => {
+  await resetBookmarksDb()
+  installSettingsHarness()
+
+  // Deleting a tag blocks its name so auto-tagging cannot resurrect it.
+  const rust = await createTag({ name: "Rust" })
+  await deleteTagsPermanently([{ tagId: rust.id, tagName: "Rust" }])
+  assert.deepEqual((await getSettings()).autoTag.blockedTagKeys, ["rust"])
+
+  const validation = validateWorkspaceBackupText(JSON.stringify(createBackupPayload({
+    tags: [{ id: "tag-rust", name: "Rust", createdAt: "2026-04-11T08:00:00.000Z" }],
+    bookmarkTags: []
+  })))
+  await restoreWorkspaceBackup(validation.payload)
+
+  // The tag is back, so the block has to go with it: otherwise the rule engine and
+  // the LLM refuse to ever suggest the concept again, silently.
+  assert.equal((await getAllTags()).some((tag) => tag.name === "Rust"), true)
+  assert.deepEqual((await getSettings()).autoTag.blockedTagKeys, [])
 })
 
 test("restoreWorkspaceBackup keeps local auto-tag settings that backups do not carry", async () => {
@@ -418,4 +605,64 @@ test("restoreWorkspaceBackup keeps sync runs empty when the backup has no latest
   await restoreWorkspaceBackup(validation.payload)
 
   assert.equal(await getLatestSyncRun(), null)
+})
+
+test("backup validation rejects parent graphs the app itself can never write", () => {
+  const base = createBackupPayload()
+
+  // Self-parent.
+  assert.throws(
+    () => validateWorkspaceBackupText(JSON.stringify(createBackupPayload({
+      tags: [{ id: "tag-a", name: "A", createdAt: "2026-04-11T08:00:00.000Z", parentId: "tag-a" }],
+      bookmarkTags: []
+    }))),
+    /point at the tag itself/
+  )
+
+  // Dangling parent.
+  assert.throws(
+    () => validateWorkspaceBackupText(JSON.stringify(createBackupPayload({
+      tags: [{ id: "tag-a", name: "A", createdAt: "2026-04-11T08:00:00.000Z", parentId: "tag-missing" }],
+      bookmarkTags: []
+    }))),
+    /parentId references a missing tag/
+  )
+
+  // Two-cycle: A's parent is B and B's parent is A. Unreachable through the store,
+  // but a hand-edited file used to restore into a library whose parent dropdown was
+  // locked because no tag counted as a root.
+  assert.throws(
+    () => validateWorkspaceBackupText(JSON.stringify(createBackupPayload({
+      tags: [
+        { id: "tag-a", name: "A", createdAt: "2026-04-11T08:00:00.000Z", parentId: "tag-b" },
+        { id: "tag-b", name: "B", createdAt: "2026-04-11T08:00:00.000Z", parentId: "tag-a" }
+      ],
+      bookmarkTags: []
+    }))),
+    /more than two levels deep/
+  )
+
+  // Three levels.
+  assert.throws(
+    () => validateWorkspaceBackupText(JSON.stringify(createBackupPayload({
+      tags: [
+        { id: "tag-a", name: "A", createdAt: "2026-04-11T08:00:00.000Z" },
+        { id: "tag-b", name: "B", createdAt: "2026-04-11T08:00:00.000Z", parentId: "tag-a" },
+        { id: "tag-c", name: "C", createdAt: "2026-04-11T08:00:00.000Z", parentId: "tag-b" }
+      ],
+      bookmarkTags: []
+    }))),
+    /more than two levels deep/
+  )
+
+  // A valid two-level graph still round-trips.
+  const ok = validateWorkspaceBackupText(JSON.stringify(createBackupPayload({
+    tags: [
+      { id: "tag-a", name: "A", createdAt: "2026-04-11T08:00:00.000Z" },
+      { id: "tag-b", name: "B", createdAt: "2026-04-11T08:00:00.000Z", parentId: "tag-a" }
+    ],
+    bookmarkTags: []
+  })))
+  assert.equal(ok.counts.tags, 2)
+  assert.equal(base.exportVersion, WORKSPACE_EXPORT_VERSION)
 })

@@ -58,10 +58,6 @@ export function formatTimestamp(value: string | undefined, locale: Locale) {
   return getDateFormatter(locale).format(parsed)
 }
 
-export function getSectionOverline(locale: Locale, zhLabel: string, enLabel: string) {
-  return locale === "zh-CN" ? zhLabel : enLabel
-}
-
 export function formatCompactCount(value: number | undefined, locale: Locale) {
   return getCompactNumberFormatter(locale, value && value >= 1000 ? 1 : 0).format(value ?? 0)
 }
@@ -174,6 +170,15 @@ export const SORT_ORDER_SEQUENCE: BookmarkSortOrder[] = ["timeline", "saved-asc"
 export const INITIAL_RESULTS_RENDER_LIMIT = 80
 export const RESULTS_RENDER_INCREMENT = 80
 export const DEFAULT_SAVED_VIEW_NAME = "Saved view"
+
+// Parks the saved-views panel. The component, its handlers in OptionsApp and its
+// settings/backup round-trip all still exist and are exercised by nothing, because
+// the sidebar renders the panel only when this is true. That is deliberate — the
+// feature is unfinished, not abandoned — but it means the saved-view copy keys
+// look "used" to any dead-key sweep while no user can see them. Flipping this to
+// true brings the panel back; deleting the panel instead would also mean dropping
+// `savedViews` from ExtensionSettings and from the backup payload, which older
+// backups still carry.
 export const ENABLE_SAVED_VIEWS_UI = false
 
 export interface ViewStateSnapshot {

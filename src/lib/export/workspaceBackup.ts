@@ -11,12 +11,15 @@ import {
   BOOKMARKS_STORE,
   BOOKMARK_TAGS_STORE,
   getBookmarksDb,
+  LLM_ANALYSIS_STORE,
   requestToPromise,
   SYNC_RUNS_STORE,
+  TAG_SUGGESTIONS_STORE,
   TAGS_STORE,
   transactionDone
 } from "../storage/db.ts"
 import { updateSettings } from "../storage/settings.ts"
+import { canonicalTagKey } from "../tags/canonical.ts"
 import { isSyncErrorKind } from "../x/syncErrors.ts"
 import {
   WORKSPACE_EXPORT_VERSION,
@@ -237,7 +240,14 @@ function validateBookmark(value: unknown, path: string): WorkspaceExportBookmark
       : requireNumber(record, "bookmarkTimelineRank", path),
     media: media as WorkspaceExportBookmarkRecord["media"],
     metrics: metrics as WorkspaceExportBookmarkRecord["metrics"],
-    updatedAt: optionalString(record, "updatedAt", path)
+    updatedAt: optionalString(record, "updatedAt", path),
+    // Hashtags are exported but were dropped on the way back in, so a restore
+    // silently stripped every bookmark's hashtags. Raw payloads are not part of
+    // a backup, so the one-time backfill could not recover them either, and the
+    // hashtag rule lost its input for good.
+    hashtags: record.hashtags === undefined
+      ? undefined
+      : requireStringArray(record, "hashtags", path)
   }
 }
 
@@ -388,6 +398,31 @@ export function validateWorkspaceBackupText(text: string): WorkspaceBackupValida
     }
   })
 
+  // The taxonomy is capped at two levels, but a backup file is untrusted input: a
+  // cyclic or three-level parent graph cannot be produced by this app's own
+  // writes yet was accepted here, and restoring one produced a library whose
+  // parent dropdown was locked or whose candidate list the store then rejected.
+  const parentIdByTagId = new Map(payload.tags.map((tag) => [tag.id, tag.parentId]))
+
+  payload.tags.forEach((tag, index) => {
+    if (!tag.parentId) {
+      return
+    }
+
+    if (tag.parentId === tag.id) {
+      throw new Error(`tags[${index}].parentId cannot point at the tag itself`)
+    }
+
+    if (!tagIds.has(tag.parentId)) {
+      throw new Error(`tags[${index}].parentId references a missing tag`)
+    }
+
+    const grandParentId = parentIdByTagId.get(tag.parentId)
+    if (grandParentId) {
+      throw new Error(`tags[${index}].parentId makes the tag hierarchy more than two levels deep`)
+    }
+  })
+
   return {
     payload,
     counts: buildCounts(payload),
@@ -398,8 +433,20 @@ export function validateWorkspaceBackupText(text: string): WorkspaceBackupValida
 export async function restoreWorkspaceBackup(payload: WorkspaceExportPayload): Promise<WorkspaceRestoreResult> {
   const validation = validateWorkspaceBackupText(JSON.stringify(payload))
   const db = await getBookmarksDb()
+  // Suggestions and the analysis ledger are derived from the bookmark set being
+  // replaced, so they are cleared with it. Left behind they outlive their
+  // bookmarks: a pending row still counts towards the sidebar badge that no
+  // bookmark can ever resolve, and an analysis row claims a verdict for a
+  // bookmark the backup may not even contain.
   const transaction = db.transaction(
-    [BOOKMARKS_STORE, TAGS_STORE, BOOKMARK_TAGS_STORE, SYNC_RUNS_STORE],
+    [
+      BOOKMARKS_STORE,
+      TAGS_STORE,
+      BOOKMARK_TAGS_STORE,
+      SYNC_RUNS_STORE,
+      TAG_SUGGESTIONS_STORE,
+      LLM_ANALYSIS_STORE
+    ],
     "readwrite"
   )
 
@@ -412,7 +459,9 @@ export async function restoreWorkspaceBackup(payload: WorkspaceExportPayload): P
     requestToPromise(bookmarksStore.clear()),
     requestToPromise(tagsStore.clear()),
     requestToPromise(bookmarkTagsStore.clear()),
-    requestToPromise(syncRunsStore.clear())
+    requestToPromise(syncRunsStore.clear()),
+    requestToPromise(transaction.objectStore(TAG_SUGGESTIONS_STORE).clear()),
+    requestToPromise(transaction.objectStore(LLM_ANALYSIS_STORE).clear())
   ])
 
   for (const bookmark of validation.payload.bookmarks) {
@@ -434,12 +483,34 @@ export async function restoreWorkspaceBackup(payload: WorkspaceExportPayload): P
   await transactionDone(transaction)
   // Backups only carry a subset of settings, so merge instead of overwriting to
   // keep local-only config (auto-tag, sidebar widths, ...) intact.
-  await updateSettings({
-    schemaVersion: validation.payload.settings.schemaVersion,
-    locale: validation.payload.settings.locale,
-    themePreference: validation.payload.settings.themePreference,
-    lastSyncSummary: validation.payload.settings.lastSyncSummary ?? validation.payload.summary,
-    savedViews: validation.payload.settings.savedViews ?? []
+  await updateSettings((current) => {
+    // A tag name blocked by an earlier delete would otherwise survive the restore:
+    // the tag comes back, but the rule engine and the LLM still refuse to suggest
+    // it, so whole subjects silently stop being auto-taggable after an import.
+    const restoredKeys = new Set<string>()
+    for (const tag of validation.payload.tags) {
+      restoredKeys.add(canonicalTagKey(tag.name))
+      for (const alias of tag.aliases ?? []) {
+        restoredKeys.add(canonicalTagKey(alias))
+      }
+    }
+    restoredKeys.delete("")
+
+    return {
+      schemaVersion: validation.payload.settings.schemaVersion,
+      locale: validation.payload.settings.locale,
+      themePreference: validation.payload.settings.themePreference,
+      lastSyncSummary: validation.payload.settings.lastSyncSummary ?? validation.payload.summary,
+      savedViews: validation.payload.settings.savedViews ?? [],
+      // Any in-flight run was working against the bookmark set that just got
+      // replaced. Clearing the state stops it at its next batch boundary instead of
+      // letting it write suggestions for bookmarks that are gone.
+      autoTagRunState: undefined,
+      autoTag: {
+        ...current.autoTag,
+        blockedTagKeys: current.autoTag.blockedTagKeys.filter((key) => !restoredKeys.has(key))
+      }
+    }
   })
 
   return {

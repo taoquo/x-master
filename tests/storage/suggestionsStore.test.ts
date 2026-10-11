@@ -8,7 +8,6 @@ import {
   getAllTagSuggestions,
   insertNewTagSuggestions,
   normalizeSuggestedTagName,
-  removeSuggestionsForBookmark,
   resolveTagSuggestion
 } from "../../src/lib/storage/suggestionsStore.ts"
 
@@ -55,19 +54,3 @@ test("insertNewTagSuggestions skips duplicates and resolveTagSuggestion updates 
   assert.equal(missing, null)
 })
 
-test("removeSuggestionsForBookmark only deletes suggestions of that bookmark", async () => {
-  await resetBookmarksDb()
-
-  const suggestions = [
-    createTagSuggestion({ bookmarkId: "tweet-1", tagName: "AI", source: "hashtag", confidence: 0.9 }),
-    createTagSuggestion({ bookmarkId: "tweet-1", tagName: "Rust", source: "keyword", confidence: 0.7 }),
-    createTagSuggestion({ bookmarkId: "tweet-2", tagName: "AI", source: "author", confidence: 0.6 })
-  ].filter((suggestion) => suggestion !== null)
-
-  await insertNewTagSuggestions(suggestions)
-  await removeSuggestionsForBookmark("tweet-1")
-
-  const remaining = await getAllTagSuggestions()
-  assert.equal(remaining.length, 1)
-  assert.equal(remaining[0].bookmarkId, "tweet-2")
-})

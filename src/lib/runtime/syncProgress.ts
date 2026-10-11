@@ -55,10 +55,12 @@ export function subscribeSyncProgress(listener: (progress: SyncProgress) => void
   }
 }
 
-export function formatSyncProgressLabel(locale: string, progress: SyncProgress) {
-  if (locale === "zh-CN") {
-    return `同步中... ${progress.pageCount} 页 · ${progress.fetchedCount} 条`
-  }
-
-  return `Syncing... ${progress.pageCount} pages · ${progress.fetchedCount} items`
+// Substitutes the counters into a copy template. It used to hardcode both
+// locales, which is how a third locale would have silently rendered Chinese or
+// English, and it put user-facing text in a runtime module that has no access to
+// the translation table.
+export function formatSyncProgressLabel(template: string, progress: SyncProgress) {
+  return template
+    .replace("{pages}", String(progress.pageCount))
+    .replace("{items}", String(progress.fetchedCount))
 }

@@ -1,4 +1,4 @@
-import { resolveTagSuggestion } from "../storage/suggestionsStore.ts"
+import { getTagSuggestion, resolveTagSuggestion } from "../storage/suggestionsStore.ts"
 import { attachTagToBookmark, createTag, getAllTags } from "../storage/tagsStore.ts"
 import { findTagByName } from "../tags/canonical.ts"
 import type { TagRecord, TagSuggestionRecord } from "../types.ts"
@@ -17,16 +17,23 @@ async function ensureTagByName(tagName: string, knownTags?: TagRecord[]): Promis
 // Accepting a suggestion is the only path where auto-tagging mutates real
 // tags: resolve the canonical name (including merge aliases), create the tag
 // only when nothing matches, attach it, and mark the suggestion accepted.
+//
+// Order matters. Marking the suggestion accepted first meant a failure in
+// createTag/attachTagToBookmark left a row that was already resolved: the tag
+// was never attached, and because every suggestion id acts as a negative cache
+// for the rule engine, that bookmark+tag pair could never be suggested again.
+// Resolving last keeps the suggestion pending when the work did not happen, so
+// a retry is possible.
 export async function acceptTagSuggestion(suggestionId: string): Promise<TagSuggestionRecord | null> {
-  const suggestion = await resolveTagSuggestion(suggestionId, "accepted")
+  const suggestion = await getTagSuggestion(suggestionId)
 
-  if (!suggestion) {
+  if (!suggestion || suggestion.status !== "pending") {
     return null
   }
 
   const tag = await ensureTagByName(suggestion.tagName)
   await attachTagToBookmark({ bookmarkId: suggestion.bookmarkId, tagId: tag.id })
-  return suggestion
+  return resolveTagSuggestion(suggestionId, "accepted")
 }
 
 export async function rejectTagSuggestion(suggestionId: string): Promise<TagSuggestionRecord | null> {
@@ -38,8 +45,8 @@ export async function acceptTagSuggestionsBulk(suggestionIds: string[]) {
   let tags = await getAllTags()
 
   for (const suggestionId of suggestionIds) {
-    const suggestion = await resolveTagSuggestion(suggestionId, "accepted")
-    if (!suggestion) {
+    const suggestion = await getTagSuggestion(suggestionId)
+    if (!suggestion || suggestion.status !== "pending") {
       continue
     }
 
@@ -49,6 +56,7 @@ export async function acceptTagSuggestionsBulk(suggestionIds: string[]) {
     }
 
     await attachTagToBookmark({ bookmarkId: suggestion.bookmarkId, tagId: tag.id })
+    await resolveTagSuggestion(suggestionId, "accepted")
     acceptedCount += 1
   }
 

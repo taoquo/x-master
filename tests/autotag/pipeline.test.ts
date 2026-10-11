@@ -104,7 +104,7 @@ test("runAutoTagPipeline persists heuristic suggestions and is idempotent", asyn
   assert.equal((await getAllTagSuggestions()).length, 1)
 })
 
-test("runAutoTagPipeline backfills hashtags before running heuristics", async () => {
+test("runAutoTagPipeline no longer owns the hashtag backfill", async () => {
   installChromeStorageMock()
   await resetBookmarksDb()
 
@@ -118,9 +118,12 @@ test("runAutoTagPipeline backfills hashtags before running heuristics", async ()
 
   await runAutoTagPipeline()
 
+  // The backfill moved to the sync path, so a run must not consume the
+  // one-time flag; otherwise the migration would be silently marked done by an
+  // auto-tag run that never performed it.
   const [bookmark] = await getAllBookmarks()
-  assert.deepEqual(bookmark?.hashtags, [])
-  assert.equal((await getSettings()).hashtagBackfillDone, true)
+  assert.equal(bookmark?.hashtags, undefined)
+  assert.equal((await getSettings()).hashtagBackfillDone, false)
 })
 
 async function enableAutoTagWithLlm(overrides: Partial<ReturnType<typeof createDefaultAutoTagSettings>["llm"]> = {}) {
@@ -696,4 +699,64 @@ test("pre-ledger llm suggestions still retire a bookmark from the queue", async 
   assert.equal(calls.length, 0)
   assert.equal(provider.calls.length, 0)
   assert.equal(result.outcome, "no-candidates")
+})
+
+test("a rule-engine write failure still reports and clears the run state", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+  await enableAutoTagWithLlm()
+  await saveSecrets({ llmApiKey: "sk-test" })
+  await upsertBookmarks([makeBookmark("t1")])
+
+  const result = await runAutoTagPipeline({
+    insertSuggestions: async () => {
+      throw new Error("quota exceeded")
+    }
+  })
+
+  // Without the guard a throw here escaped the pipeline, so the published run
+  // state was never cleared: the panel showed the previous result while the
+  // state claimed a run was still in flight.
+  assert.equal(result.outcome, "failed")
+  assert.equal(result.error, "quota exceeded")
+  assert.equal((await getSettings()).autoTagRunState, undefined)
+})
+
+test("a cancel requested while the rules run stops a rules-only run", async () => {
+  installChromeStorageMock()
+  await resetBookmarksDb()
+
+  // Rules only: the LLM step never runs, so the heuristics checkpoint is the only
+  // place this cancel can be observed. Before the fix the run reported
+  // "llm-disabled" and the user's stop was silently dropped.
+  const settings = await getSettings()
+  await saveSettings({
+    ...settings,
+    hashtagBackfillDone: true,
+    autoTag: { ...createDefaultAutoTagSettings(), enabled: true }
+  })
+  await upsertBookmarks([
+    makeBookmark("t1", { hashtags: ["Rust"] }),
+    makeBookmark("t2", { hashtags: ["Rust"] }),
+    makeBookmark("t3", { hashtags: ["Rust"] })
+  ])
+
+  let cancelAccepted = false
+
+  const result = await runAutoTagPipeline({
+    // The one await between publishing the run state and the LLM step, which is
+    // where a user clicking "stop" during the rules phase lands.
+    insertSuggestions: async (suggestions) => {
+      cancelAccepted = await requestAutoTagRunCancel()
+      return insertNewTagSuggestions(suggestions)
+    }
+  })
+
+  assert.equal(cancelAccepted, true)
+  assert.equal(result.outcome, "cancelled")
+  // The suggestions the rules already produced are kept.
+  assert.equal(
+    (await getAllTagSuggestions()).some((suggestion) => suggestion.tagName === "Rust"),
+    true
+  )
 })

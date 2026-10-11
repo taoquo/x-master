@@ -5,6 +5,11 @@ import { upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
 import { createSyncRun, getLatestSyncRun } from "../../src/lib/storage/syncRunsStore.ts"
 import {
+  createTagSuggestion,
+  getAllTagSuggestions,
+  insertNewTagSuggestions
+} from "../../src/lib/storage/suggestionsStore.ts"
+import {
   attachTagToBookmark,
   attachTagToBookmarks,
   createTag,
@@ -393,4 +398,119 @@ test("createSyncRun stores sync runs in IndexedDB and getLatestSyncRun returns t
   assert.equal(syncRun?.id, "sync-2")
   assert.equal(syncRun?.status, "partial_success")
   assert.equal(syncRun?.updatedCount, 4)
+})
+
+test("renameTag refuses a name that another tag already uses", async () => {
+  await resetBookmarksDb()
+  await createTag({ name: "Rust" })
+  const go = await createTag({ name: "Go" })
+
+  // createTag and updateTagAliases both refuse to let two tags share a canonical
+  // identity; rename had no such guard and produced two tags named "rust" and
+  // "Rust", after which every name lookup silently picked one of them.
+  await assert.rejects(() => renameTag({ tagId: go.id, name: "rust" }), /already uses/)
+
+  const tags = await getAllTags()
+  assert.deepEqual(tags.map((tag) => tag.name).sort(), ["Go", "Rust"])
+})
+
+test("renameTag refuses a name that another tag claims as an alias", async () => {
+  await resetBookmarksDb()
+  const ai = await createTag({ name: "Artificial Intelligence" })
+  await updateTagAliases({ tagId: ai.id, aliases: ["ai"] })
+  const random = await createTag({ name: "Random" })
+
+  // A real tag named "ai" beside an alias "ai" splits the concept: findTagByName
+  // resolves a stored name before an alias, so the alias quietly stops working.
+  await assert.rejects(() => renameTag({ tagId: random.id, name: "AI" }), /already uses/)
+
+  assert.equal((await getAllTags()).find((tag) => tag.id === random.id)?.name, "Random")
+})
+
+test("renameTag still allows the tag's own aliases and unnamed duplicates", async () => {
+  await resetBookmarksDb()
+  const tag = await createTag({ name: "Rust" })
+  await updateTagAliases({ tagId: tag.id, aliases: ["rustlang"] })
+
+  // Its own alias is not a collision with itself.
+  const renamed = await renameTag({ tagId: tag.id, name: "rustlang" })
+  assert.equal(renamed.name, "rustlang")
+  // Renaming to the same canonical identity is a no-op, not a rejection.
+  const again = await renameTag({ tagId: tag.id, name: "Rust" })
+  assert.equal(again.name, "Rust")
+})
+
+test("renameTag moves the tag's pending suggestions to the new name", async () => {
+  await resetBookmarksDb()
+  const tag = await createTag({ name: "AI" })
+  const suggestion = createTagSuggestion({
+    bookmarkId: "tweet-1",
+    tagName: "AI",
+    source: "keyword",
+    confidence: 0.7
+  })
+  assert.ok(suggestion)
+  await insertNewTagSuggestions([suggestion])
+
+  await renameTag({ tagId: tag.id, name: "Artificial Intelligence" })
+
+  // The row is keyed and labelled by the tag name, so leaving it behind meant
+  // accepting it later found no match and created a SECOND tag for the concept.
+  const stored = await getAllTagSuggestions()
+  assert.equal(stored.length, 1)
+  assert.equal(stored[0].tagName, "Artificial Intelligence")
+  assert.equal(stored[0].id, "tweet-1::artificialintelligence")
+})
+
+test("renameTag does not rewrite suggestions that were already resolved", async () => {
+  await resetBookmarksDb()
+  const tag = await createTag({ name: "AI" })
+  const suggestion = createTagSuggestion({
+    bookmarkId: "tweet-1",
+    tagName: "AI",
+    source: "keyword",
+    confidence: 0.7
+  })
+  assert.ok(suggestion)
+  await insertNewTagSuggestions([{ ...suggestion, status: "rejected" }])
+
+  await renameTag({ tagId: tag.id, name: "Artificial Intelligence" })
+
+  // A resolved row is the record of a decision the user already made, not a
+  // proposal waiting to be applied.
+  const stored = await getAllTagSuggestions()
+  assert.equal(stored[0].tagName, "AI")
+  assert.equal(stored[0].status, "rejected")
+})
+
+test("two tags cannot claim the same alias", async () => {
+  await resetBookmarksDb()
+  const alpha = await createTag({ name: "Alpha" })
+  const beta = await createTag({ name: "Beta" })
+  await updateTagAliases({ tagId: alpha.id, aliases: ["shared"] })
+
+  await updateTagAliases({ tagId: beta.id, aliases: ["shared"] })
+
+  // findTagByName resolves by array order, so a shared alias made which tag a
+  // suggestion reached invisible to the user.
+  assert.deepEqual((await getAllTags()).find((tag) => tag.id === beta.id)?.aliases, undefined)
+})
+
+test("merging a theme into one of its own children keeps the other children together", async () => {
+  await resetBookmarksDb()
+  const theme = await createTag({ name: "theme" })
+  const survivor = await createTag({ name: "survivor" })
+  const sibling = await createTag({ name: "sibling" })
+  await setTagParent({ tagId: survivor.id, parentId: theme.id })
+  await setTagParent({ tagId: sibling.id, parentId: theme.id })
+
+  await mergeTags({ sourceTagIds: [theme.id], targetTagId: survivor.id })
+
+  const tags = await getAllTags()
+  const byName = Object.fromEntries(tags.map((tag) => [tag.name, tag]))
+
+  // The survivor becomes a root (its parent was the merged theme), so its siblings
+  // can follow it instead of being scattered to the root level.
+  assert.equal(byName["survivor"]?.parentId, undefined)
+  assert.equal(byName["sibling"]?.parentId, survivor.id)
 })

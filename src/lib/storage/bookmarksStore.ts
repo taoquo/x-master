@@ -1,9 +1,10 @@
-import type { BookmarkRecord, SiteTweetDraft } from "../types.ts"
+import type { BookmarkRecord, SiteTweetDraft, TagSuggestionRecord } from "../types.ts"
 import {
   BOOKMARKS_STORE,
   BOOKMARK_TAGS_STORE,
   LLM_ANALYSIS_STORE,
   RAW_PAYLOADS_STORE,
+  TAG_SUGGESTIONS_STORE,
   getBookmarksDb,
   requestToPromise,
   transactionDone
@@ -125,17 +126,34 @@ export async function removeBookmarkSnapshot(bookmarkId: string) {
   // The analysis ledger is keyed by bookmark, so it has to be cleaned up with
   // the bookmark. A row left behind would claim a re-added bookmark was already
   // analyzed and keep it out of the queue forever.
+  //
+  // Suggestions are cleaned up too, but only the *pending* ones: the pending
+  // count that drives the sidebar badge is a plain filter over that store, so a
+  // leftover pending row shows an entry no bookmark can ever resolve. A resolved
+  // row is different — it is the negative cache that remembers the user already
+  // said yes or no, and deleting it would re-suggest the tag they rejected as
+  // soon as the bookmark comes back.
   const transaction = db.transaction(
-    [BOOKMARKS_STORE, BOOKMARK_TAGS_STORE, RAW_PAYLOADS_STORE, LLM_ANALYSIS_STORE],
+    [BOOKMARKS_STORE, BOOKMARK_TAGS_STORE, RAW_PAYLOADS_STORE, LLM_ANALYSIS_STORE, TAG_SUGGESTIONS_STORE],
     "readwrite"
   )
   const bookmarksStore = transaction.objectStore(BOOKMARKS_STORE)
   const bookmarkTagsStore = transaction.objectStore(BOOKMARK_TAGS_STORE)
   const relatedBookmarkTags = (await requestToPromise(bookmarkTagsStore.index("bookmarkId").getAll(bookmarkId))) as BookmarkTagRecord[]
+  const suggestionsStore = transaction.objectStore(TAG_SUGGESTIONS_STORE)
+  const relatedSuggestions = (await requestToPromise(
+    suggestionsStore.index("bookmarkId").getAll(bookmarkId)
+  )) as TagSuggestionRecord[]
 
   bookmarksStore.delete(bookmarkId)
   transaction.objectStore(RAW_PAYLOADS_STORE).delete(bookmarkId)
   transaction.objectStore(LLM_ANALYSIS_STORE).delete(bookmarkId)
+
+  for (const suggestion of relatedSuggestions) {
+    if (suggestion.status === "pending") {
+      suggestionsStore.delete(suggestion.id)
+    }
+  }
 
   for (const bookmarkTag of relatedBookmarkTags) {
     bookmarkTagsStore.delete(bookmarkTag.id)

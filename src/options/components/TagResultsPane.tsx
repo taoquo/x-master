@@ -25,7 +25,6 @@ import {
   cn,
   createFieldId,
   formatTimestamp,
-  getSectionOverline,
   INITIAL_RESULTS_RENDER_LIMIT,
   RESULTS_RENDER_INCREMENT
 } from "../utils.ts"
@@ -621,7 +620,7 @@ export function TagResultsPane({
               <div className="options-main-header-top">
                 <div className="options-main-header-row">
                   <div className="options-main-header-copy min-w-0">
-                    <div className="options-overline">{getSectionOverline(locale, copy.tagLibrary, "Taxonomy")}</div>
+                    <div className="options-overline">{copy.tagLibrary}</div>
                     <h2 className="options-display-title-sm mt-3 truncate font-bold">{copy.manageTagsLabel}</h2>
                     <div data-testid="tag-header-meta" className="options-meta-copy options-tag-header-meta">
                       {tagItems.length} {copy.tagsCountSuffix} · {orphanCount} {copy.orphanTagsSuffix} · {unparentedCount}{" "}

@@ -5,7 +5,6 @@ import {
   type LlmVocabularyEntry
 } from "./llmProvider.ts"
 import { broadcastAutoTagProgress } from "../runtime/autotagProgress.ts"
-import { backfillHashtagsFromRawPayloads } from "../storage/backfillHashtags.ts"
 import { getAllBookmarks } from "../storage/bookmarksStore.ts"
 import {
   createLlmAnalysisRecord,
@@ -17,9 +16,9 @@ import {
 import { getSecrets } from "../storage/secrets.ts"
 import {
   beginAutoTagRunState,
+  finishAutoTagRun,
   getSettings,
-  touchAutoTagRunState,
-  updateSettings
+  touchAutoTagRunState
 } from "../storage/settings.ts"
 import { createTagSuggestion, getAllTagSuggestions, insertNewTagSuggestions } from "../storage/suggestionsStore.ts"
 import { getAllBookmarkTags, getAllTags } from "../storage/tagsStore.ts"
@@ -62,7 +61,21 @@ export interface AutoTagRunResult {
 // outcome report, the cleared run state and the released background lock all
 // hang off it. Per-request timeouts bound one batch, this bounds the run, and
 // partial results are already persisted batch by batch.
-export const DEFAULT_LLM_RUN_BUDGET_MS = 8 * 60 * 1000
+//
+// This must stay comfortably below Chrome's per-invocation limit for an MV3
+// service worker (~5 minutes, which no keepalive resets). This used to be 8
+// minutes, i.e. past the limit: the worker was killed mid-run, finishRun never
+// ran, and the run state stayed "running" with the previous result on screen.
+// The deadline is also handed to the provider, so one slow batch cannot outlive
+// it either.
+export const DEFAULT_LLM_RUN_BUDGET_MS = 4 * 60 * 1000
+
+// Upper bound on a single batch. The heartbeat is refreshed once per batch, so
+// the gap between heartbeats is one batch: without a cap on a batch, a batch
+// could outlive the window other code uses to decide whether this run is still
+// alive, and a healthy run would be taken over as if it had died. Kept well
+// below that window (AUTO_TAG_RUN_STALE_MS).
+export const DEFAULT_LLM_BATCH_BUDGET_MS = 2 * 60 * 1000
 
 interface LlmStepInput {
   bookmarks: BookmarkRecord[]
@@ -91,6 +104,9 @@ interface LlmStepInput {
   // Wall-clock budget for the whole step. Checked at batch boundaries, so the
   // worst case is one in-flight batch past the deadline.
   budgetMs?: number
+  // Per-batch cap, so the heartbeat gap stays smaller than the window other code
+  // uses to decide whether this run is alive.
+  batchBudgetMs?: number
   now?: () => number
   // Called at every batch boundary with the progress so far. Returning true
   // stops the step and reports "cancelled". The pipeline wires this to the
@@ -183,6 +199,7 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
 
   const now = input.now ?? (() => Date.now())
   const budgetMs = input.budgetMs ?? DEFAULT_LLM_RUN_BUDGET_MS
+  const batchBudgetMs = input.batchBudgetMs ?? DEFAULT_LLM_BATCH_BUDGET_MS
   const deadlineAt = Number.isFinite(budgetMs) ? now() + budgetMs : Number.POSITIVE_INFINITY
   let stoppedReason: "deadline" | "cancelled" | undefined
 
@@ -214,7 +231,13 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
         })),
         vocabulary: [...vocabulary.values()],
         allowNewTags: input.allowNewTags && remainingNewTagBudget > 0,
-        newTagBudget: Number.isFinite(remainingNewTagBudget) ? remainingNewTagBudget : undefined
+        newTagBudget: Number.isFinite(remainingNewTagBudget) ? remainingNewTagBudget : undefined,
+        // The provider enforces this too: a single batch can otherwise burn 5
+        // attempts x the request timeout plus backoff and outlive the run
+        // budget, which is what let a run die without reaching finishRun.
+        // Capped per batch as well, so the heartbeat gap stays inside the window
+        // that decides whether this run is still alive.
+        deadlineMs: Math.min(deadlineAt, now() + batchBudgetMs)
       })
     } catch (error) {
       failedBatchCount += 1
@@ -370,7 +393,7 @@ export function resolveNewTagBudget(mode: string, candidateCount: number, vocabu
 // the user what happened; a run that silently does nothing is the single
 // hardest thing to debug in this feature. finishRun also clears the in-flight
 // run state, which is what releases the panel from showing "running".
-async function finishRun(result: AutoTagRunResult): Promise<AutoTagRunResult> {
+async function finishRun(result: AutoTagRunResult, runId?: string): Promise<AutoTagRunResult> {
   let pendingCount = 0
   try {
     pendingCount = (await getAllTagSuggestions()).filter((suggestion) => suggestion.status === "pending").length
@@ -379,9 +402,12 @@ async function finishRun(result: AutoTagRunResult): Promise<AutoTagRunResult> {
   }
 
   try {
-    await updateSettings({
-      autoTagRunState: undefined,
-      lastAutoTagRun: {
+    // Scoped to the run that owns the state: a run superseded by a takeover must
+    // not clear the replacement's state (which would leave it looking finished
+    // but still running, and uncancellable) nor publish its own discarded report.
+    await finishAutoTagRun({
+      runId,
+      summary: {
         finishedAt: new Date().toISOString(),
         outcome: result.outcome,
         suggestedCount: result.suggestedCount,
@@ -406,11 +432,39 @@ async function finishRun(result: AutoTagRunResult): Promise<AutoTagRunResult> {
   return result
 }
 
+// A run that throws must still report. Without this, a failure anywhere between
+// publishing the run state and reaching finishRun left the state behind with a
+// frozen heartbeat: the panel showed the previous result while the state claimed
+// a run was still in flight.
+function failedRunResult(error: unknown): AutoTagRunResult {
+  return {
+    ran: true,
+    outcome: "failed",
+    suggestedCount: 0,
+    llmProcessedCount: 0,
+    skippedCount: 0,
+    candidateCount: 0,
+    llmBatchCount: 0,
+    llmFailedBatchCount: 0,
+    newTagBudget: 0,
+    vocabularySize: 0,
+    blockedTagKeyCount: 0,
+    blockedDroppedCount: 0,
+    budgetDroppedCount: 0,
+    unprocessedCount: 0,
+    error: error instanceof Error ? error.message : String(error)
+  }
+}
+
 export async function runAutoTagPipeline(options?: {
   createLlmProvider?: (input: { apiKey: string; baseUrl: string; model: string }) => AutoTagLlmProvider
   // Wall-clock budget for the LLM step, exposed for tests.
   llmBudgetMs?: number
   now?: () => number
+  // Injectable like the provider: the rule-engine write is the one await between
+  // publishing the run state and the LLM step, so tests use it to force a storage
+  // failure and to land a cancel while the rules are still running.
+  insertSuggestions?: typeof insertNewTagSuggestions
 }): Promise<AutoTagRunResult> {
   const settings = await getSettings()
 
@@ -433,8 +487,11 @@ export async function runAutoTagPipeline(options?: {
     })
   }
 
-  await backfillHashtagsFromRawPayloads()
-
+  // The one-time hashtag backfill used to run here, which made it unreachable
+  // whenever auto-tagging was off (the default): the early return above fired
+  // first, so existing bookmarks kept hashtags: undefined and the hashtag rule
+  // had nothing to work with. It now runs on the sync path instead
+  // (src/background/index.ts), independently of this pipeline's gate.
   const [bookmarks, tags, bookmarkTags, suggestions, llmAnalysis] = await Promise.all([
     getAllBookmarks(),
     getAllTags(),
@@ -446,7 +503,10 @@ export async function runAutoTagPipeline(options?: {
   broadcastAutoTagProgress({ phase: "heuristics", processed: 0, total: bookmarks.length })
   // Published before the first request so a run killed mid-flight (worker
   // recycled, browser closed) still leaves a trace instead of looking frozen.
-  await beginAutoTagRunState({ phase: "heuristics", total: bookmarks.length })
+  // The returned runId is this run's identity: every later state write is
+  // scoped to it, so a takeover cannot leave two runs fighting over one state.
+  const runState = await beginAutoTagRunState({ phase: "heuristics", total: bookmarks.length })
+  const runId = runState?.runId
 
   const heuristicSuggestions = computeHeuristicSuggestions({
     bookmarks,
@@ -457,14 +517,38 @@ export async function runAutoTagPipeline(options?: {
     blockedTagKeys: settings.autoTag.blockedTagKeys
   })
 
-  const { insertedCount } = await insertNewTagSuggestions(heuristicSuggestions)
+  let insertedCount = 0
+  try {
+    const insertSuggestions = options?.insertSuggestions ?? insertNewTagSuggestions
+    insertedCount = (await insertSuggestions(heuristicSuggestions)).insertedCount
+  } catch (error) {
+    // A storage failure here must not leave the run state behind: every exit
+    // after publishing the state has to go through finishRun.
+    return finishRun(failedRunResult(error), runId)
+  }
 
   broadcastAutoTagProgress({ phase: "heuristics", processed: bookmarks.length, total: bookmarks.length })
+
+  // A cancel requested while the rules were running had no checkpoint of its own:
+  // the only read used to be at LLM batch boundaries, so a cancel aimed at a
+  // rules-only run (or one that never reached the LLM) was accepted and then
+  // silently ignored.
+  const heuristicsCheckpoint = await touchAutoTagRunState({
+    runId,
+    phase: "heuristics",
+    processed: bookmarks.length,
+    total: bookmarks.length
+  }).catch(() => undefined)
+  const stoppedAfterHeuristics =
+    heuristicsCheckpoint !== undefined &&
+    (heuristicsCheckpoint.ownsState
+      ? Boolean(heuristicsCheckpoint.state?.cancelRequested)
+      : runId !== undefined)
 
   let llmInsertedCount = 0
   let llmProcessedCount = 0
   let llmSkippedCount = 0
-  let outcome: AutoTagRunOutcome = "ok"
+  let outcome: AutoTagRunOutcome = stoppedAfterHeuristics ? "cancelled" : "ok"
   let candidateCount = 0
   let llmBatchCount = 0
   let llmFailedBatchCount = 0
@@ -475,10 +559,16 @@ export async function runAutoTagPipeline(options?: {
   let runError: string | undefined
 
   const llmSettings = settings.autoTag.llm
-  if (!llmSettings.enabled) {
+
+  if (stoppedAfterHeuristics) {
+    // The rules already wrote their suggestions; skipping the LLM step is the
+    // whole point of the cancel, and the kept count tells the user where it left off.
+  } else if (!llmSettings.enabled) {
     outcome = "llm-disabled"
   } else {
-    const { llmApiKey } = await getSecrets()
+    // A secrets read failure degrades to "no key" instead of throwing out of the
+    // published run state.
+    const { llmApiKey } = await getSecrets().catch(() => ({ llmApiKey: undefined }))
 
     if (!llmApiKey) {
       outcome = "missing-api-key"
@@ -556,13 +646,25 @@ export async function runAutoTagPipeline(options?: {
           // One round-trip per batch boundary: refresh the heartbeat and read
           // back a cancel the options page may have requested.
           shouldCancel: async (progress) => {
-            const state = await touchAutoTagRunState({
+            const touched = await touchAutoTagRunState({
+              runId,
               phase: "llm",
               processed: progress.processed,
               total: progress.total
             }).catch(() => undefined)
 
-            return Boolean(state?.cancelRequested)
+            if (!touched) {
+              return false
+            }
+
+            // Losing the state means another run took over: it owns the state and
+            // the report now. Stopping here is what keeps two live pipelines from
+            // both spending on the same bookmarks.
+            if (runId !== undefined && !touched.ownsState) {
+              return true
+            }
+
+            return Boolean(touched.state?.cancelRequested)
           }
         })
 
@@ -625,5 +727,5 @@ export async function runAutoTagPipeline(options?: {
     budgetDroppedCount: llmBudgetDroppedCount,
     unprocessedCount: llmUnprocessedCount,
     ...(runError ? { error: runError } : {})
-  })
+  }, runId)
 }

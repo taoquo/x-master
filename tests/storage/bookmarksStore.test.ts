@@ -9,6 +9,7 @@ import {
   upsertBookmarkSnapshot
 } from "../../src/lib/storage/bookmarksStore.ts"
 import { attachTagToBookmark, createTag, getAllBookmarkTags } from "../../src/lib/storage/tagsStore.ts"
+import { createTagSuggestion, getAllTagSuggestions, insertNewTagSuggestions, resolveTagSuggestion } from "../../src/lib/storage/suggestionsStore.ts"
 
 test("upsertBookmarks stores bookmarks and getAllBookmarks returns them", async () => {
   await resetBookmarksDb()
@@ -301,4 +302,78 @@ test("removeBookmarkSnapshot removes the bookmark and all related tag mappings",
 
   assert.equal((await getAllBookmarks()).length, 0)
   assert.equal((await getAllBookmarkTags()).length, 0)
+})
+
+test("removeBookmarkSnapshot drops the bookmark's tag suggestions", async () => {
+  await resetBookmarksDb()
+
+  await upsertBookmarkSnapshot({
+    tweetId: "tweet-123",
+    tweetUrl: "https://x.com/alice/status/123",
+    authorName: "Alice",
+    authorHandle: "alice",
+    text: "Short DOM text",
+    createdAtOnX: "2026-04-01T00:00:00.000Z"
+  })
+  const doomed = createTagSuggestion({
+    bookmarkId: "tweet-123",
+    tagName: "AI",
+    source: "hashtag",
+    confidence: 0.9
+  })
+  const survivor = createTagSuggestion({
+    bookmarkId: "tweet-999",
+    tagName: "Rust",
+    source: "hashtag",
+    confidence: 0.9
+  })
+  assert.ok(doomed && survivor)
+  await insertNewTagSuggestions([doomed, survivor])
+
+  await removeBookmarkSnapshot("tweet-123")
+
+  // A leftover pending row would still be counted by the sidebar badge and
+  // could never be resolved, because its bookmark is gone.
+  assert.deepEqual(
+    (await getAllTagSuggestions()).map((suggestion) => suggestion.id),
+    [survivor.id]
+  )
+})
+
+test("removeBookmarkSnapshot keeps rejected suggestions as the user's negative cache", async () => {
+  await resetBookmarksDb()
+
+  await upsertBookmarkSnapshot({
+    tweetId: "tweet-123",
+    tweetUrl: "https://x.com/alice/status/123",
+    authorName: "Alice",
+    authorHandle: "alice",
+    text: "Short DOM text",
+    createdAtOnX: "2026-04-01T00:00:00.000Z"
+  })
+  const pending = createTagSuggestion({
+    bookmarkId: "tweet-123",
+    tagName: "AI",
+    source: "hashtag",
+    confidence: 0.9
+  })
+  const rejected = createTagSuggestion({
+    bookmarkId: "tweet-123",
+    tagName: "Crypto",
+    source: "keyword",
+    confidence: 0.7
+  })
+  assert.ok(pending && rejected)
+  await insertNewTagSuggestions([pending, rejected])
+  await resolveTagSuggestion(rejected.id, "rejected")
+
+  await removeBookmarkSnapshot("tweet-123")
+
+  // Only the pending row is gone. A resolved row records that the user already
+  // answered, and deleting it would re-suggest a tag they explicitly turned down
+  // as soon as the bookmark is saved again.
+  assert.deepEqual(
+    (await getAllTagSuggestions()).map((suggestion) => [suggestion.id, suggestion.status]),
+    [[rejected.id, "rejected"]]
+  )
 })

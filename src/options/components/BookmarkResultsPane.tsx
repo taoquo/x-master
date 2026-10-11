@@ -178,7 +178,6 @@ export function BookmarkResultsPane({
               viewMode === "grid" ? "options-results-shell-grid" : "options-results-shell-list"
             )}>
             <WorkspaceToolbar
-              locale={locale}
               copy={copy}
               loadError={showLoadErrorState ? null : workspace.loadError}
               currentScopeLabel={currentScopeLabel}

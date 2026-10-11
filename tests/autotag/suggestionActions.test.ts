@@ -74,3 +74,48 @@ test("acceptTagSuggestionsBulk accepts every resolvable suggestion once", async 
   assert.equal((await getAllTags()).length, 2)
   assert.equal((await getAllBookmarkTags()).length, 3)
 })
+
+test("a suggestion whose tag work fails stays pending so it can be retried", async () => {
+  await resetBookmarksDb()
+
+  // createTag rejects a blank name, so this row reaches the failure branch
+  // without needing a mock. It is stored directly because createTagSuggestion
+  // would refuse to build it.
+  const broken = {
+    id: "t1::",
+    bookmarkId: "t1",
+    tagName: "   ",
+    source: "hashtag" as const,
+    confidence: 0.9,
+    status: "pending" as const,
+    createdAt: new Date().toISOString()
+  }
+  await insertNewTagSuggestions([broken])
+  const healthy = await seedSuggestion("t2", "Rust")
+
+  await assert.rejects(() => acceptTagSuggestion(broken.id))
+
+  // The work did not happen, so the row must not claim it did: a resolved row
+  // has no way back, and its id blocks that bookmark+tag pair from ever being
+  // suggested again.
+  const [stored] = (await getAllTagSuggestions()).filter((row) => row.id === broken.id)
+  assert.equal(stored?.status, "pending")
+  assert.equal(stored?.resolvedAt, undefined)
+
+  // Nothing was attached for the failed attempt, and the healthy row is intact.
+  assert.equal((await getAllBookmarkTags()).length, 0)
+  const accepted = await acceptTagSuggestion(healthy.id)
+  assert.equal(accepted?.status, "accepted")
+})
+
+test("accepting an already-resolved suggestion is a no-op", async () => {
+  await resetBookmarksDb()
+
+  const suggestion = await seedSuggestion("t1", "Rust")
+  await acceptTagSuggestion(suggestion.id)
+  const secondAttempt = await acceptTagSuggestion(suggestion.id)
+
+  assert.equal(secondAttempt, null)
+  assert.equal((await getAllBookmarkTags()).length, 1)
+  assert.equal((await getAllTags()).length, 1)
+})

@@ -5,6 +5,7 @@ import React from "react"
 import { act } from "react"
 import { OptionsApp } from "../../src/options/OptionsApp.tsx"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
+import { upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
 import { cleanupRenders, render, settle } from "../helpers/render.tsx"
 import { installChromeRuntimeHarness } from "../helpers/runtime.ts"
@@ -54,6 +55,119 @@ test("settings panel opens from the sidebar gear and closes again", async () => 
 
   await click(dom, findByTestId(container, "settings-close"))
   assert.equal(findByTestId(container, "settings-panel"), null)
+})
+
+test("the settings panel is a labelled dialog that closes on Escape", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  const { container, dom } = render(<OptionsApp />)
+  await settle()
+
+  await click(dom, findByTestId(container, "footer-settings-toggle"))
+
+  const dialog = findByTestId(container, "settings-panel")?.querySelector('[role="dialog"]')
+  assert.ok(dialog, "the panel must announce itself as a dialog")
+  assert.equal(dialog?.getAttribute("aria-modal"), "true")
+
+  // The label has to resolve to the visible title, or screen readers announce an
+  // unnamed dialog.
+  const labelledBy = dialog?.getAttribute("aria-labelledby")
+  assert.ok(labelledBy)
+  const title = container.querySelector(`#${labelledBy}`)
+  assert.ok(title, "aria-labelledby must point at an element in the dialog")
+  assert.equal(title?.textContent?.trim(), "Settings")
+
+  // The detail modal already closed on Escape; the settings panel did not.
+  await act(async () => {
+    dom.window.document.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+  })
+  await settle()
+
+  assert.equal(findByTestId(container, "settings-panel"), null)
+})
+
+test("icon-only card and sidebar controls expose an accessible name", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  await upsertBookmarks([
+    {
+      tweetId: "tweet-a11y",
+      tweetUrl: "https://x.com/alice/status/tweet-a11y",
+      authorName: "Alice",
+      authorHandle: "alice",
+      text: "Accessible controls",
+      createdAtOnX: "2026-03-15T00:00:00.000Z",
+      savedAt: "2026-03-15T01:00:00.000Z"
+    }
+  ])
+
+  const { container } = render(<OptionsApp />)
+  await settle()
+
+  // AppIcon is always aria-hidden, so an icon-only button without an explicit
+  // label is announced as nothing at all.
+  const openOnX = findByTestId(container, "card-open-on-x")
+  assert.ok(openOnX)
+  assert.equal(openOnX?.getAttribute("aria-label"), "Open on X")
+
+  const tagsToggle = findByTestId(container, "sidebar-tags-toggle")
+  assert.ok(tagsToggle?.getAttribute("aria-label"))
+  const authorsToggle = findByTestId(container, "sidebar-authors-toggle-header")
+  assert.ok(authorsToggle?.getAttribute("aria-label"))
+})
+
+test("the progress line names the phase instead of the raw pipeline enum", async () => {
+  const harness = installChromeRuntimeHarness()
+  await resetBookmarksDb()
+
+  const { container, dom } = render(<OptionsApp />)
+  await settle()
+
+  await click(dom, findByTestId(container, "footer-settings-toggle"))
+  await click(dom, findByTestId(container, "settings-nav-autotag"))
+
+  await act(async () => {
+    harness.emitRuntimeMessage({
+      type: "autotag/progress",
+      progress: { phase: "heuristics", processed: 2, total: 5 }
+    })
+  })
+  await settle()
+
+  const progress = findByTestId(container, "settings-autotag-progress")
+  assert.ok(progress, "the panel should show progress while a run is in flight")
+  // The internal phase name used to be interpolated straight into translated copy.
+  assert.match(progress?.textContent ?? "", /Rule-based/)
+  assert.doesNotMatch(progress?.textContent ?? "", /heuristics/)
+  assert.match(progress?.textContent ?? "", /2\/5/)
+})
+
+test("the sidebar status badge is translated rather than the raw status enum", async () => {
+  installChromeRuntimeHarness()
+  await resetBookmarksDb()
+  await saveSettings({
+    schemaVersion: 3,
+    locale: "en",
+    themePreference: "system",
+    lastSyncSummary: {
+      status: "partial_success",
+      fetchedCount: 3,
+      insertedCount: 2,
+      updatedCount: 0,
+      failedCount: 1
+    }
+  })
+
+  const { container } = render(<OptionsApp />)
+  await settle()
+
+  const badge = findByTestId(container, "sidebar-status-section")?.querySelector(".workspace-badge")
+  assert.ok(badge, "the sidebar hero should render a status badge")
+  // StatusBadge falls back to formatStatusLabel, which upper-cases the raw enum
+  // ("PARTIAL_SUCCESS"). Only the popup used to pass a translated label.
+  assert.equal(badge?.textContent?.trim(), "Partial success")
 })
 
 test("auto-tag toggles persist to settings storage", async () => {

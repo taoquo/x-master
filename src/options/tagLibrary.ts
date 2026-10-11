@@ -23,13 +23,6 @@ export type TagLibraryFilter = "all" | "orphan" | "long-tail" | "pending" | "unp
 
 export type TagLibrarySortOrder = "count-desc" | "count-asc" | "name-asc" | "recent"
 
-export const TAG_LIBRARY_SORT_ORDERS: TagLibrarySortOrder[] = [
-  "count-desc",
-  "count-asc",
-  "name-asc",
-  "recent"
-]
-
 export function buildTagLibraryItems({
   tags,
   bookmarkTags,
@@ -108,10 +101,14 @@ export function countLongTailTags(items: TagLibraryItem[]) {
   return items.reduce((total, item) => (isLongTailTag(item) ? total + 1 : total), 0)
 }
 
-// Tags safe to sweep in one go: no bookmarks and no children, so removing them
-// never detaches a theme's sub tags.
+// Tags safe to sweep in one go: no bookmarks, no children, and nothing waiting to
+// be triaged. Without the pending-suggestion check the sweep deleted a tag the
+// user was still reviewing, which also rejected those suggestions and added the
+// name to the block list, so the concept could not be suggested again.
 export function getRemovableOrphanTagIds(items: TagLibraryItem[]): string[] {
-  return items.filter((item) => !item.bookmarkCount && !item.childCount).map((item) => item.tagId)
+  return items
+    .filter((item) => !item.bookmarkCount && !item.childCount && !item.pendingSuggestionCount)
+    .map((item) => item.tagId)
 }
 
 // "Unparented" only counts tags that could reasonably sit under a theme: a tag

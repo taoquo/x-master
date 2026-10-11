@@ -67,8 +67,10 @@ function normalizeHandle(handle: string) {
 }
 
 // Author scoping happens before the graph is built so cooccurrence weights
-// reflect the visible slice instead of the whole workspace.
-function selectScopedBookmarkTags({
+// reflect the visible slice instead of the whole workspace. Exported because the
+// caller memoises the relation graph separately from the search-dependent view
+// model, and has to apply the same scoping to the half it caches.
+export function selectScopedBookmarkTags({
   bookmarks,
   bookmarkTags,
   activeAuthorHandles
@@ -214,7 +216,8 @@ export function buildGraphViewModel({
   nodeLimit = DEFAULT_GRAPH_NODE_LIMIT,
   authorLimit = DEFAULT_GRAPH_AUTHOR_LIMIT,
   includeAuthors = false,
-  relationOptions
+  relationOptions,
+  graph: prebuiltGraph
 }: {
   tags: TagRecord[]
   bookmarkTags: BookmarkTagRecord[]
@@ -224,6 +227,11 @@ export function buildGraphViewModel({
   authorLimit?: number
   includeAuthors?: boolean
   relationOptions?: TagRelationGraphOptions
+  // The relation graph is the expensive part (it walks every bookmark/tag pair)
+  // and does not depend on the search query or the focused tags. Callers that
+  // rebuild on every keystroke pass a memoised graph so a search re-runs only the
+  // cheap scoping and layout below.
+  graph?: TagRelationGraph
 }): GraphViewModel {
   const scopedBookmarkTags = selectScopedBookmarkTags({
     bookmarks,
@@ -231,7 +239,7 @@ export function buildGraphViewModel({
     activeAuthorHandles: scope.activeAuthorHandles
   })
 
-  const graph = buildTagRelationGraph({
+  const graph = prebuiltGraph ?? buildTagRelationGraph({
     tags,
     bookmarkTags: scopedBookmarkTags,
     bookmarks,

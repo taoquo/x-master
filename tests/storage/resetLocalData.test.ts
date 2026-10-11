@@ -7,6 +7,7 @@ import { resetLocalData } from "../../src/lib/storage/resetLocalData.ts"
 import { createSyncRun, getLatestSyncRun } from "../../src/lib/storage/syncRunsStore.ts"
 import { attachTagToBookmark, createTag, getAllBookmarkTags, getAllTags } from "../../src/lib/storage/tagsStore.ts"
 import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
+import { getSecrets, saveSecrets } from "../../src/lib/storage/secrets.ts"
 
 function openIndependentBookmarksDb() {
   return new Promise<IDBDatabase>((resolve, reject) => {
@@ -85,6 +86,30 @@ test("resetLocalData clears IndexedDB stores and resets reduced extension settin
   assert.equal(settings.syncStrategyVersion, 1)
   assert.equal(settings.hasCompletedInitialFullSync, false)
   assert.equal(settings.incrementalStopBufferPages, 3)
+})
+
+test("resetLocalData clears the stored LLM API key", async () => {
+  const store: Record<string, unknown> = {}
+
+  ;(globalThis as any).chrome = {
+    storage: {
+      local: {
+        get: async (key?: string) => (key ? { [key]: store[key] } : { ...store }),
+        set: async (value: Record<string, unknown>) => {
+          Object.assign(store, value)
+        }
+      }
+    }
+  }
+
+  await saveSecrets({ llmApiKey: "sk-live-must-not-survive-reset" })
+  assert.equal((await getSecrets()).llmApiKey, "sk-live-must-not-survive-reset")
+
+  await resetLocalData()
+
+  // The key lives in its own storage key, so it used to survive a full reset even
+  // though the confirmation promises every local setting is cleared.
+  assert.deepEqual(await getSecrets(), {})
 })
 
 test("resetLocalData is not blocked by another open IndexedDB connection", async () => {

@@ -1,10 +1,11 @@
-import type { BookmarkRecord, BookmarkTagRecord, TagRecord } from "../types.ts"
+import type { BookmarkRecord, BookmarkTagRecord, TagRecord, TagSuggestionRecord } from "../types.ts"
 import { canonicalTagKey, normalizeTagDisplayName } from "../tags/canonical.ts"
 import {
   BOOKMARKS_STORE,
   BOOKMARK_TAGS_STORE,
   getBookmarksDb,
   requestToPromise,
+  TAG_SUGGESTIONS_STORE,
   TAGS_STORE,
   transactionDone
 } from "./db.ts"
@@ -58,12 +59,67 @@ export async function renameTag({
   }
 
   const db = await getBookmarksDb()
-  const transaction = db.transaction(TAGS_STORE, "readwrite")
+  const transaction = db.transaction([TAGS_STORE, TAG_SUGGESTIONS_STORE], "readwrite")
   const store = transaction.objectStore(TAGS_STORE)
   const existing = (await requestToPromise(store.get(tagId))) as TagRecord | undefined
 
   if (!existing) {
     throw new Error("Tag not found")
+  }
+
+  // createTag and updateTagAliases both refuse to let two tags share a canonical
+  // identity; rename did not, so it could produce two tags named "rust" and
+  // "Rust" — after which every name lookup (accepting a suggestion, auto-creating
+  // a tag) silently picked whichever row IndexedDB returned first. Aliases count
+  // too: turning a tag into another tag's alias splits the concept, because
+  // findTagByName prefers a real name over an alias.
+  const canonicalKey = canonicalTagKey(trimmedName)
+  const allTags = (await requestToPromise(store.getAll())) as TagRecord[]
+  const collision = allTags.find((tag) => {
+    if (tag.id === tagId) {
+      return false
+    }
+
+    return (
+      canonicalTagKey(tag.name) === canonicalKey ||
+      (tag.aliases ?? []).some((alias) => canonicalTagKey(alias) === canonicalKey)
+    )
+  })
+
+  if (collision) {
+    await transactionDone(transaction)
+    throw new Error(`Another tag already uses "${collision.name}" as its name or alias`)
+  }
+
+  // Pending suggestions are keyed and labelled by the tag's name, so they have to
+  // move with it. Left behind they stayed pending under the old name, and
+  // accepting one later found no match and created a SECOND tag for the concept
+  // the user had just renamed.
+  const previousKeys = new Set(
+    [existing.name, ...(existing.aliases ?? [])].map((name) => canonicalTagKey(name)).filter(Boolean)
+  )
+  previousKeys.delete(canonicalKey)
+
+  if (previousKeys.size) {
+    const suggestionsStore = transaction.objectStore(TAG_SUGGESTIONS_STORE)
+    const suggestions = (await requestToPromise(suggestionsStore.getAll())) as TagSuggestionRecord[]
+    const existingIds = new Set(suggestions.map((suggestion) => suggestion.id))
+
+    for (const suggestion of suggestions) {
+      if (suggestion.status !== "pending" || !previousKeys.has(canonicalTagKey(suggestion.tagName))) {
+        continue
+      }
+
+      const nextId = `${suggestion.bookmarkId}::${canonicalKey}`
+      suggestionsStore.delete(suggestion.id)
+
+      // A suggestion for the new name may already exist; that one is the same
+      // proposal, so the old row is simply dropped rather than duplicated.
+      if (!existingIds.has(nextId)) {
+        suggestionsStore.put({ ...suggestion, id: nextId, tagName: trimmedName })
+        existingIds.add(nextId)
+      }
+    }
   }
 
   const updatedTag: TagRecord = {
@@ -167,9 +223,21 @@ export async function updateTagAliases({
     throw new Error("Tag not found")
   }
 
-  const blockedKeys = new Set(
-    allTags.filter((tag) => tag.id !== tagId).map((tag) => canonicalTagKey(tag.name))
-  )
+  // Every canonical identity another tag already claims: its name and its own
+  // aliases. Blocking only names let two tags advertise the same alias, after
+  // which which one wins a suggestion depended on the order IndexedDB returned.
+  const blockedKeys = new Set<string>()
+  for (const tag of allTags) {
+    if (tag.id === tagId) {
+      continue
+    }
+
+    blockedKeys.add(canonicalTagKey(tag.name))
+    for (const alias of tag.aliases ?? []) {
+      blockedKeys.add(canonicalTagKey(alias))
+    }
+  }
+
   blockedKeys.add(canonicalTagKey(existing.name))
 
   const nextAliases: string[] = []
@@ -422,6 +490,11 @@ export async function mergeTags({
   // a child — the taxonomy stays two levels deep, so they become roots instead.
   if (mergedTagIds.length) {
     const mergedIdSet = new Set(mergedTagIds)
+    // The survivor's parent may itself be one of the merged tags, in which case it
+    // is about to become a root (below). Deciding on the stale parentId would send
+    // its children to the root level even though the survivor ends up a root they
+    // could follow.
+    const survivorEndsUpRoot = !target.parentId || mergedIdSet.has(target.parentId)
 
     for (const child of allTags) {
       if (!child.parentId || !mergedIdSet.has(child.parentId)) {
@@ -436,7 +509,7 @@ export async function mergeTags({
       const { parentId: _droppedParentId, ...rest } = child
       const reparented: TagRecord = { ...rest, updatedAt: new Date().toISOString() }
 
-      if (!target.parentId) {
+      if (survivorEndsUpRoot) {
         reparented.parentId = targetTagId
       }
 

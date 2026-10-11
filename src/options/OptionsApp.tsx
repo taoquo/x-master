@@ -30,10 +30,13 @@ import { BookmarkResultsPane } from "./components/BookmarkResultsPane.tsx"
 import { TagResultsPane, type TagViewMode } from "./components/TagResultsPane.tsx"
 import {
   buildGraphViewModel,
+  DEFAULT_GRAPH_AUTHOR_LIMIT,
   EMPTY_GRAPH_SCOPE,
   EMPTY_GRAPH_VIEW_MODEL,
+  selectScopedBookmarkTags,
   type GraphViewModel
 } from "./graph/graphModel.ts"
+import { buildTagRelationGraph } from "../lib/graph/tagRelations.ts"
 import {
   buildTagLibraryItems,
   getVisibleTagLibraryItems,
@@ -318,8 +321,40 @@ function OptionsScreen() {
   )
   // Only build the relation graph while the graph view is on screen: it walks
   // every bookmark/tag pair and would be wasted work in the bookmark views.
-  const tagGraphModel = useMemo<GraphViewModel>(() => {
+  //
+  // Two memos on purpose. The relation graph is the expensive half and does not
+  // depend on the search query, so typing in the tag search used to rebuild the
+  // entire graph only to filter at most a few dozen nodes afterwards.
+  const tagRelationGraph = useMemo(() => {
     if (libraryMode !== "tags" || tagViewMode !== "graph") {
+      return undefined
+    }
+
+    return buildTagRelationGraph({
+      tags: workspace.tags,
+      bookmarkTags: selectScopedBookmarkTags({
+        bookmarks: workspace.bookmarks,
+        bookmarkTags: workspace.bookmarkTags,
+        activeAuthorHandles
+      }),
+      bookmarks: workspace.bookmarks,
+      options: {
+        includeAuthors: graphShowAuthors,
+        maxAuthors: Math.max(0, DEFAULT_GRAPH_AUTHOR_LIMIT)
+      }
+    })
+  }, [
+    activeAuthorHandles,
+    graphShowAuthors,
+    libraryMode,
+    tagViewMode,
+    workspace.bookmarkTags,
+    workspace.bookmarks,
+    workspace.tags
+  ])
+
+  const tagGraphModel = useMemo<GraphViewModel>(() => {
+    if (!tagRelationGraph) {
       return EMPTY_GRAPH_VIEW_MODEL
     }
 
@@ -328,6 +363,7 @@ function OptionsScreen() {
       bookmarkTags: workspace.bookmarkTags,
       bookmarks: workspace.bookmarks,
       includeAuthors: graphShowAuthors,
+      graph: tagRelationGraph,
       scope: {
         ...EMPTY_GRAPH_SCOPE,
         activeAuthorHandles,
@@ -338,8 +374,7 @@ function OptionsScreen() {
     activeAuthorHandles,
     deferredTagSearchQuery,
     graphShowAuthors,
-    libraryMode,
-    tagViewMode,
+    tagRelationGraph,
     workspace.bookmarkTags,
     workspace.bookmarks,
     workspace.tags
@@ -741,12 +776,22 @@ function OptionsScreen() {
 
   async function handleApplyReview() {
     // Merges run first so a rename never targets a tag that is about to disappear.
+    // Each plan is isolated: a single rejection used to abort the loop and discard
+    // the rest of the approved plan, while the failure surfaced nowhere the tag
+    // manager could show it. Failures are reported in the review panel, which
+    // stays open so the remainder can be retried.
+    const failures: string[] = []
+
     for (const plan of reviewMerges) {
       if (!selectedReviewKeys.has(mergePlanKey(plan))) {
         continue
       }
 
-      await workspace.handleMergeTags(plan.sourceTagIds, plan.targetTagId)
+      try {
+        await workspace.handleMergeTags(plan.sourceTagIds, plan.targetTagId)
+      } catch (error) {
+        failures.push(error instanceof Error ? error.message : String(error))
+      }
     }
 
     for (const plan of reviewRenames) {
@@ -754,7 +799,19 @@ function OptionsScreen() {
         continue
       }
 
-      await workspace.handleRenameTag(plan.tagId, plan.to)
+      try {
+        await workspace.handleRenameTag(plan.tagId, plan.to)
+      } catch (error) {
+        failures.push(error instanceof Error ? error.message : String(error))
+      }
+    }
+
+    if (failures.length) {
+      setReviewStatus("error")
+      setReviewError(failures.join("; "))
+      // Reconcile first: the panel must show what actually landed, not the plan.
+      await workspace.refreshData({ background: true })
+      return
     }
 
     resetReviewState()
@@ -815,7 +872,12 @@ function OptionsScreen() {
                 onDeleteSavedView={(savedViewId) => void handleDeleteSavedView(savedViewId)}
                 setLocale={setLocale}
                 setThemePreference={setThemePreference}
-                onOpenSettings={() => setIsSettingsOpen(true)}
+                onOpenSettings={() => {
+                  // One overlay at a time. Stacking them left two Escape handlers
+                  // live and the inspector's closed whichever it saw first.
+                  setSelectedBookmarkId(undefined)
+                  setIsSettingsOpen(true)
+                }}
                 dataSafety={dataSafety}
               />
 
@@ -970,6 +1032,13 @@ function OptionsScreen() {
                         await workspace.handleDetachTag(selectedBookmark.tweetId, tagId)
                       }}
                       onCreateTag={workspace.handleCreateTag}
+                      pendingSuggestions={
+                        selectedBookmark
+                          ? pendingSuggestionsByBookmarkId.get(selectedBookmark.tweetId) ?? []
+                          : []
+                      }
+                      onAcceptSuggestion={(suggestionId) => void workspace.handleAcceptSuggestion(suggestionId)}
+                      onRejectSuggestion={(suggestionId) => void workspace.handleRejectSuggestion(suggestionId)}
                       onClose={() => setSelectedBookmarkId(undefined)}
                     />
                   </div>

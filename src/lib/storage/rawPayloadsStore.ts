@@ -27,9 +27,3 @@ export async function getRawPayload(tweetId: string) {
   return record?.payload
 }
 
-export async function removeRawPayload(tweetId: string) {
-  const db = await getBookmarksDb()
-  const transaction = db.transaction(RAW_PAYLOADS_STORE, "readwrite")
-  transaction.objectStore(RAW_PAYLOADS_STORE).delete(tweetId)
-  await transactionDone(transaction)
-}

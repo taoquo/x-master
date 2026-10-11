@@ -5,31 +5,6 @@ function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ")
 }
 
-export function SectionHeader({
-  title,
-  description,
-  actions
-}: {
-  title: string
-  description?: string
-  actions?: React.ReactNode
-}) {
-  return (
-    <div className="folio-section-header flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-      <div className="min-w-0 flex-1">
-        <h1 className="folio-display-title max-w-[10ch] text-ink">
-          {title}
-        </h1>
-        {description ? (
-          <p className="folio-section-description mt-4 max-w-[28ch] md:text-xl">
-            {description}
-          </p>
-        ) : null}
-      </div>
-      {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
-    </div>
-  )
-}
 
 export function SurfaceCard({
   title,
@@ -64,39 +39,7 @@ export function SurfaceCard({
   )
 }
 
-export function MetricCard({
-  label,
-  value,
-  hint,
-  accentClassName
-}: {
-  label: string
-  value: string
-  hint: string
-  accentClassName?: string
-}) {
-  return (
-    <div className="panel-elevated folio-metric-card relative overflow-hidden rounded-[20px] p-6">
-      <div className="relative">
-        <p className="folio-metric-label text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-tertiary)]">{label}</p>
-        <div className="mt-5 grid gap-3 md:grid-cols-[auto_minmax(0,1fr)] md:items-end">
-          <div className="folio-metric-value text-[3.3rem] leading-none tracking-[-0.06em] text-[var(--text-primary)]">{value}</div>
-          <p className="folio-metric-hint max-w-[18ch] text-[0.92rem] leading-6 text-[var(--text-secondary)]">{hint}</p>
-        </div>
-        <div className={cn("folio-metric-rule mt-6 h-px rounded-full bg-[var(--accent-bg)]", accentClassName)} />
-      </div>
-    </div>
-  )
-}
 
-export function EmptyState({ title, description }: { title: string; description?: string }) {
-  return (
-    <div className="workspace-empty-state">
-      <h3 className="workspace-heading-md">{title}</h3>
-      {description ? <p className="workspace-copy">{description}</p> : null}
-    </div>
-  )
-}
 
 function formatStatusLabel(status?: string) {
   if (!status) {

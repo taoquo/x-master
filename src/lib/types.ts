@@ -240,6 +240,10 @@ export interface AutoTagRunSummary {
 // closed) wrote nothing at all and the panel just showed the previous result
 // while looking frozen.
 export interface AutoTagRunState {
+  // Identifies the run that owns this state. A takeover replaces the state
+  // wholesale, so a superseded run can tell the state is no longer its own and
+  // must neither clear nor overwrite the run that replaced it.
+  runId?: string
   startedAt: string
   // Heartbeat, refreshed after every batch. A state whose heartbeat stopped
   // moving is how a dead run is told apart from a slow one.

@@ -10,10 +10,10 @@ import { resetStoredData } from "../../lib/runtime/popupClient.ts"
 import { runSyncAndWait } from "../../lib/runtime/syncStatus.ts"
 import { subscribeSyncProgress, type SyncProgress } from "../../lib/runtime/syncProgress.ts"
 import {
-  acceptTagSuggestion,
-  acceptTagSuggestionsBulk,
-  rejectTagSuggestion
-} from "../../lib/autotag/suggestionActions.ts"
+  requestAcceptSuggestion,
+  requestAcceptSuggestionsBulk,
+  requestRejectSuggestion
+} from "../../lib/runtime/suggestionClient.ts"
 import { getSettings, updateSettings } from "../../lib/storage/settings.ts"
 import {
   attachTagToBookmark,
@@ -26,7 +26,7 @@ import {
   updateTagAliases
 } from "../../lib/storage/tagsStore.ts"
 import { deleteTagsPermanently, unblockTagKey } from "../../lib/tags/tagActions.ts"
-import { isSameTagName } from "../../lib/tags/canonical.ts"
+import { canonicalTagKey } from "../../lib/tags/canonical.ts"
 import type { BookmarkTagRecord, SavedViewRecord, TagRecord, WorkspaceData } from "../../lib/types.ts"
 import type { WorkspaceTagPatch } from "./useWorkspaceQueries.ts"
 
@@ -240,13 +240,16 @@ export function useWorkspaceCommands({
       await deleteTagsPermanently(uniqueTagIds.map((tagId) => ({ tagId, tagName: nameById.get(tagId) })))
 
       const deletedIds = new Set(uniqueTagIds)
+      // Canonical keys, not a nested scan: matching every suggestion against every
+      // deleted name was O(suggestions x deletedTags) canonicalizations, which on a
+      // 500-tag deletion over thousands of pending rows ran into the millions.
+      const deletedKeys = new Set(deletedNames.map((name) => canonicalTagKey(name)).filter(Boolean))
       applyWorkspacePatch(({ tags, bookmarkTags, tagSuggestions }) => ({
         tags: tags.filter((tag) => !deletedIds.has(tag.id)),
         bookmarkTags: bookmarkTags.filter((relation) => !deletedIds.has(relation.tagId)),
-        tagSuggestions: deletedNames.length
+        tagSuggestions: deletedKeys.size
           ? tagSuggestions.map((suggestion) =>
-              suggestion.status === "pending" &&
-              deletedNames.some((deletedName) => isSameTagName(suggestion.tagName, deletedName))
+              suggestion.status === "pending" && deletedKeys.has(canonicalTagKey(suggestion.tagName))
                 ? { ...suggestion, status: "rejected" as const, resolvedAt: new Date().toISOString() }
                 : suggestion
             )
@@ -437,7 +440,7 @@ export function useWorkspaceCommands({
     setIsSavingTags(true)
 
     try {
-      const accepted = await acceptTagSuggestion(suggestionId)
+      const accepted = await requestAcceptSuggestion(suggestionId)
       if (accepted) {
         applyWorkspacePatch(({ tagSuggestions }) => ({
           tagSuggestions: tagSuggestions.map((suggestion) =>
@@ -459,7 +462,7 @@ export function useWorkspaceCommands({
     setCommandError(null)
 
     try {
-      const rejected = await rejectTagSuggestion(suggestionId)
+      const rejected = await requestRejectSuggestion(suggestionId)
       if (rejected) {
         applyWorkspacePatch(({ tagSuggestions }) => ({
           tagSuggestions: tagSuggestions.map((suggestion) =>
@@ -482,7 +485,7 @@ export function useWorkspaceCommands({
     setIsSavingTags(true)
 
     try {
-      await acceptTagSuggestionsBulk(suggestionIds)
+      await requestAcceptSuggestionsBulk(suggestionIds)
       await refreshData({ background: true })
     } catch (error) {
       setCommandError(toErrorMessage(error, "Failed to accept suggestions"))

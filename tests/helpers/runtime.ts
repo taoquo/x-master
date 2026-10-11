@@ -3,6 +3,7 @@ import { resetLocalData } from "../../src/lib/storage/resetLocalData.ts"
 import { loadWorkspaceDataFromLocal } from "../../src/lib/workspace/loadWorkspaceData.ts"
 
 type StorageListener = (changes: Record<string, { newValue?: unknown }>, areaName: string) => void
+type RuntimeMessageListener = (message: unknown) => void
 
 export function installChromeRuntimeHarness({
   runSync,
@@ -24,6 +25,9 @@ export function installChromeRuntimeHarness({
 } = {}) {
   let stored: Record<string, unknown> = {}
   const storageListeners = new Set<StorageListener>()
+  // Progress broadcasts are push-only, so a test has to be able to emit one the
+  // way the background worker would.
+  const runtimeMessageListeners = new Set<RuntimeMessageListener>()
   let openOptionsPageCallCount = 0
 
   const handler = createBackgroundMessageHandler({
@@ -52,7 +56,15 @@ export function installChromeRuntimeHarness({
       openOptionsPage: async () => {
         openOptionsPageCallCount += 1
       },
-      getURL: (path: string) => `chrome-extension://extension-id/${path}`
+      getURL: (path: string) => `chrome-extension://extension-id/${path}`,
+      onMessage: {
+        addListener: (listener: RuntimeMessageListener) => {
+          runtimeMessageListeners.add(listener)
+        },
+        removeListener: (listener: RuntimeMessageListener) => {
+          runtimeMessageListeners.delete(listener)
+        }
+      }
     },
     storage: {
       local: {
@@ -90,6 +102,11 @@ export function installChromeRuntimeHarness({
 
   return {
     getOpenOptionsPageCallCount: () => openOptionsPageCallCount,
+    emitRuntimeMessage: (message: unknown) => {
+      for (const listener of runtimeMessageListeners) {
+        listener(message)
+      }
+    },
     getStoredSettings: () => stored.settings,
     getStoredSecrets: () => stored.secrets as { llmApiKey?: string } | undefined
   }

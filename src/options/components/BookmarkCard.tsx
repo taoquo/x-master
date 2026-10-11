@@ -249,6 +249,10 @@ export function BookmarkCard({
               )}
               <button
                 type="button"
+                data-testid="card-open-on-x"
+                // AppIcon is always aria-hidden, so this button had no accessible
+                // name at all.
+                aria-label={copy.openOnX}
                 className="options-card-action"
                 onClick={(event) => {
                   event.stopPropagation()

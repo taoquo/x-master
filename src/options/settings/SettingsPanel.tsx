@@ -10,11 +10,14 @@ import type { OptionsCopy } from "../i18n/copy.ts"
 import type { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
 import type { useDataSafetyActions } from "../hooks/useDataSafetyActions.ts"
 import { InlineMessage } from "../components/common.tsx"
+import { DataSafetyPanel } from "../components/DataSafetyPanel.tsx"
 import { cn, formatTimestamp } from "../utils.ts"
 
 type SettingsSection = "general" | "sync" | "autotag" | "data-safety"
 
 const SETTINGS_SECTIONS: SettingsSection[] = ["general", "sync", "autotag", "data-safety"]
+// Names the dialog for assistive tech; the panel is a single instance.
+const SETTINGS_TITLE_ID = "settings-dialog-title"
 const AUTOTAG_POLL_INTERVAL_MS = 1500
 const AUTOTAG_POLL_ATTEMPTS = 120
 
@@ -79,6 +82,12 @@ function describeAutoTagDetail(summary: AutoTagRunSummary, copy: OptionsCopy): s
     .replace("{budget}", summary.newTagBudget < 0 ? "∞" : String(summary.newTagBudget))
 }
 
+// The progress record carries the pipeline's internal phase name, so translate
+// it here instead of leaking the enum into the UI.
+function describeAutoTagPhase(phase: AutoTagProgress["phase"], copy: OptionsCopy): string {
+  return phase === "llm" ? copy.settingsAutoTagPhaseLlm : copy.settingsAutoTagPhaseHeuristics
+}
+
 export function SettingsPanel({
   workspace,
   copy,
@@ -112,6 +121,7 @@ export function SettingsPanel({
     status: "idle"
   })
   const pollAbortRef = useRef(false)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -181,20 +191,31 @@ export function SettingsPanel({
     void updateSettings(patch)
   }
 
+  // Nested writes merge against the value read *inside* the write queue, never
+  // against this component's snapshot. A snapshot-built patch reverts every
+  // sibling field that changed while the component was awaiting something —
+  // including the write the background run makes between batches — which is how
+  // a toggle the user had just flipped visibly flipped back on its own.
   function updateAutoTag(patch: Partial<ExtensionSettings["autoTag"]>) {
-    if (!settings) {
-      return
-    }
-
-    persistSettings({ autoTag: { ...settings.autoTag, ...patch } })
+    setSettings((current) => (current ? { ...current, autoTag: { ...current.autoTag, ...patch } } : current))
+    void updateSettings((current) => ({ autoTag: { ...current.autoTag, ...patch } }))
   }
 
   function updateHeuristics(patch: Partial<ExtensionSettings["autoTag"]["heuristics"]>) {
-    if (!settings) {
-      return
-    }
-
-    updateAutoTag({ heuristics: { ...settings.autoTag.heuristics, ...patch } })
+    setSettings((current) =>
+      current
+        ? {
+            ...current,
+            autoTag: {
+              ...current.autoTag,
+              heuristics: { ...current.autoTag.heuristics, ...patch }
+            }
+          }
+        : current
+    )
+    void updateSettings((current) => ({
+      autoTag: { ...current.autoTag, heuristics: { ...current.autoTag.heuristics, ...patch } }
+    }))
   }
 
   // Bulk tag deletions can block hundreds of mainstream names, which silently
@@ -208,11 +229,13 @@ export function SettingsPanel({
   }
 
   function updateLlm(patch: Partial<ExtensionSettings["autoTag"]["llm"]>) {
-    if (!settings) {
-      return
-    }
-
-    updateAutoTag({ llm: { ...settings.autoTag.llm, ...patch } })
+    // Same reasoning as updateAutoTag: merge llm fields against the stored value.
+    setSettings((current) =>
+      current ? { ...current, autoTag: { ...current.autoTag, llm: { ...current.autoTag.llm, ...patch } } } : current
+    )
+    void updateSettings((current) => ({
+      autoTag: { ...current.autoTag, llm: { ...current.autoTag.llm, ...patch } }
+    }))
   }
 
   // The LLM endpoint lives outside the default x.com host permission, so we
@@ -384,8 +407,16 @@ export function SettingsPanel({
       return
     }
 
-    await chrome.runtime.sendMessage({ type: AUTOTAG_CANCEL_MESSAGE })
-    setAutoTagRunMessage(copy.settingsAutoTagCancelRequested)
+    const response = (await chrome.runtime.sendMessage({ type: AUTOTAG_CANCEL_MESSAGE })) as
+      | { cancelRequested?: boolean }
+      | undefined
+
+    // The background can only record a cancel against a run that published its
+    // state. Reporting success unconditionally told the user a run would stop
+    // while it carried on to completion.
+    setAutoTagRunMessage(
+      response?.cancelRequested ? copy.settingsAutoTagCancelRequested : copy.settingsAutoTagCancelUnavailable
+    )
   }
 
   function handleBufferPagesChange(rawValue: string) {
@@ -406,6 +437,62 @@ export function SettingsPanel({
     "data-safety": copy.settingsSectionDataSafety
   }
 
+  // The panel is an overlay, so it owes the same keyboard contract the detail
+  // modal already implements: Escape closes it, Tab stays inside it, focus starts
+  // on the close button and returns to whatever opened the panel. Without this,
+  // tabbing walked straight into the sidebar behind an overlay that never
+  // announced itself as a dialog.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    dialogRef.current?.querySelector<HTMLElement>('[data-testid="settings-close"]')?.focus()
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        // The inspector's handler is on window; stopping here keeps the event
+        // from reaching it if both ever end up mounted.
+        event.stopPropagation()
+        onClose()
+        return
+      }
+
+      if (event.key !== "Tab") {
+        return
+      }
+
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        ) ?? []
+      ).filter((element) => element.offsetParent !== null || element === document.activeElement)
+
+      if (!focusable.length) {
+        event.preventDefault()
+        return
+      }
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const active = document.activeElement
+
+      if (event.shiftKey && (active === first || !dialogRef.current?.contains(active))) {
+        event.preventDefault()
+        last.focus()
+        return
+      }
+
+      if (!event.shiftKey && active === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown)
+      previouslyFocused?.focus?.()
+    }
+  }, [onClose])
+
   return (
     <section data-testid="settings-panel" role="presentation" className="options-detail-modal">
       <button
@@ -416,9 +503,14 @@ export function SettingsPanel({
         onClick={onClose}
       />
       <div className="options-detail-focus-card options-settings-card">
-        <div className="options-settings-dialog">
+        <div
+          ref={dialogRef}
+          className="options-settings-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={SETTINGS_TITLE_ID}>
           <header className="options-settings-header">
-            <h2 className="options-settings-title">{copy.settingsTitle}</h2>
+            <h2 id={SETTINGS_TITLE_ID} className="options-settings-title">{copy.settingsTitle}</h2>
             <button
               type="button"
               data-testid="settings-close"
@@ -600,7 +692,7 @@ export function SettingsPanel({
                     <InlineMessage message={autoTagRunMessage} tone="info" />
                     {autoTagProgress ? (
                       <p data-testid="settings-autotag-progress" className="options-meta-copy">
-                        {`${copy.settingsAutoTagProgress} · ${autoTagProgress.phase} ${autoTagProgress.processed}/${autoTagProgress.total}`}
+                        {`${copy.settingsAutoTagProgress} · ${describeAutoTagPhase(autoTagProgress.phase, copy)} ${autoTagProgress.processed}/${autoTagProgress.total}`}
                       </p>
                     ) : null}
                     {autoTagRunSummary ? (
@@ -804,6 +896,11 @@ export function SettingsPanel({
               {activeSection === "data-safety" ? (
                 <div data-testid="settings-section-data-safety" className="options-settings-section">
                   <p className="options-settings-section-intro">{copy.settingsDataSafetyHint}</p>
+                  {/* The canonical panel owns the backup-status surface and its
+                      testids. Rendering it here instead of re-deriving the same
+                      status text keeps one implementation, so the sidebar footer
+                      and this section can never disagree. */}
+                  <DataSafetyPanel workspace={workspace} locale={locale} copy={copy} />
                   <div className="options-settings-action-list">
                     <div className="options-settings-action-row">
                       <span className="options-settings-action-copy">
