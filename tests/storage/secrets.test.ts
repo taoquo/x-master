@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { getSecrets, saveSecrets } from "../../src/lib/storage/secrets.ts"
+import { getSecrets, restrictStorageToTrustedContexts, saveSecrets } from "../../src/lib/storage/secrets.ts"
 
 function installChromeStorageMock() {
   let stored: Record<string, unknown> = {}
@@ -41,4 +41,38 @@ test("secrets are stored under a dedicated key, separate from settings", async (
   await saveSecrets({ llmApiKey: "sk-separate" })
   assert.equal("settings" in storage.getStored(), false)
   assert.equal((storage.getStored().secrets as { llmApiKey?: string }).llmApiKey, "sk-separate")
+})
+
+test("the worker restricts the secrets area to trusted contexts", async () => {
+  const levels: unknown[] = []
+  ;(globalThis as typeof globalThis & { chrome: any }).chrome = {
+    storage: {
+      local: {
+        get: async () => ({}),
+        set: async () => {},
+        setAccessLevel: async (options: unknown) => {
+          levels.push(options)
+        }
+      }
+    }
+  }
+
+  await restrictStorageToTrustedContexts()
+
+  // The default level lets the content script beside x.com read this area, and the
+  // API key lives here. Trusted contexts are the extension's own pages and worker.
+  assert.deepEqual(levels, [{ accessLevel: "TRUSTED_CONTEXTS" }])
+})
+
+test("restricting the area is a no-op on Chrome without the API", async () => {
+  ;(globalThis as typeof globalThis & { chrome: any }).chrome = {
+    storage: { local: { get: async () => ({}), set: async () => {} } }
+  }
+
+  // Older Chrome predates setAccessLevel; the call must not break worker startup.
+  await restrictStorageToTrustedContexts()
+
+  // And a missing chrome global altogether (node tests, non-extension contexts).
+  delete (globalThis as { chrome?: unknown }).chrome
+  await restrictStorageToTrustedContexts()
 })

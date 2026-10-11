@@ -19,6 +19,8 @@ import {
   validateWorkspaceBackupText,
   type WorkspaceRestoreResult
 } from "../../src/lib/export/workspaceBackup.ts"
+import { createWorkspaceExportPayload } from "../../src/lib/export/exportBookmarks.ts"
+import { getSecrets, saveSecrets } from "../../src/lib/storage/secrets.ts"
 import { WORKSPACE_EXPORT_VERSION, type WorkspaceExportPayload } from "../../src/lib/export/exportBookmarks.ts"
 
 function installSettingsHarness() {
@@ -665,4 +667,95 @@ test("backup validation rejects parent graphs the app itself can never write", (
   })))
   assert.equal(ok.counts.tags, 2)
   assert.equal(base.exportVersion, WORKSPACE_EXPORT_VERSION)
+})
+
+// Behaves like the real chrome.storage.local: several keys in one area, so a test
+// can hold settings and secrets at the same time.
+function installMultiKeyStorageHarness() {
+  let stored: Record<string, unknown> = {}
+
+  ;(globalThis as any).chrome = {
+    storage: {
+      local: {
+        get: async (key?: string) =>
+          typeof key === "string" ? { [key]: stored[key] } : { ...stored },
+        set: async (value: Record<string, unknown>) => {
+          stored = { ...stored, ...value }
+        },
+        setAccessLevel: async () => {}
+      }
+    }
+  }
+
+  return { read: () => stored }
+}
+
+function emptyWorkspace() {
+  return {
+    bookmarks: [],
+    tags: [],
+    bookmarkTags: [],
+    tagSuggestions: [],
+    savedViews: [],
+    summary: createEmptySyncSummary(),
+    latestSyncRun: null,
+    stats: {
+      totalBookmarks: 0,
+      unclassifiedCount: 0,
+      pendingSuggestionCount: 0,
+      tagCounts: [],
+      topAuthors: []
+    }
+  } as Parameters<typeof createWorkspaceExportPayload>[0]["workspace"]
+}
+
+test("a backup never carries the stored API key", async () => {
+  installMultiKeyStorageHarness()
+  await resetBookmarksDb()
+
+  const secret = "sk-live-value-that-must-never-be-exported"
+  await saveSecrets({ llmApiKey: secret })
+  assert.equal((await getSecrets()).llmApiKey, secret)
+
+  // The export payload is an explicit allow-list, and secrets live in a separate
+  // storage key that the export module never reads. This pins that: the whole point
+  // of excluding the key is worthless if a later refactor starts spreading settings.
+  const payload = createWorkspaceExportPayload({
+    workspace: emptyWorkspace(),
+    settings: await getSettings()
+  })
+  const serialized = JSON.stringify(payload)
+
+  assert.equal(serialized.includes(secret), false, "the API key must not appear in a backup")
+  assert.equal("secrets" in payload, false, "a backup payload has no secrets field")
+  assert.equal(serialized.includes("llmApiKey"), false, "not even the key name is exported")
+  assert.deepEqual(Object.keys(payload.settings).sort(), [
+    "lastSyncSummary",
+    "locale",
+    "savedViews",
+    "schemaVersion",
+    "themePreference"
+  ])
+})
+
+test("a hand-crafted backup cannot inject or overwrite the API key", async () => {
+  installMultiKeyStorageHarness()
+  await resetBookmarksDb()
+
+  const secret = "sk-the-real-user-key"
+  await saveSecrets({ llmApiKey: secret })
+
+  // A backup file is untrusted input: it must not be able to smuggle a key in and
+  // have it written to storage, nor overwrite the one the user already saved.
+  const hostile = {
+    ...createBackupPayload(),
+    secrets: { llmApiKey: "sk-attacker-supplied" },
+    settings: { ...createBackupPayload().settings, apiKey: "sk-attacker-supplied" }
+  }
+
+  const validation = validateWorkspaceBackupText(JSON.stringify(hostile))
+  assert.equal(JSON.stringify(validation.payload).includes("sk-attacker-supplied"), false)
+
+  await restoreWorkspaceBackup(validation.payload)
+  assert.equal((await getSecrets()).llmApiKey, secret)
 })
