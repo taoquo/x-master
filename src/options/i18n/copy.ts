@@ -212,6 +212,11 @@ export function getOptionsCopy(locale: Locale) {
       settingsAutoTagRunning: "分析已开始，稍后可在“待确认标签”中查看结果。",
       settingsAutoTagAlreadyRunning: "已有一次分析正在进行，请等待它结束。",
       settingsAutoTagRunTimeout: "分析仍在后台运行，稍后重新打开设置即可看到结果。",
+      settingsAutoTagWaiting: "正在等待模型响应",
+      settingsAutoTagStalled: "已 {seconds} 秒没有心跳，可能已中断",
+      settingsAutoTagElapsed: "已用 {seconds}s",
+      settingsAutoTagRemaining: "约剩 {seconds}s",
+      settingsAutoTagStopping: "正在停止…",
       settingsAutoTagProgress: "正在分析",
       settingsAutoTagPhaseHeuristics: "规则匹配",
       settingsAutoTagPhaseLlm: "大模型",
@@ -234,6 +239,8 @@ export function getOptionsCopy(locale: Locale) {
       settingsAutoTagResultBudgetDropped: "本次有 {dropped} 条建议因新标签额度不足被丢弃。",
       settingsAutoTagResultTimedOut:
         "本次运行达到时间上限后停止，已保存 {suggested} 条建议，还有 {remaining} 条书签没来得及分析。再运行一次即可继续。",
+      settingsAutoTagResultInterrupted:
+        "上次运行被中断（浏览器或后台进程结束），已保留已写入的建议，还有 {remaining} 条书签没分析。已自动继续。",
       settingsAutoTagResultCancelled:
         "本次运行已被取消，已保存 {suggested} 条建议，还有 {remaining} 条书签没有分析。再运行一次即可继续。",
       settingsAutoTagCancel: "停止本次分析",
@@ -519,6 +526,11 @@ export function getOptionsCopy(locale: Locale) {
     settingsAutoTagRunning: "Analysis started. Check \"Pending tags\" for results.",
     settingsAutoTagAlreadyRunning: "An analysis is already running. Wait for it to finish.",
     settingsAutoTagRunTimeout: "Analysis is still running in the background. Reopen settings later to see the result.",
+    settingsAutoTagWaiting: "Waiting for the provider",
+    settingsAutoTagStalled: "No heartbeat for {seconds}s — it may have stopped",
+    settingsAutoTagElapsed: "Elapsed {seconds}s",
+    settingsAutoTagRemaining: "~{seconds}s left",
+    settingsAutoTagStopping: "Stopping…",
     settingsAutoTagProgress: "Analyzing",
     settingsAutoTagPhaseHeuristics: "Rule-based",
     settingsAutoTagPhaseLlm: "LLM",
@@ -541,6 +553,8 @@ export function getOptionsCopy(locale: Locale) {
     settingsAutoTagResultBudgetDropped: "{dropped} suggestions were dropped because the new-tag budget ran out.",
     settingsAutoTagResultTimedOut:
       "This run stopped at its time limit. {suggested} suggestions were saved and {remaining} bookmarks were not reached. Run again to continue.",
+    settingsAutoTagResultInterrupted:
+      "The last run was interrupted (the browser or background worker ended). Saved suggestions were kept and {remaining} bookmarks were left; it continued automatically.",
     settingsAutoTagResultCancelled:
       "This run was cancelled. {suggested} suggestions were saved and {remaining} bookmarks were not analyzed. Run again to continue.",
     settingsAutoTagCancel: "Stop this run",

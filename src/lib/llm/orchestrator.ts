@@ -16,6 +16,14 @@ import type { AdapterContext, DroppedOption, JsonStrategy, ModelCapabilities } f
 // Used only when the caller passes no budget. The pipeline always passes one.
 const DEFAULT_CALL_BUDGET_MS = 4 * 60 * 1000
 
+// A batch must be able to express every bookmark's answer in one response. Each
+// entry is `{"tweetId":"…","tags":[{"name":"…","confidence":0.9}]}` — roughly 30-45
+// tokens for the two tags the prompt allows — so this leaves headroom without asking
+// a provider to reserve its whole output window.
+const OUTPUT_TOKENS_PER_BOOKMARK = 64
+const MIN_OUTPUT_TOKENS = 256
+const MAX_OUTPUT_TOKENS = 4_096
+
 export const MISSING_CREDENTIAL_ERROR = "missing-credentials"
 const SCHEMA_NAME = "tag_suggestions"
 
@@ -67,18 +75,37 @@ export interface LlmCallOptions {
   timeoutMs?: number
   now?: () => number
   signal?: AbortSignal
+  // Every adapter sleeps through this one seam, so wrapping it here reports a
+  // provider-requested backoff for all four protocols without touching any
+  // adapter (including the OpenAI-compatible engine, which sleeps internally).
+  onWait?: (wait: { waitMs: number; reason: "rate-limit" | "retry" }) => void
 }
 
 // Capability resolution and request assembly happen once, in one place, because
 // the answers interact: whether a schema can be enforced decides whether it has to
 // travel in the prompt instead.
+// Providers default their output ceiling to whatever suits a chat reply (Anthropic
+// defaults to 1024 tokens). A batch of 25 answers does not fit in that, and a
+// truncated response is indistinguishable from a model that answered nothing, so the
+// ceiling is derived from the batch size instead of inherited.
+function deriveMaxOutputTokens(batchSize: number, settings: AutoTagLlmSettings): number {
+  const override = settings.capabilityOverrides?.maxOutputTokens
+  if (override !== undefined) {
+    return override
+  }
+
+  return Math.min(MAX_OUTPUT_TOKENS, Math.max(MIN_OUTPUT_TOKENS, batchSize * OUTPUT_TOKENS_PER_BOOKMARK))
+}
+
 function planRequest(input: {
   settings: AutoTagLlmSettings
   providerId: string
   capabilities: ModelCapabilities
+  batchSize: number
 }): {
   strategy: JsonStrategy
   jsonSchema?: Record<string, unknown>
+  maxOutputTokens?: number
   droppedOptions: DroppedOption[]
   promptIncludesSchema: boolean
 } {
@@ -102,6 +129,7 @@ function planRequest(input: {
   const assembled = assembleRequest({
     capabilities: { ...input.capabilities, jsonStrategy: strategy },
     temperature: 0,
+    maxOutputTokens: deriveMaxOutputTokens(input.batchSize, input.settings),
     jsonSchema: schema,
     requireSchema: false
   })
@@ -109,6 +137,7 @@ function planRequest(input: {
   return {
     strategy: assembled.strategy,
     jsonSchema: assembled.jsonSchema,
+    maxOutputTokens: assembled.maxOutputTokens,
     droppedOptions: assembled.droppedOptions,
     promptIncludesSchema: assembled.promptIncludesSchema
   }
@@ -117,6 +146,13 @@ function planRequest(input: {
 function buildAdapterContext(options: LlmCallOptions, capabilities: ModelCapabilities): AdapterContext {
   const provider = resolveProvider(options.settings.activeProviderId)
   const now = options.now ?? (() => Date.now())
+  const realSleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+  const sleep = options.onWait
+    ? async (ms: number) => {
+        options.onWait?.({ waitMs: ms, reason: "retry" })
+        await realSleep(ms)
+      }
+    : realSleep
 
   return {
     apiKey: options.credential?.apiKey,
@@ -125,7 +161,7 @@ function buildAdapterContext(options: LlmCallOptions, capabilities: ModelCapabil
     apiVersion: options.settings.apiVersion ?? provider.defaultApiVersion,
     extraHeaders: provider.extraHeaders,
     fetchImpl: options.fetchImpl,
-    sleep: options.sleep,
+    sleep,
     timeoutMs: options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
     now,
     signal: options.signal,
@@ -158,8 +194,16 @@ export function createAutoTagLlmProvider(options: LlmCallOptions): AutoTagLlmPro
       const provider = resolveProvider(settings.activeProviderId)
       const adapter = apiFor(provider.api, settings.model)
       const capabilities = capabilitiesFor(settings)
-      const plan = planRequest({ settings, providerId: provider.id, capabilities })
-      const context = buildAdapterContext(options, capabilities)
+      const plan = planRequest({
+        settings,
+        providerId: provider.id,
+        capabilities,
+        batchSize: input.bookmarks.length
+      })
+      const context = buildAdapterContext(
+        input.onWait ? { ...options, onWait: (wait) => input.onWait?.({ waitMs: wait.waitMs, reason: "rate-limit" }) } : options,
+        capabilities
+      )
       const now = context.now
       const deadlineMs = input.deadlineMs ?? now() + DEFAULT_CALL_BUDGET_MS
 
@@ -185,6 +229,7 @@ export function createAutoTagLlmProvider(options: LlmCallOptions): AutoTagLlmPro
               jsonSchema: plan.jsonSchema,
               jsonMode: "prefer",
               temperature: 0,
+              maxOutputTokens: plan.maxOutputTokens,
               deadlineMs
             },
             context
@@ -277,7 +322,7 @@ export async function testLlmConnectionFor(
   const settings = options.settings
   const provider = resolveProvider(settings.activeProviderId)
   const capabilities = capabilitiesFor(settings)
-  const plan = planRequest({ settings, providerId: provider.id, capabilities })
+  const plan = planRequest({ settings, providerId: provider.id, capabilities, batchSize: 0 })
   const base = {
     providerId: provider.id,
     model: settings.model,

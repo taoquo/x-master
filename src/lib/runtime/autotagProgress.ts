@@ -4,6 +4,17 @@ export interface AutoTagProgress {
   phase: "heuristics" | "llm"
   processed: number
   total: number
+  // Optional progress detail. The broadcast is only a low-latency nudge: the
+  // persisted run state is the source of truth, so a listener that misses this
+  // message still renders correct numbers.
+  status?: "running" | "waiting" | "cancelling"
+  inFlight?: boolean
+  batchStartedAt?: string
+  waitingUntilMs?: number
+  waitingReason?: string
+  providerId?: string
+  model?: string
+  lastErrorKind?: string
 }
 
 interface AutoTagProgressMessage {

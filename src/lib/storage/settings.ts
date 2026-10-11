@@ -2,6 +2,7 @@ import {
   createEmptySyncSummary,
   type AutoTagRunOutcome,
   type AutoTagRunState,
+  type AutoTagRunStatus,
   type AutoTagRunSummary,
   type AutoTagSettings,
   type ExtensionSettings,
@@ -29,7 +30,11 @@ const DEFAULT_RIGHT_SIDEBAR_WIDTH = 360
 const SAVED_VIEW_SORT_ORDERS = new Set<BookmarkSortOrder>(["timeline", "saved-desc", "saved-asc", "created-desc", "likes-desc"])
 const DEFAULT_LLM_BASE_URL = "https://api.openai.com/v1"
 const DEFAULT_LLM_MODEL = "gpt-4o-mini"
-const DEFAULT_LLM_BATCH_SIZE = 10
+const DEFAULT_LLM_BATCH_SIZE = 25
+// Batches are independent requests, so they are run in waves. Three keeps a
+// rate-limited key usable while cutting a 20-batch run to about seven rounds; the
+// pipeline lowers it automatically when a provider answers 429.
+const DEFAULT_LLM_CONCURRENCY = 3
 const DEFAULT_LLM_MAX_BOOKMARKS_PER_RUN = 200
 
 function normalizeLocale(locale: unknown): Locale {
@@ -140,6 +145,7 @@ export function createDefaultAutoTagSettings(): AutoTagSettings {
   return {
     enabled: false,
     runAfterSync: true,
+    autoContinue: true,
     heuristics: {
       useHashtags: true,
       useAuthors: true,
@@ -151,6 +157,7 @@ export function createDefaultAutoTagSettings(): AutoTagSettings {
       baseUrl: DEFAULT_LLM_BASE_URL,
       model: DEFAULT_LLM_MODEL,
       batchSize: DEFAULT_LLM_BATCH_SIZE,
+      concurrency: DEFAULT_LLM_CONCURRENCY,
       maxBookmarksPerRun: DEFAULT_LLM_MAX_BOOKMARKS_PER_RUN,
       tagVocabularyMode: "guarded"
     },
@@ -248,6 +255,7 @@ function normalizeAutoTagSettings(value: unknown): AutoTagSettings {
   return {
     enabled: Boolean(record.enabled),
     runAfterSync: record.runAfterSync === undefined ? defaults.runAfterSync : Boolean(record.runAfterSync),
+    autoContinue: record.autoContinue === undefined ? defaults.autoContinue : Boolean(record.autoContinue),
     heuristics: {
       useHashtags: heuristics.useHashtags === undefined ? defaults.heuristics.useHashtags : Boolean(heuristics.useHashtags),
       useAuthors: heuristics.useAuthors === undefined ? defaults.heuristics.useAuthors : Boolean(heuristics.useAuthors),
@@ -261,6 +269,7 @@ function normalizeAutoTagSettings(value: unknown): AutoTagSettings {
       ...(deploymentName ? { deploymentName } : {}),
       ...(apiVersion ? { apiVersion } : {}),
       batchSize: normalizeRange(llm.batchSize, defaults.llm.batchSize, 1, 50),
+      concurrency: normalizeRange(llm.concurrency, DEFAULT_LLM_CONCURRENCY, 1, 4),
       maxBookmarksPerRun: normalizeRange(llm.maxBookmarksPerRun, defaults.llm.maxBookmarksPerRun, 1, 2000),
       tagVocabularyMode: normalizeTagVocabularyMode(llm.tagVocabularyMode, defaults.llm.tagVocabularyMode),
       ...(capabilityOverrides ? { capabilityOverrides } : {}),
@@ -297,6 +306,7 @@ const AUTO_TAG_RUN_OUTCOMES = new Set<AutoTagRunOutcome>([
   "budget-exhausted",
   "timed-out",
   "cancelled",
+  "interrupted",
   "failed"
 ])
 
@@ -373,7 +383,30 @@ function normalizeAutoTagRunState(value: unknown): AutoTagRunState | undefined {
     phase: record.phase === "llm" ? "llm" : "heuristics",
     processed: normalizeCount(record.processed),
     total: normalizeCount(record.total),
-    ...(record.cancelRequested ? { cancelRequested: true } : {})
+    ...(record.cancelRequested ? { cancelRequested: true } : {}),
+    ...(record.status === "waiting" || record.status === "cancelling" || record.status === "running"
+      ? { status: record.status }
+      : {}),
+    ...(record.inFlight ? { inFlight: true } : {}),
+    ...(typeof record.batchStartedAt === "string" && record.batchStartedAt.trim()
+      ? { batchStartedAt: record.batchStartedAt.trim() }
+      : {}),
+    ...(typeof record.waitingUntilMs === "number" && Number.isFinite(record.waitingUntilMs)
+      ? { waitingUntilMs: record.waitingUntilMs }
+      : {}),
+    ...(typeof record.waitingReason === "string" && record.waitingReason.trim()
+      ? { waitingReason: record.waitingReason.trim() }
+      : {}),
+    ...(typeof record.attempt === "number" && Number.isFinite(record.attempt)
+      ? { attempt: Math.max(0, Math.trunc(record.attempt)) }
+      : {}),
+    ...(typeof record.providerId === "string" && record.providerId.trim()
+      ? { providerId: record.providerId.trim() }
+      : {}),
+    ...(typeof record.model === "string" && record.model.trim() ? { model: record.model.trim() } : {}),
+    ...(typeof record.lastErrorKind === "string" && record.lastErrorKind.trim()
+      ? { lastErrorKind: record.lastErrorKind.trim() }
+      : {})
   }
 }
 
@@ -432,6 +465,7 @@ function normalizeSettings(settings: Partial<ExtensionSettings> | undefined): Ex
     rightSidebarWidth: normalizeRange(settings?.rightSidebarWidth, DEFAULT_RIGHT_SIDEBAR_WIDTH, 320, 520),
     savedViews: normalizeSavedViews(settings?.savedViews),
     hashtagBackfillDone: Boolean(settings?.hashtagBackfillDone),
+    autoTagContinueCount: normalizeCount(settings?.autoTagContinueCount),
     autoTag: normalizeAutoTagSettings(settings?.autoTag),
     ...(lastAutoTagRun ? { lastAutoTagRun } : {}),
     ...(autoTagRunState ? { autoTagRunState } : {})
@@ -451,7 +485,8 @@ export function createDefaultSettings(): ExtensionSettings {
     rightSidebarWidth: DEFAULT_RIGHT_SIDEBAR_WIDTH,
     savedViews: [],
     hashtagBackfillDone: false,
-    autoTag: createDefaultAutoTagSettings()
+    autoTag: createDefaultAutoTagSettings(),
+    autoTagContinueCount: 0
   }
 }
 
@@ -534,6 +569,8 @@ export async function resetSettings() {
 export async function beginAutoTagRunState(input: {
   phase: "heuristics" | "llm"
   total: number
+  providerId?: string
+  model?: string
 }): Promise<AutoTagRunState | undefined> {
   const startedAt = new Date().toISOString()
   const runId = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
@@ -544,7 +581,10 @@ export async function beginAutoTagRunState(input: {
       updatedAt: startedAt,
       phase: input.phase,
       processed: 0,
-      total: Math.max(0, Math.trunc(input.total))
+      total: Math.max(0, Math.trunc(input.total)),
+      status: "running",
+      ...(input.providerId ? { providerId: input.providerId } : {}),
+      ...(input.model ? { model: input.model } : {})
     }
   })
 
@@ -563,6 +603,18 @@ export async function touchAutoTagRunState(input: {
   phase: "heuristics" | "llm"
   processed: number
   total: number
+  // Optional progress detail. `detail: undefined` keeps whatever the state had,
+  // so a plain heartbeat never erases a pending "waiting until" marker set by a
+  // different writer.
+  status?: AutoTagRunStatus
+  inFlight?: boolean
+  batchStartedAt?: string
+  waitingUntilMs?: number
+  waitingReason?: string
+  attempt?: number
+  providerId?: string
+  model?: string
+  lastErrorKind?: string
 }): Promise<{ state: AutoTagRunState | undefined; ownsState: boolean }> {
   let ownsState = false
 
@@ -575,13 +627,36 @@ export async function touchAutoTagRunState(input: {
     }
 
     ownsState = true
+    const {
+      runId: _runId,
+      startedAt: _startedAt,
+      updatedAt: _updatedAt,
+      phase: _phase,
+      processed: _processed,
+      total: _total,
+      cancelRequested: _cancelRequested,
+      ...previousDetail
+    } = state
+
     return {
       autoTagRunState: {
-        ...state,
+        runId: state.runId,
+        startedAt: state.startedAt,
         updatedAt: new Date().toISOString(),
         phase: input.phase,
         processed: Math.max(0, Math.trunc(input.processed)),
-        total: Math.max(0, Math.trunc(input.total))
+        total: Math.max(0, Math.trunc(input.total)),
+        ...(state.cancelRequested ? { cancelRequested: true } : {}),
+        ...previousDetail,
+        ...(input.status ? { status: input.status } : {}),
+        ...(input.inFlight === undefined ? {} : input.inFlight ? { inFlight: true } : { inFlight: undefined }),
+        ...(input.batchStartedAt ? { batchStartedAt: input.batchStartedAt } : {}),
+        ...(input.waitingUntilMs === undefined ? {} : { waitingUntilMs: input.waitingUntilMs }),
+        ...(input.waitingReason ? { waitingReason: input.waitingReason } : {}),
+        ...(input.attempt === undefined ? {} : { attempt: input.attempt }),
+        ...(input.providerId ? { providerId: input.providerId } : {}),
+        ...(input.model ? { model: input.model } : {}),
+        ...(input.lastErrorKind ? { lastErrorKind: input.lastErrorKind } : {})
       }
     }
   })
@@ -619,7 +694,9 @@ export async function finishAutoTagRun(input: {
       return {}
     }
 
-    return { autoTagRunState: undefined, lastAutoTagRun: input.summary }
+    // A run that reaches its own end closes the chain, so the next one starts with a
+    // fresh continuation budget.
+    return { autoTagRunState: undefined, lastAutoTagRun: input.summary, autoTagContinueCount: 0 }
   })
 
   return { reported }

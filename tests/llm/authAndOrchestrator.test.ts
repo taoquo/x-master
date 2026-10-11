@@ -187,3 +187,84 @@ test("test connection never returns the credential", async () => {
 
   assert.equal(JSON.stringify(result).includes("sk-super-secret"), false)
 })
+
+test("a provider-requested backoff is reported so the UI can show a wait", async () => {
+  installStorage()
+  const waits: number[] = []
+  let calls = 0
+
+  const provider = createAutoTagLlmProvider({
+    settings: llmSettings(),
+    credential: { apiKey: "sk-x" },
+    onWait: ({ waitMs }) => waits.push(waitMs),
+    fetchImpl: async () => {
+      calls += 1
+      if (calls === 1) {
+        return {
+          ok: false,
+          status: 429,
+          headers: { get: (name: string) => (name === "retry-after" ? "1" : null) },
+          text: async () => ""
+        } as unknown as Response
+      }
+
+      return chatResponse(JSON.stringify({ results: [{ tweetId: "t1", tags: [{ name: "ai", confidence: 0.8 }] }] }))
+    }
+  })
+
+  const suggestions = await provider.suggestTags({
+    bookmarks: [{ tweetId: "t1", authorHandle: "alice", text: "agents" }],
+    vocabulary: [],
+    allowNewTags: true
+  })
+
+  // The wait has to reach the UI, otherwise a rate limit is indistinguishable
+  // from a wedged run.
+  assert.deepEqual(waits, [1000])
+  assert.equal(suggestions.length, 1)
+})
+
+// A provider's default output ceiling is sized for a chat reply, not for a batch of
+// answers. Anthropic defaults to 1024 tokens; 25 tag entries do not fit, and a
+// truncated response looks exactly like a model that answered nothing.
+test("the output ceiling is derived from the batch size instead of inherited", async () => {
+  installStorage()
+  const bodies: Array<Record<string, unknown>> = []
+
+  const runWith = async (bookmarkCount: number) => {
+    bodies.length = 0
+    const provider = createAutoTagLlmProvider({
+      settings: llmSettings({ activeProviderId: "anthropic", baseUrl: "https://api.anthropic.com" }),
+      credential: { apiKey: "sk-x" },
+      fetchImpl: async (_url, init) => {
+        bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>)
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            content: [{ type: "tool_use", name: "emit_tags", input: { results: [] } }]
+          })
+        } as unknown as Response
+      }
+    })
+
+    await provider.suggestTags({
+      bookmarks: Array.from({ length: bookmarkCount }, (_, index) => ({
+        tweetId: `t${index}`,
+        authorHandle: "alice",
+        text: "hello"
+      })),
+      vocabulary: [],
+      allowNewTags: true
+    })
+
+    return bodies[0]?.max_tokens
+  }
+
+  // 25 x 64 = 1600, comfortably above Anthropic's 1024 default.
+  assert.equal(await runWith(25), 1600)
+  // A tiny batch still gets a usable floor.
+  assert.equal(await runWith(2), 256)
+  // And a huge batch is capped rather than asking for the whole output window.
+  assert.equal(await runWith(200), 4096)
+})

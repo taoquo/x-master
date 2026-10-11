@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react"
 import { loadWorkspaceData } from "../lib/runtime/popupClient.ts"
 import { runSyncAndWait } from "../lib/runtime/syncStatus.ts"
 import { subscribeSyncProgress, type SyncProgress } from "../lib/runtime/syncProgress.ts"
-import { subscribeAutoTagProgress, type AutoTagProgress } from "../lib/runtime/autotagProgress.ts"
+import { useAutoTagRunStatus } from "../ui/useAutoTagRunStatus.ts"
 import { getSettings, isAutoTagRunActive } from "../lib/storage/settings.ts"
 import type { AutoTagRunState, AutoTagRunSummary, Locale, WorkspaceData } from "../lib/types.ts"
 import { createEmptySyncSummary } from "../lib/types.ts"
@@ -43,6 +43,8 @@ function getPopupAppCopy(locale: Locale) {
       unclassified: "未分类",
       openManager: "打开管理器",
       analyzing: "正在分析标签",
+      analyzingWaiting: "等待模型响应",
+      analyzingStalled: "可能已中断",
       pendingTags: "待确认标签",
       status: {
         idle: "空闲",
@@ -63,6 +65,8 @@ function getPopupAppCopy(locale: Locale) {
     unclassified: "Unclassified",
     openManager: "Open manager",
     analyzing: "Analyzing tags",
+    analyzingWaiting: "waiting for the provider",
+    analyzingStalled: "possibly stopped",
     pendingTags: "Pending tags",
     status: {
       idle: "idle",
@@ -77,10 +81,11 @@ function getPopupAppCopy(locale: Locale) {
 function PopupScreen() {
   const { locale } = useExtensionUi()
   const copy = getPopupAppCopy(locale)
+  // Reads the persisted run state, so a refresh mid-run keeps the numbers.
+  const autoTagRun = useAutoTagRunStatus()
   const [data, setData] = useState<WorkspaceData>(createEmptyWorkspaceData())
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null)
-  const [autoTagProgress, setAutoTagProgress] = useState<AutoTagProgress | null>(null)
   // Signature of the last finished run this popup has already accounted for.
   const lastAutoTagRunRef = useRef<string | null>(null)
 
@@ -96,7 +101,6 @@ function PopupScreen() {
   useEffect(() => subscribeSyncProgress(setSyncProgress), [])
   // Auto-tag progress is broadcast from the background worker and outlives the
   // popup, so the popup only sees the frames that happen while it is open.
-  useEffect(() => subscribeAutoTagProgress(setAutoTagProgress), [])
 
   // Those broadcasts have no terminal frame, so progress used to freeze on the
   // last one it saw — "Analyzing tags 47/47" forever, indistinguishable from a
@@ -113,10 +117,10 @@ function PopupScreen() {
         return
       }
 
-      const isRunning = isAutoTagRunActive(runState)
-      if (!isRunning) {
-        setAutoTagProgress(null)
-      }
+      // Progress itself comes from useAutoTagRunStatus, which reads the persisted
+      // run state. Previously the persisted numbers were discarded here and the
+      // popup waited for the next broadcast, so a refresh mid-batch showed nothing.
+      void isAutoTagRunActive(runState)
 
       const runSignature = lastRun ? JSON.stringify(lastRun) : null
       if (lastAutoTagRunRef.current !== null && lastAutoTagRunRef.current !== runSignature) {
@@ -212,11 +216,16 @@ function PopupScreen() {
               </div>
             </div>
 
-            {autoTagProgress ? (
-              <div data-testid="popup-autotag-progress" className="popup-autotag-progress">
+            {autoTagRun.isActive ? (
+              <div
+                data-testid="popup-autotag-progress"
+                data-status={autoTagRun.status}
+                className="popup-autotag-progress">
                 <AppIcon name="tag" size={14} />
                 <span>
-                  {copy.analyzing} {autoTagProgress.processed}/{autoTagProgress.total}
+                  {copy.analyzing} {autoTagRun.processed}/{autoTagRun.total}
+                  {autoTagRun.status === "waiting" ? ` · ${copy.analyzingWaiting}` : ""}
+                  {autoTagRun.isStalled ? ` · ${copy.analyzingStalled}` : ""}
                 </span>
               </div>
             ) : null}

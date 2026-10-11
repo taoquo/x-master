@@ -6,7 +6,9 @@ import { LLM_PROVIDERS, permissionOrigin, resolveBaseUrl, resolveProvider, valid
 import type { JsonStrategy } from "../../lib/llm/types.ts"
 import { clearBlockedTagKeys } from "../../lib/tags/tagActions.ts"
 import { AUTOTAG_CANCEL_MESSAGE, AUTOTAG_RUN_MESSAGE, LLM_TEST_CONNECTION_MESSAGE } from "../../lib/runtime/messages.ts"
-import { subscribeAutoTagProgress, type AutoTagProgress } from "../../lib/runtime/autotagProgress.ts"
+import { useAutoTagRunStatus } from "../../ui/useAutoTagRunStatus.ts"
+import { AutoTagProgressBar } from "../../ui/components.tsx"
+import { isAutoTagRunActive } from "../../lib/storage/settings.ts"
 import { AppIcon } from "../../ui/icons.tsx"
 import type { OptionsCopy } from "../i18n/copy.ts"
 import type { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
@@ -21,7 +23,8 @@ const SETTINGS_SECTIONS: SettingsSection[] = ["general", "sync", "autotag", "dat
 // Names the dialog for assistive tech; the panel is a single instance.
 const SETTINGS_TITLE_ID = "settings-dialog-title"
 const AUTOTAG_POLL_INTERVAL_MS = 1500
-const AUTOTAG_POLL_ATTEMPTS = 120
+// Backstop only: the loop normally ends when the run's heartbeat says it is over.
+const AUTO_TAG_POLL_MAX_MS = 30 * 60 * 1000
 
 function SettingsToggleRow({
   testId,
@@ -59,6 +62,9 @@ function describeAutoTagOutcome(summary: AutoTagRunSummary, copy: OptionsCopy): 
       .replace("{suggested}", String(summary.suggestedCount))
       .replace("{remaining}", String(summary.unprocessedCount ?? 0))
   }
+  if (summary.outcome === "interrupted") {
+    return copy.settingsAutoTagResultInterrupted.replace("{remaining}", String(summary.unprocessedCount ?? 0))
+  }
   if (summary.outcome === "cancelled") {
     return copy.settingsAutoTagResultCancelled
       .replace("{suggested}", String(summary.suggestedCount))
@@ -84,12 +90,6 @@ function describeAutoTagDetail(summary: AutoTagRunSummary, copy: OptionsCopy): s
     .replace("{budget}", summary.newTagBudget < 0 ? "∞" : String(summary.newTagBudget))
 }
 
-// The progress record carries the pipeline's internal phase name, so translate
-// it here instead of leaking the enum into the UI.
-function describeAutoTagPhase(phase: AutoTagProgress["phase"], copy: OptionsCopy): string {
-  return phase === "llm" ? copy.settingsAutoTagPhaseLlm : copy.settingsAutoTagPhaseHeuristics
-}
-
 export function SettingsPanel({
   workspace,
   copy,
@@ -112,9 +112,13 @@ export function SettingsPanel({
   const [activeSection, setActiveSection] = useState<SettingsSection>("general")
   const [settings, setSettings] = useState<ExtensionSettings | null>(null)
   const [autoTagRunMessage, setAutoTagRunMessage] = useState<string | null>(null)
-  const [autoTagProgress, setAutoTagProgress] = useState<AutoTagProgress | null>(null)
   const [autoTagRunSummary, setAutoTagRunSummary] = useState<AutoTagRunSummary | null>(null)
   const [isAutoTagRunning, setIsAutoTagRunning] = useState(false)
+  // Reads the persisted run state, so a dialog opened (or refreshed) mid-run shows
+  // the real numbers instead of nothing until the next broadcast lands.
+  const autoTagRun = useAutoTagRunStatus()
+  // The local flag covers the gap between "run requested" and "run state written".
+  const runIsActive = isAutoTagRunning || autoTagRun.isActive
   const [draftKeyword, setDraftKeyword] = useState("")
   const [draftTagName, setDraftTagName] = useState("")
   const [hasStoredApiKey, setHasStoredApiKey] = useState(false)
@@ -161,7 +165,6 @@ export function SettingsPanel({
 
   // The run happens in the background worker, so the panel listens for progress
   // broadcasts instead of holding the message channel open.
-  useEffect(() => subscribeAutoTagProgress(setAutoTagProgress), [])
 
   // The background worker owns the run summary, and a run can also be started
   // by a sync instead of by this panel. Mirroring storage changes keeps the
@@ -493,7 +496,6 @@ export function SettingsPanel({
 
     const previousFinishedAt = autoTagRunSummary?.finishedAt ?? ""
     setAutoTagRunMessage(copy.settingsAutoTagRunning)
-    setAutoTagProgress(null)
     setIsAutoTagRunning(true)
     pollAbortRef.current = false
 
@@ -507,7 +509,12 @@ export function SettingsPanel({
       return
     }
 
-    for (let attempt = 0; attempt < AUTOTAG_POLL_ATTEMPTS; attempt += 1) {
+    // Polling is bounded by the run's own liveness, not by a fixed attempt count:
+    // a fixed 3-minute cap gave up before a 4-minute run budget was spent, so the
+    // panel declared "not running" while the run was still going.
+    const hardStopAt = Date.now() + AUTO_TAG_POLL_MAX_MS
+
+    while (Date.now() < hardStopAt) {
       if (pollAbortRef.current) {
         return
       }
@@ -519,9 +526,18 @@ export function SettingsPanel({
 
       if (summary && summary.finishedAt !== previousFinishedAt) {
         setAutoTagRunSummary(summary)
-        setAutoTagProgress(null)
         setIsAutoTagRunning(false)
         setAutoTagRunMessage(null)
+        return
+      }
+
+      // No new summary, but the heartbeat says the run is over: it was taken over,
+      // or it died without reaching finishRun. Waiting the full cap would leave the
+      // panel claiming a run that is gone.
+      const state = latest?.autoTagRunState
+      if (state && !isAutoTagRunActive(state)) {
+        setIsAutoTagRunning(false)
+        setAutoTagRunMessage(copy.settingsAutoTagRunTimeout)
         return
       }
     }
@@ -814,14 +830,14 @@ export function SettingsPanel({
                         type="button"
                         data-testid="settings-autotag-run-now"
                         className="chip-button"
-                        disabled={isAutoTagRunning}
+                        disabled={runIsActive}
                         onClick={() => void runAutoTagNow()}>
-                        {isAutoTagRunning ? copy.settingsAutoTagProgress : copy.settingsRunAutoTagNow}
+                        {runIsActive ? copy.settingsAutoTagProgress : copy.settingsRunAutoTagNow}
                       </button>
                       {/* Only reachable while a run is in flight: a run that is
                           taking too long must be stoppable without reloading
                           the extension. */}
-                      {isAutoTagRunning ? (
+                      {runIsActive ? (
                         <button
                           type="button"
                           data-testid="settings-autotag-cancel"
@@ -832,10 +848,23 @@ export function SettingsPanel({
                       ) : null}
                     </div>
                     <InlineMessage message={autoTagRunMessage} tone="info" />
-                    {autoTagProgress ? (
-                      <p data-testid="settings-autotag-progress" className="options-meta-copy">
-                        {`${copy.settingsAutoTagProgress} · ${describeAutoTagPhase(autoTagProgress.phase, copy)} ${autoTagProgress.processed}/${autoTagProgress.total}`}
-                      </p>
+                    {autoTagRun.isActive ? (
+                      <AutoTagProgressBar
+                        testId="settings-autotag-progress"
+                        progress={autoTagRun}
+                        labels={{
+                          analyzing: copy.settingsAutoTagProgress,
+                          phaseHeuristics: copy.settingsAutoTagPhaseHeuristics,
+                          phaseLlm: copy.settingsAutoTagPhaseLlm,
+                          waiting: copy.settingsAutoTagWaiting,
+                          stalled: copy.settingsAutoTagStalled,
+                          cancel: copy.settingsAutoTagCancel,
+                          cancelling: copy.settingsAutoTagStopping,
+                          elapsed: copy.settingsAutoTagElapsed,
+                          remaining: copy.settingsAutoTagRemaining
+                        }}
+                        onCancel={() => void cancelAutoTagRun()}
+                      />
                     ) : null}
                     {autoTagRunSummary ? (
                       <div data-testid="settings-autotag-result" className="options-settings-result">

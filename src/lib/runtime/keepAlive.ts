@@ -52,6 +52,20 @@ function attachListenerOnce(alarms: AlarmsApi) {
   })
 }
 
+// MV3 only delivers an event to a worker whose listeners were registered during
+// the worker's initial evaluation. Attaching this inside startKeepAlive() alone was
+// not enough: once a run's worker was killed, the restarted worker attached nothing
+// at the top level, so the next keep-alive alarm could not reliably wake it — the
+// run never reached finishRun and left no report at all.
+//
+// Call this synchronously from the worker entry point.
+export function attachKeepAliveListenerAtStartup() {
+  const alarms = getAlarms()
+  if (alarms) {
+    attachListenerOnce(alarms)
+  }
+}
+
 export function startKeepAlive() {
   const alarms = getAlarms()
   if (!alarms) {

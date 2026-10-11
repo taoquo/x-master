@@ -31,6 +31,10 @@ export interface AutoTagLlmProvider {
     // it, no attempt may run past it, and backoff sleeps are clamped to it, so
     // one batch can never outlive the run budget.
     deadlineMs?: number
+    // Reported when a provider asks us to back off, so the UI can say "waiting"
+    // instead of showing a bar that looks frozen. Optional: the pipeline passes
+    // one, tests do not have to.
+    onWait?: (wait: { waitMs: number; reason: "rate-limit" | "retry"; attempt?: number }) => void
   }): Promise<LlmTagSuggestion[]>
 }
 
@@ -141,7 +145,13 @@ async function readErrorDetail(response: Response): Promise<string> {
   return compact ? `HTTP ${response.status}: ${compact}` : `HTTP ${response.status}`
 }
 
-const MAX_VOCABULARY_ENTRIES = 200
+// How many vocabulary entries the prompt carries. The list is already sorted
+// most-used-first, and the healthy library target is 30-50 tags, so this covers a
+// healthy library with headroom while halving the worst case. Deduplication is
+// unaffected: the pipeline still matches proposals against the FULL vocabulary map,
+// so a tag that exists but was not sent is reused rather than re-created. The only
+// cost of trimming is that the model sees fewer near-synonyms to avoid.
+const MAX_VOCABULARY_ENTRIES = 100
 
 // Mirrors the healthy taxonomy size used by the vocabulary review, so both
 // prompts push the library towards the same target instead of fighting.

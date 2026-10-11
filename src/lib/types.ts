@@ -182,6 +182,8 @@ export interface AutoTagLlmSettings {
   deploymentName?: string
   apiVersion?: string
   batchSize: number
+  // How many batches may be in flight at once. 1 restores strictly serial runs.
+  concurrency?: number
   maxBookmarksPerRun: number
   tagVocabularyMode: TagVocabularyMode
   // Explicit override of the built-in capability table: the escape hatch for a
@@ -197,6 +199,11 @@ export interface AutoTagLlmSettings {
 export interface AutoTagSettings {
   enabled: boolean
   runAfterSync: boolean
+  // When a run stops at the wall-clock limit with bookmarks still queued, start
+  // another one instead of leaving the user to click again. Each continuation is a
+  // fresh service-worker invocation, which is the only way past Chrome's per
+  // invocation limit; the count is capped so a stuck run cannot spin.
+  autoContinue?: boolean
   heuristics: {
     useHashtags: boolean
     useAuthors: boolean
@@ -227,6 +234,10 @@ export type AutoTagRunOutcome =
   // The model answered, but every tag it proposed was new and the run had no
   // new-tag budget left. Also a "successful" run that stores nothing.
   | "budget-exhausted"
+  // The worker died before finishRun. Without its own outcome the run left no
+  // trace at all: the state was cleared, the panel kept showing the previous
+  // result, and nothing told the user a run had even been interrupted.
+  | "interrupted"
   // The run hit its wall-clock budget before it worked through the candidate
   // window. Batches already persisted are kept; this is a partial success, not
   // a failure, and it must stay distinguishable from both so the user knows to
@@ -265,6 +276,10 @@ export interface AutoTagRunSummary {
 // trace. Without it a run killed mid-flight (service worker recycled, browser
 // closed) wrote nothing at all and the panel just showed the previous result
 // while looking frozen.
+// What the run is doing right now. `waiting` is the honest answer to "is it stuck
+// or is the provider slow?": the heartbeat is fresh but no batch is progressing.
+export type AutoTagRunStatus = "running" | "waiting" | "cancelling"
+
 export interface AutoTagRunState {
   // Identifies the run that owns this state. A takeover replaces the state
   // wholesale, so a superseded run can tell the state is no longer its own and
@@ -280,6 +295,20 @@ export interface AutoTagRunState {
   // Set by the options page; read back by the pipeline after each batch, which
   // is why the heartbeat write and the cancel read are the same round-trip.
   cancelRequested?: boolean
+  // --- progress detail (all optional, so an older state stays valid) ---
+  status?: AutoTagRunStatus
+  // Which unit of work is in flight, so the UI can say "waiting" instead of
+  // showing a frozen bar.
+  inFlight?: boolean
+  batchStartedAt?: string
+  // When a provider asked us to back off, the wall clock we are waiting until.
+  waitingUntilMs?: number
+  waitingReason?: string
+  attempt?: number
+  // Which model produced the numbers, so the user knows what is running.
+  providerId?: string
+  model?: string
+  lastErrorKind?: string
 }
 
 export interface ExtensionSettings {
@@ -297,6 +326,10 @@ export interface ExtensionSettings {
   autoTag: AutoTagSettings
   lastAutoTagRun?: AutoTagRunSummary
   autoTagRunState?: AutoTagRunState
+  // How many times the current chain of runs has been continued automatically.
+  // Reset when a run ends on its own or the user starts one, so a run that cannot
+  // make progress stops asking for another service-worker invocation.
+  autoTagContinueCount?: number
 }
 
 export interface WorkspaceData {

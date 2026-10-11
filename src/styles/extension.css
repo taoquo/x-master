@@ -4602,3 +4602,97 @@
     background-color: rgba(255, 255, 255, 0.03) !important;
   }
 }
+
+  /* Auto-tag run progress. Shown in the sidebar so it stays visible without
+     opening settings, and kept legible in the three states that a bare
+     percentage cannot express: working, waiting on the provider, and stopped. */
+  .options-sidebar-autotag:empty {
+    display: none;
+  }
+
+  .options-autotag-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    background: var(--surface-raised);
+  }
+
+  .options-autotag-progress-head,
+  .options-autotag-progress-foot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .options-autotag-progress-head {
+    justify-content: space-between;
+  }
+
+  .options-autotag-progress-phase {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .options-autotag-progress-count {
+    font-size: 0.78rem;
+    color: var(--text-tertiary);
+  }
+
+  .options-autotag-progress-track {
+    position: relative;
+    overflow: hidden;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--badge-bg);
+  }
+
+  .options-autotag-progress-fill {
+    height: 100%;
+    border-radius: 9999px;
+    background: var(--accent);
+    transition: width 200ms ease-out;
+  }
+
+  /* Waiting or silent heartbeat: an indeterminate stripe instead of a bar that
+     looks frozen at a number nobody can trust. */
+  .options-autotag-progress-fill-indeterminate {
+    width: 40%;
+    animation: options-autotag-progress-slide 1.4s ease-in-out infinite;
+  }
+
+  .options-autotag-progress-stalled .options-autotag-progress-fill {
+    background: var(--warning, var(--accent));
+  }
+
+  .options-autotag-progress-foot {
+    flex-wrap: wrap;
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+  }
+
+  .options-autotag-progress-foot > span:first-child {
+    flex: 1 1 auto;
+    color: var(--text-secondary);
+  }
+
+  @keyframes options-autotag-progress-slide {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(250%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .options-autotag-progress-fill-indeterminate {
+      animation: none;
+      width: 100%;
+      opacity: 0.6;
+    }
+  }

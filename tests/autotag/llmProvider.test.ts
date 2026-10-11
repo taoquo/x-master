@@ -682,9 +682,12 @@ test("buildPrompt sorts the vocabulary by usage, caps it and states the new tag 
   const listed = prompt.match(/Existing vocabulary[^\n]*/)?.[0] ?? ""
   const names = listed.match(/tag\d{3}/g) ?? []
 
-  assert.equal(names.length, 200)
+  // The prompt carries a bounded slice of the vocabulary: most-used first, capped at
+  // MAX_VOCABULARY_ENTRIES. Deduplication is unaffected because the pipeline matches
+  // proposals against the full vocabulary map.
+  assert.equal(names.length, 100)
   assert.equal(names[0], "tag249")
-  assert.equal(names.at(-1), "tag050")
+  assert.equal(names.at(-1), "tag150")
   assert.match(prompt, /at most 3 new tag\(s\)/)
 
   const unlimited = buildPrompt({

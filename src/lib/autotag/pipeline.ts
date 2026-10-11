@@ -4,6 +4,7 @@ import {
   type LlmVocabularyEntry
 } from "./llmProvider.ts"
 import { broadcastAutoTagProgress } from "../runtime/autotagProgress.ts"
+import type { AutoTagProgress } from "../runtime/autotagProgress.ts"
 import { getAllBookmarks } from "../storage/bookmarksStore.ts"
 import {
   createLlmAnalysisRecord,
@@ -14,6 +15,7 @@ import {
 } from "../storage/llmAnalysisStore.ts"
 import { getSecrets } from "../storage/secrets.ts"
 import { resolveAuth } from "../llm/auth/index.ts"
+import { isLlmError } from "../llm/errors.ts"
 import { createAutoTagLlmProvider } from "../llm/orchestrator.ts"
 import { resolveBaseUrl, resolveProvider } from "../llm/providers.ts"
 import {
@@ -79,7 +81,7 @@ export const DEFAULT_LLM_RUN_BUDGET_MS = 4 * 60 * 1000
 // below that window (AUTO_TAG_RUN_STALE_MS).
 export const DEFAULT_LLM_BATCH_BUDGET_MS = 2 * 60 * 1000
 
-interface LlmStepInput {
+export interface LlmStepInput {
   bookmarks: BookmarkRecord[]
   taggedBookmarkIds: Set<string>
   // Bookmarks whose stored LLM verdict is still valid. Unlike the old set this
@@ -99,6 +101,8 @@ interface LlmStepInput {
   newTagBudget?: number
   blockedTagKeys?: string[]
   batchSize: number
+  // How many batches may be in flight at once. 1 restores strictly serial runs.
+  concurrency?: number
   maxBookmarksPerRun: number
   provider: AutoTagLlmProvider
   // Called after every batch so results survive a worker shutdown mid-run.
@@ -115,6 +119,9 @@ interface LlmStepInput {
   // persisted run state, so the same round-trip refreshes the heartbeat and
   // reads back any cancel the options page requested.
   shouldCancel?: (progress: { processed: number; total: number }) => boolean | Promise<boolean>
+  // Progress detail is published through the caller because only it owns the run
+  // identity, and therefore the persisted heartbeat the UI reads after a refresh.
+  onProgress?: (progress: AutoTagProgress) => void
   // Records what the model decided about every bookmark in a finished batch,
   // including the ones it produced nothing for. Without this the zero-result
   // bookmarks stayed at the head of the queue and were re-sent every run.
@@ -205,9 +212,22 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
   const deadlineAt = Number.isFinite(budgetMs) ? now() + budgetMs : Number.POSITIVE_INFINITY
   let stoppedReason: "deadline" | "cancelled" | undefined
 
-  for (let offset = 0; offset < candidates.length; offset += input.batchSize) {
-    // Checked before the request, never in the middle of one: a batch that is
-    // already in flight runs to completion so its results still get persisted.
+    // Batches are independent requests, so they are issued in waves. Per-request
+    // latency dominates the run's wall clock, and the run budget is capped by
+    // Chrome's per-invocation limit, so overlapping a few batches is what lets a run
+    // finish instead of stopping at the deadline. The unit of parallelism is the
+    // batch, never the bookmark: the instruction block and the vocabulary are a fixed
+    // prefix that is only worth paying once per request.
+    const maxConcurrency = Math.max(1, Math.min(4, Math.trunc(input.concurrency ?? 1)))
+    let activeConcurrency = maxConcurrency
+    // Advanced by the size of the wave actually issued, never by the current
+    // concurrency: a wave that shrinks after a 429 would otherwise re-send the
+    // batches it just covered.
+    let offset = 0
+
+    while (offset < candidates.length) {
+    // Checked before the wave, never in the middle of one: batches already in flight
+    // run to completion so their results still get persisted.
     if (input.shouldCancel && (await input.shouldCancel({ processed: processedCount, total: candidates.length }))) {
       stoppedReason = "cancelled"
       break
@@ -218,138 +238,214 @@ export async function runLlmSuggestionStep(input: LlmStepInput): Promise<{
       break
     }
 
-    const batch = candidates.slice(offset, offset + input.batchSize)
-    batchCount += 1
+    const waveBatches: BookmarkRecord[][] = []
+    for (let index = 0; index < activeConcurrency; index += 1) {
+      const start = offset + index * input.batchSize
+      if (start >= candidates.length) {
+        break
+      }
 
-    // Per-batch isolation: one provider error (or a malformed response) must
-    // not abandon the batches that already succeeded.
-    let results: Awaited<ReturnType<AutoTagLlmProvider["suggestTags"]>>
-    try {
-      results = await input.provider.suggestTags({
-        bookmarks: batch.map((bookmark) => ({
-          tweetId: bookmark.tweetId,
-          authorHandle: bookmark.authorHandle,
-          text: bookmark.text
-        })),
-        vocabulary: [...vocabulary.values()],
-        allowNewTags: input.allowNewTags && remainingNewTagBudget > 0,
-        newTagBudget: Number.isFinite(remainingNewTagBudget) ? remainingNewTagBudget : undefined,
-        // The provider enforces this too: a single batch can otherwise burn 5
-        // attempts x the request timeout plus backoff and outlive the run
-        // budget, which is what let a run die without reaching finishRun.
-        // Capped per batch as well, so the heartbeat gap stays inside the window
-        // that decides whether this run is still alive.
-        deadlineMs: Math.min(deadlineAt, now() + batchBudgetMs)
+      waveBatches.push(candidates.slice(start, start + input.batchSize))
+    }
+
+    offset += input.batchSize * waveBatches.length
+
+    // Announced once per wave, before the requests go out: a wave is what may take a
+    // minute plus a backoff, and without this the bar would sit still for that whole
+    // time with no way to tell "waiting" from "wedged".
+    const batchStartedAt = new Date().toISOString()
+    input.onProgress?.({
+      phase: "llm",
+      processed: processedCount,
+      total: candidates.length,
+      status: "running",
+      inFlight: true,
+      batchStartedAt,
+      ...(input.model ? { model: input.model } : {})
+    })
+
+    // Per-batch isolation: one provider error (or a malformed response) must not
+    // abandon the other batches in the wave, nor the batches already persisted.
+    const waveOutcomes = await Promise.all(
+      waveBatches.map(async (waveBatch) => {
+        try {
+          const results = await input.provider.suggestTags({
+            // A provider that asks us to back off is reported as waiting, so the UI
+            // can say "waiting on the provider" instead of looking frozen. The wait
+            // is persisted too, so a refresh during a rate limit still shows it.
+            onWait: ({ waitMs }) => {
+              input.onProgress?.({
+                phase: "llm",
+                processed: processedCount,
+                total: candidates.length,
+                status: "waiting",
+                inFlight: true,
+                waitingUntilMs: Date.now() + waitMs,
+                waitingReason: "rate-limit",
+                ...(input.model ? { model: input.model } : {})
+              })
+            },
+            bookmarks: waveBatch.map((bookmark) => ({
+              tweetId: bookmark.tweetId,
+              authorHandle: bookmark.authorHandle,
+              text: bookmark.text
+            })),
+            vocabulary: [...vocabulary.values()],
+            // A wave shares one budget snapshot: concurrent batches may each spend
+            // from it, and the accounting below still clamps the total, so the run
+            // can overshoot by at most (concurrency - 1) new tags.
+            allowNewTags: input.allowNewTags && remainingNewTagBudget > 0,
+            newTagBudget: Number.isFinite(remainingNewTagBudget) ? remainingNewTagBudget : undefined,
+            // The provider enforces this too: a single batch can otherwise burn 5
+            // attempts x the request timeout plus backoff and outlive the run budget,
+            // which is what let a run die without reaching finishRun. Capped per batch
+            // as well, so the heartbeat gap stays inside the window that decides
+            // whether this run is still alive.
+            deadlineMs: Math.min(deadlineAt, now() + batchBudgetMs)
+          })
+
+          return { ok: true as const, results }
+        } catch (error) {
+          return { ok: false as const, error }
+        }
       })
-    } catch (error) {
-      failedBatchCount += 1
-      lastError = error instanceof Error ? error.message : String(error)
-      continue
+    )
+
+    // A rate limit is a property of the provider, not of one batch: shrink the wave
+    // for the rest of the run instead of hammering it, and let the per-batch backoff
+    // do its work.
+    if (waveOutcomes.some((outcome) => !outcome.ok && isRateLimitFailure(outcome.error))) {
+      activeConcurrency = Math.max(1, Math.floor(activeConcurrency / 2))
     }
 
-    processedCount += batch.length
+    for (let index = 0; index < waveBatches.length; index += 1) {
+      const batch = waveBatches[index]
+      const outcome = waveOutcomes[index]
+      batchCount += 1
 
-    const batchSuggestions: TagSuggestionRecord[] = []
-    // Every bookmark in a finished batch gets a verdict, even the ones the model
-    // ignored entirely. "The model saw this and said nothing" is a real answer
-    // and has to be recorded, otherwise it is indistinguishable from "never
-    // looked at" and gets re-sent on every later run.
-    const batchVerdicts = new Map<string, { tagged: number; blocked: number; budgetDropped: number }>()
-    for (const bookmark of batch) {
-      batchVerdicts.set(bookmark.tweetId, { tagged: 0, blocked: 0, budgetDropped: 0 })
-    }
+      if (!outcome.ok) {
+        failedBatchCount += 1
+        lastError = outcome.error instanceof Error ? outcome.error.message : String(outcome.error)
+        continue
+      }
 
-    for (const result of results) {
-      const verdict = batchVerdicts.get(result.tweetId)
+      const results = outcome.results
+      processedCount += batch.length
 
-      for (const tag of result.tags) {
-        const key = canonicalTagKey(tag.name)
-        if (!key) {
-          continue
-        }
 
-        if (blockedKeys.has(key)) {
-          blockedDroppedCount += 1
-          if (verdict) {
-            verdict.blocked += 1
+      const batchSuggestions: TagSuggestionRecord[] = []
+      // Every bookmark in a finished batch gets a verdict, even the ones the model
+      // ignored entirely. "The model saw this and said nothing" is a real answer
+      // and has to be recorded, otherwise it is indistinguishable from "never
+      // looked at" and gets re-sent on every later run.
+      const batchVerdicts = new Map<string, { tagged: number; blocked: number; budgetDropped: number }>()
+      for (const bookmark of batch) {
+        batchVerdicts.set(bookmark.tweetId, { tagged: 0, blocked: 0, budgetDropped: 0 })
+      }
+
+      for (const result of results) {
+        const verdict = batchVerdicts.get(result.tweetId)
+
+        for (const tag of result.tags) {
+          const key = canonicalTagKey(tag.name)
+          if (!key) {
+            continue
           }
-          continue
-        }
 
-        const known = vocabulary.get(key)
-
-        if (!known) {
-          if (!input.allowNewTags || remainingNewTagBudget <= 0) {
-            budgetDroppedCount += 1
+          if (blockedKeys.has(key)) {
+            blockedDroppedCount += 1
             if (verdict) {
-              verdict.budgetDropped += 1
+              verdict.blocked += 1
             }
             continue
           }
 
-          remainingNewTagBudget -= 1
-        }
+          const known = vocabulary.get(key)
 
-        const suggestion = createTagSuggestion({
-          bookmarkId: result.tweetId,
-          // Reuse the stored spelling so a run cannot create casing variants.
-          tagName: known?.name ?? tag.name,
-          source: "llm",
-          confidence: tag.confidence
-        })
+          if (!known) {
+            if (!input.allowNewTags || remainingNewTagBudget <= 0) {
+              budgetDroppedCount += 1
+              if (verdict) {
+                verdict.budgetDropped += 1
+              }
+              continue
+            }
 
-        if (suggestion) {
-          suggestions.push(suggestion)
-          batchSuggestions.push(suggestion)
-          if (verdict) {
-            verdict.tagged += 1
+            remainingNewTagBudget -= 1
           }
 
-          if (known) {
-            known.count += 1
-          } else {
-            vocabulary.set(key, { name: tag.name, count: 1 })
-          }
-        }
-      }
-    }
-
-    if (input.persistBatch && batchSuggestions.length) {
-      const persisted = await input.persistBatch(batchSuggestions)
-      insertedCount += persisted.insertedCount
-    }
-
-    if (input.persistAnalysis) {
-      const textByTweetId = new Map(batch.map((bookmark) => [bookmark.tweetId, bookmark.text]))
-      const records: LlmAnalysisRecord[] = []
-
-      for (const [tweetId, verdict] of batchVerdicts) {
-        // A dropped tag is reported rather than hidden behind "no topic": the
-        // model did find a subject, the run's own rules refused it, and the
-        // ledger has to say which so the outcome stays explainable.
-        const outcome: LlmAnalysisOutcome = verdict.tagged
-          ? "tagged"
-          : verdict.blocked
-            ? "all-blocked"
-            : verdict.budgetDropped
-              ? "budget-dropped"
-              : "no-topic"
-
-        records.push(
-          createLlmAnalysisRecord({
-            bookmarkId: tweetId,
-            model: input.model ?? "",
-            contentHash: hashAnalyzedContent(textByTweetId.get(tweetId) ?? ""),
-            outcome,
-            tagCount: verdict.tagged
+          const suggestion = createTagSuggestion({
+            bookmarkId: result.tweetId,
+            // Reuse the stored spelling so a run cannot create casing variants.
+            tagName: known?.name ?? tag.name,
+            source: "llm",
+            confidence: tag.confidence
           })
-        )
+
+          if (suggestion) {
+            suggestions.push(suggestion)
+            batchSuggestions.push(suggestion)
+            if (verdict) {
+              verdict.tagged += 1
+            }
+
+            if (known) {
+              known.count += 1
+            } else {
+              vocabulary.set(key, { name: tag.name, count: 1 })
+            }
+          }
+        }
       }
 
-      await input.persistAnalysis(records)
+      if (input.persistBatch && batchSuggestions.length) {
+        const persisted = await input.persistBatch(batchSuggestions)
+        insertedCount += persisted.insertedCount
+      }
+
+      if (input.persistAnalysis) {
+        const textByTweetId = new Map(batch.map((bookmark) => [bookmark.tweetId, bookmark.text]))
+        const records: LlmAnalysisRecord[] = []
+
+        for (const [tweetId, verdict] of batchVerdicts) {
+          // A dropped tag is reported rather than hidden behind "no topic": the
+          // model did find a subject, the run's own rules refused it, and the
+          // ledger has to say which so the outcome stays explainable.
+          const outcome: LlmAnalysisOutcome = verdict.tagged
+            ? "tagged"
+            : verdict.blocked
+              ? "all-blocked"
+              : verdict.budgetDropped
+                ? "budget-dropped"
+                : "no-topic"
+
+          records.push(
+            createLlmAnalysisRecord({
+              bookmarkId: tweetId,
+              model: input.model ?? "",
+              contentHash: hashAnalyzedContent(textByTweetId.get(tweetId) ?? ""),
+              outcome,
+              tagCount: verdict.tagged
+            })
+          )
+        }
+
+        await input.persistAnalysis(records)
+      }
+
     }
 
-    broadcastAutoTagProgress({ phase: "llm", processed: processedCount, total: candidates.length })
+    // Announced once per wave, after every batch in it has been processed: a per-batch
+    // "done" would clear the in-flight marker while the rest of the wave was still
+    // running, which is exactly the "is it stuck?" question the marker answers.
+    input.onProgress?.({
+      phase: "llm",
+      processed: processedCount,
+      total: candidates.length,
+      status: "running",
+      inFlight: false,
+      ...(input.model ? { model: input.model } : {})
+    })
   }
 
   return {
@@ -395,6 +491,17 @@ export function resolveNewTagBudget(mode: string, candidateCount: number, vocabu
 // the user what happened; a run that silently does nothing is the single
 // hardest thing to debug in this feature. finishRun also clears the in-flight
 // run state, which is what releases the panel from showing "running".
+// A rate limit is the one failure worth reacting to globally: it describes the
+// provider's current capacity, not the batch that happened to hit it.
+function isRateLimitFailure(error: unknown): boolean {
+  if (isLlmError(error)) {
+    return error.kind === "rate-limit"
+  }
+
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes("429") || /rate ?limit/i.test(message)
+}
+
 async function finishRun(result: AutoTagRunResult, runId?: string): Promise<AutoTagRunResult> {
   let pendingCount = 0
   try {
@@ -651,6 +758,7 @@ export async function runAutoTagPipeline(options?: {
           newTagBudget,
           blockedTagKeys: settings.autoTag.blockedTagKeys,
           batchSize: llmSettings.batchSize,
+          concurrency: llmSettings.concurrency,
           maxBookmarksPerRun: llmSettings.maxBookmarksPerRun,
           provider,
           persistBatch: insertNewTagSuggestions,
@@ -658,6 +766,26 @@ export async function runAutoTagPipeline(options?: {
           model: llmSettings.model,
           budgetMs: options?.llmBudgetMs,
           ...(options?.now ? { now: options.now } : {}),
+          // The persisted state is the source of truth the UI re-reads after a
+          // refresh; the broadcast only lowers the latency. Detail that cannot be
+          // expressed by a plain heartbeat (in flight, waiting until) is written
+          // here too, so a refresh during a rate limit still shows the wait.
+          onProgress: (progress: AutoTagProgress) => {
+            void touchAutoTagRunState({
+              runId,
+              phase: progress.phase,
+              processed: progress.processed,
+              total: progress.total,
+              ...(progress.status ? { status: progress.status } : {}),
+              ...(progress.inFlight === undefined ? {} : { inFlight: progress.inFlight }),
+              ...(progress.batchStartedAt ? { batchStartedAt: progress.batchStartedAt } : {}),
+              ...(progress.waitingUntilMs === undefined ? {} : { waitingUntilMs: progress.waitingUntilMs }),
+              ...(progress.waitingReason ? { waitingReason: progress.waitingReason } : {}),
+              ...(llmSettings.model ? { model: llmSettings.model } : {})
+            }).catch(() => undefined)
+
+            broadcastAutoTagProgress(progress)
+          },
           // One round-trip per batch boundary: refresh the heartbeat and read
           // back a cancel the options page may have requested.
           shouldCancel: async (progress) => {

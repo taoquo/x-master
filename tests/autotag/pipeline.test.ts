@@ -245,7 +245,9 @@ test("runAutoTagPipeline honors the open vocabulary mode", async () => {
 test("guarded mode accumulates the vocabulary across batches and caps new tags", async () => {
   installChromeStorageMock()
   await resetBookmarksDb()
-  await enableAutoTagWithLlm({ tagVocabularyMode: "guarded", batchSize: 1 })
+  // Serial on purpose: this pins the per-batch accumulation property, which waves
+  // deliberately replace with a per-wave vocabulary snapshot.
+  await enableAutoTagWithLlm({ tagVocabularyMode: "guarded", batchSize: 1, concurrency: 1 })
   await saveSecrets({ llmApiKey: "sk-test" })
   await upsertBookmarks([makeBookmark("t1"), makeBookmark("t2")])
 
@@ -485,7 +487,8 @@ test("closed vocabulary runs normally once the library has a tag", async () => {
 test("a run that exhausts its wall-clock budget reports timed-out and keeps the batches it finished", async () => {
   installChromeStorageMock()
   await resetBookmarksDb()
-  await enableAutoTagWithLlm({ tagVocabularyMode: "closed" })
+  // Serial so the deadline lands between two specific batches.
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed", concurrency: 1 })
   await saveSecrets({ llmApiKey: "sk-test" })
   await createTag({ name: "AI" })
   await upsertBookmarks([makeBookmark("t1"), makeBookmark("t2"), makeBookmark("t3"), makeBookmark("t4")])
@@ -520,7 +523,8 @@ test("a run that exhausts its wall-clock budget reports timed-out and keeps the 
 test("a cancelled run stops at the next batch boundary and reports cancelled", async () => {
   installChromeStorageMock()
   await resetBookmarksDb()
-  await enableAutoTagWithLlm({ tagVocabularyMode: "closed" })
+  // Serial so "the next batch boundary" is a single batch, not a whole wave.
+  await enableAutoTagWithLlm({ tagVocabularyMode: "closed", concurrency: 1 })
   await saveSecrets({ llmApiKey: "sk-test" })
   await createTag({ name: "AI" })
   await upsertBookmarks([makeBookmark("t1"), makeBookmark("t2"), makeBookmark("t3"), makeBookmark("t4")])

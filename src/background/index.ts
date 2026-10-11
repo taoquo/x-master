@@ -12,12 +12,15 @@ import {
 } from "../lib/autotag/suggestionActions.ts"
 import { removeBookmarkSnapshot, upsertBookmarkSnapshot } from "../lib/storage/bookmarksStore.ts"
 import { backfillHashtagsFromRawPayloads } from "../lib/storage/backfillHashtags.ts"
+import { getAllTagSuggestions } from "../lib/storage/suggestionsStore.ts"
 import { releaseKeepAliveForAbandonedRun, startKeepAlive, stopKeepAlive } from "../lib/runtime/keepAlive.ts"
 import { resetLocalData } from "../lib/storage/resetLocalData.ts"
 import {
   AUTO_TAG_RUN_LIVENESS_MS,
   AUTO_TAG_RUN_STALE_MS,
   clearAutoTagRunState,
+  finishAutoTagRun,
+  updateSettings,
   getSettings,
   isAutoTagRunActive,
   requestAutoTagRunCancel,
@@ -147,11 +150,18 @@ export function createBackgroundMessageHandler({
     }
   }
 
-  const startAutoTagRun = async () => {
+  const startAutoTagRun = async ({ continuation = false }: { continuation?: boolean } = {}) => {
     const startedAt = now()
 
     if (autoTagRunStartedAt !== null && startedAt - autoTagRunStartedAt <= AUTO_TAG_RUN_STALE_MS) {
       return { started: false, alreadyRunning: true }
+    }
+
+    // A run the user starts by hand restarts the continuation budget; the counting
+    // and the cap live with reportInterruptedAutoTagRun, which is the only thing that
+    // ever continues a run.
+    if (!continuation) {
+      await updateSettings({ autoTagContinueCount: 0 }).catch(() => undefined)
     }
 
     if (await hasLivePersistedRun(startedAt)) {
@@ -188,6 +198,8 @@ export function createBackgroundMessageHandler({
 
     return { started: true, ...(takeoverOf !== null ? { tookOverStaleRun: true } : {}) }
   }
+
+  registerAutoTagRunStarter(startAutoTagRun)
 
   return async function handleMessage(message: BackgroundMessage | { type: string; [key: string]: unknown }) {
     if (message.type === LOAD_WORKSPACE_DATA_MESSAGE) {
@@ -267,7 +279,7 @@ export function createBackgroundMessageHandler({
     }
 
     if (message.type === AUTOTAG_RUN_MESSAGE) {
-      return startAutoTagRun()
+      return startAutoTagRun({ continuation: false })
     }
 
     if (message.type === AUTOTAG_CANCEL_MESSAGE) {
@@ -333,6 +345,103 @@ async function shouldAutoTagAfterSyncDefault() {
   } catch {
     return false
   }
+}
+
+// The alarm path has to be able to start a run, but startAutoTagRun lives inside
+// the handler closure (it owns the in-process lock and the keepalive). The factory
+// registers it here so the module-level startup/continuation code can reuse every
+// guard instead of reimplementing them.
+let autoTagRunStarter: ((options: { continuation: boolean }) => Promise<unknown>) | null = null
+
+export function registerAutoTagRunStarter(starter: (options: { continuation: boolean }) => Promise<unknown>) {
+  autoTagRunStarter = starter
+}
+
+// A run that reaches the wall-clock limit keeps its suggestions and leaves the rest
+// of the queue for the next invocation. Chaining a few of those turns "stopped at
+// the limit" into "finished in stages" without ever exceeding Chrome's per
+// invocation limit. Capped so a run that cannot make progress stops asking.
+export const AUTO_TAG_CONTINUE_MAX_RUNS = 5
+
+// Reports a run whose worker died before finishRun, and optionally continues it.
+//
+// This is the only path that can say "the run was interrupted": finishRun never ran,
+// so without it the state was simply cleared, the panel kept showing the previous
+// result, and the user saw progress vanish with no explanation.
+export async function reportInterruptedAutoTagRun(
+  mode: "startup" | "tick" = "startup"
+): Promise<{ reported: boolean; continued: boolean }> {
+  try {
+    const settings = await getSettings()
+    const state = settings.autoTagRunState
+
+    if (!state) {
+      return { reported: false, continued: false }
+    }
+
+    // A tick can fire while this same worker is running a healthy run; only a state
+    // whose heartbeat stopped moving belongs to a worker that is gone.
+    if (mode === "tick" && isAutoTagRunActive(state, Date.now(), AUTO_TAG_RUN_LIVENESS_MS)) {
+      return { reported: false, continued: false }
+    }
+
+    // Nothing is in process at worker startup, so the state cannot own the run.
+    if (mode === "startup" && !isAutoTagRunActive(state, Date.now(), AUTO_TAG_RUN_LIVENESS_MS)) {
+      // fall through: report it as interrupted
+    }
+
+    const wasCancelled = Boolean(state.cancelRequested)
+    const leftover = Math.max(0, state.total - state.processed)
+    const pendingCount = (await getAllTagSuggestions().catch(() => []))
+      .filter((suggestion: { status: string }) => suggestion.status === "pending")
+      .length
+
+    await finishAutoTagRun({
+      runId: state.runId,
+      summary: {
+        finishedAt: new Date().toISOString(),
+        outcome: wasCancelled ? "cancelled" : "interrupted",
+        suggestedCount: 0,
+        pendingCount,
+        candidateCount: state.total,
+        llmProcessedCount: state.processed,
+        llmBatchCount: 0,
+        llmFailedBatchCount: 0,
+        newTagBudget: 0,
+        vocabularySize: 0,
+        blockedTagKeyCount: settings.autoTag.blockedTagKeys.length,
+        unprocessedCount: leftover,
+        ...(wasCancelled ? {} : { error: "worker-terminated" })
+      }
+    })
+
+    // Continue only when the user did not ask to stop, the feature is still on, and
+    // there is something left to do.
+    const shouldContinue = !wasCancelled && leftover > 0 && settings.autoTag.autoContinue !== false
+    if (!shouldContinue || !autoTagRunStarter) {
+      return { reported: true, continued: false }
+    }
+
+    // The chain is bounded here, where the decision is made: a run that keeps dying
+    // must stop asking for another service-worker invocation.
+    const continues = settings.autoTagContinueCount ?? 0
+    if (continues >= AUTO_TAG_CONTINUE_MAX_RUNS) {
+      return { reported: true, continued: false }
+    }
+    await updateSettings({ autoTagContinueCount: continues + 1 }).catch(() => undefined)
+
+    const continued = await autoTagRunStarter({ continuation: true }).catch(() => undefined)
+    return { reported: true, continued: Boolean((continued as { started?: boolean } | undefined)?.started) }
+  } catch {
+    return { reported: false, continued: false }
+  }
+}
+
+// Invoked from the alarm listener registered at the worker's top level. Its main job
+// is to be reachable so Chrome keeps waking this worker; whatever it finds is then
+// handled by the interruption path.
+export async function handleKeepAliveTick(): Promise<void> {
+  await reportInterruptedAutoTagRun("tick")
 }
 
 // Default "test connection" wiring for the settings panel: reads the stored
@@ -425,11 +534,10 @@ export async function reconcileInterruptedRuns() {
       })
     }
 
-    if (settings.autoTagRunState) {
-      // Clearing it frees the run immediately instead of waiting out the liveness
-      // window, and tells the popup to drop its last progress frame.
-      await clearAutoTagRunState()
-    }
+    // A run state that exists while no worker is running it belongs to a worker
+    // that died. Report it, then clear it: clearing alone left the user with a
+    // vanished progress bar and the previous run's result still on screen.
+    await reportInterruptedAutoTagRun("startup")
   } catch {
     // Startup is best-effort: a failure here must not stop the worker from
     // serving messages.

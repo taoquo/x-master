@@ -8,7 +8,8 @@ import {
 import type { useWorkspaceData } from "../hooks/useWorkspaceData.ts"
 import type { useDataSafetyActions } from "../hooks/useDataSafetyActions.ts"
 import { formatSyncProgressLabel } from "../../lib/runtime/syncProgress.ts"
-import { StatusBadge } from "../../ui/components.tsx"
+import { AutoTagProgressBar, StatusBadge } from "../../ui/components.tsx"
+import { useAutoTagRunStatus } from "../../ui/useAutoTagRunStatus.ts"
 import { BrandLogo } from "../../ui/branding.tsx"
 import { AppIcon } from "../../ui/icons.tsx"
 import type { OptionsCopy } from "../i18n/copy.ts"
@@ -185,6 +186,9 @@ export function WorkspaceSidebar({
   onOpenSettings: () => void
   dataSafety: ReturnType<typeof useDataSafetyActions>
 }) {
+  // The run's state lives in persisted settings, so this survives a refresh and
+  // stays visible without opening the settings dialog.
+  const autoTagRun = useAutoTagRunStatus()
   const [isCreatingTagInline, setIsCreatingTagInline] = useState(false)
   const [draftTagName, setDraftTagName] = useState("")
   const [renamingTagId, setRenamingTagId] = useState<string | null>(null)
@@ -355,6 +359,27 @@ export function WorkspaceSidebar({
               {copy.pageTitle}
             </h1>
           </div>
+        </div>
+
+        <div data-testid="workspace-sidebar-autotag" className="options-sidebar-autotag">
+          {autoTagRun.isActive ? (
+            <AutoTagProgressBar
+              testId="sidebar-autotag-progress"
+              progress={autoTagRun}
+              labels={{
+                analyzing: copy.settingsAutoTagProgress,
+                phaseHeuristics: copy.settingsAutoTagPhaseHeuristics,
+                phaseLlm: copy.settingsAutoTagPhaseLlm,
+                waiting: copy.settingsAutoTagWaiting,
+                stalled: copy.settingsAutoTagStalled,
+                cancel: copy.settingsAutoTagCancel,
+                cancelling: copy.settingsAutoTagStopping,
+                elapsed: copy.settingsAutoTagElapsed,
+                remaining: copy.settingsAutoTagRemaining
+              }}
+              onCancel={() => void autoTagRun.cancel()}
+            />
+          ) : null}
         </div>
 
         <div data-testid="workspace-sidebar-sync" className="options-sidebar-sync">
