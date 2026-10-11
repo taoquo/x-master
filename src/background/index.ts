@@ -1,5 +1,8 @@
 import { runBookmarkSync } from "./syncBookmarks.ts"
-import { testLlmConnection } from "../lib/autotag/llmProvider.ts"
+import { createLlmChat, testLlmConnectionFor } from "../lib/llm/orchestrator.ts"
+import type { LlmConnectionTestResult } from "../lib/llm/orchestrator.ts"
+import { resolveProvider, resolveBaseUrl } from "../lib/llm/providers.ts"
+import { resolveAuth } from "../lib/llm/auth/index.ts"
 import { runAutoTagPipeline } from "../lib/autotag/pipeline.ts"
 import { reviewTagVocabulary, type TagVocabularyReviewResult } from "../lib/autotag/vocabularyReview.ts"
 import {
@@ -11,7 +14,6 @@ import { removeBookmarkSnapshot, upsertBookmarkSnapshot } from "../lib/storage/b
 import { backfillHashtagsFromRawPayloads } from "../lib/storage/backfillHashtags.ts"
 import { releaseKeepAliveForAbandonedRun, startKeepAlive, stopKeepAlive } from "../lib/runtime/keepAlive.ts"
 import { resetLocalData } from "../lib/storage/resetLocalData.ts"
-import { getSecrets } from "../lib/storage/secrets.ts"
 import {
   AUTO_TAG_RUN_LIVENESS_MS,
   AUTO_TAG_RUN_STALE_MS,
@@ -75,7 +77,7 @@ interface BackgroundDependencies {
   acceptSuggestion?: (suggestionId: string) => Promise<TagSuggestionRecord | null>
   rejectSuggestion?: (suggestionId: string) => Promise<TagSuggestionRecord | null>
   acceptSuggestionsBulk?: (suggestionIds: string[]) => Promise<{ acceptedCount: number }>
-  testLlmConnection?: () => Promise<{ ok: boolean; error?: string }>
+  testLlmConnection?: () => Promise<LlmConnectionTestResult>
   reviewTagVocabulary?: () => Promise<TagVocabularyReviewResult>
   syncSiteTweetBookmark?: (input: { tweet: SiteTweetDraft; enabled: boolean }) => Promise<SiteTweetBookmarkSyncResult>
   prepareSiteTweetTagging?: (input: { tweet: SiteTweetDraft }) => Promise<SiteTweetTagState>
@@ -334,37 +336,47 @@ async function shouldAutoTagAfterSyncDefault() {
 }
 
 // Default "test connection" wiring for the settings panel: reads the stored
-// key + LLM settings and pings the provider's /models endpoint.
-async function testLlmConnectionDefault(): Promise<{ ok: boolean; error?: string }> {
-  const [settings, secrets] = await Promise.all([getSettings(), getSecrets()])
+// credential for the active provider and pings that provider's model-listing
+// endpoint. The reported strategy and dropped parameters are computed locally from
+// capability data, so this costs no tokens. The credential itself is never returned.
+async function testLlmConnectionDefault(): Promise<LlmConnectionTestResult> {
+  const settings = await getSettings()
+  const llmSettings = settings.autoTag.llm
+  const provider = resolveProvider(llmSettings.activeProviderId)
+  const auth = await resolveAuth(llmSettings.activeProviderId, { allowLegacy: true })
 
-  if (!secrets.llmApiKey) {
-    return { ok: false, error: "missing-api-key" }
+  if (provider.credentialKind !== "api-key-or-none" && !auth?.apiKey) {
+    return { ok: false, providerId: provider.id, model: llmSettings.model, error: "missing-api-key" }
   }
 
-  return testLlmConnection({ settings: settings.autoTag.llm, apiKey: secrets.llmApiKey })
+  const result = await testLlmConnectionFor({ settings: llmSettings, credential: auth })
+  return result.ok ? result : { ...result, error: result.message ?? "request-failed" }
 }
 
 // Vocabulary review is a single chat request over the whole tag list, so it can
 // answer the message directly instead of going through the fire-and-forget path
 // used by the batched auto-tag run.
 async function reviewTagVocabularyDefault(): Promise<TagVocabularyReviewResult> {
-  const [settings, secrets, tags, bookmarkTags] = await Promise.all([
+  const [settings, tags, bookmarkTags] = await Promise.all([
     getSettings(),
-    getSecrets(),
     getAllTags(),
     getAllBookmarkTags()
   ])
 
-  if (!secrets.llmApiKey) {
+  const llmSettings = settings.autoTag.llm
+  const provider = resolveProvider(llmSettings.activeProviderId)
+  const auth = await resolveAuth(llmSettings.activeProviderId, { allowLegacy: true })
+
+  if (provider.credentialKind !== "api-key-or-none" && !auth?.apiKey) {
     return { ok: false, error: "missing-api-key", merges: [], renames: [] }
   }
 
   return reviewTagVocabulary({
-    settings: settings.autoTag.llm,
-    apiKey: secrets.llmApiKey,
+    settings: { baseUrl: resolveBaseUrl(provider, llmSettings.baseUrl), model: llmSettings.model },
+    apiKey: auth?.apiKey ?? "",
     tags,
-    bookmarkTags
+    bookmarkTags,
+    chat: createLlmChat({ settings: llmSettings, credential: auth })
   })
 }
 

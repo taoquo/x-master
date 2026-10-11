@@ -233,7 +233,7 @@ function extractJsonCandidates(content: string): string[] {
 // Returns null when the response carries no parsable results array. That is a
 // real provider failure (wrong model, prose answer, truncated output) and must
 // stay distinguishable from a valid "no tags for this batch" answer.
-function parseSuggestions(content: string, validTweetIds: Set<string>): LlmTagSuggestion[] | null {
+export function parseSuggestedTags(content: string, validTweetIds: Set<string>): LlmTagSuggestion[] | null {
   let results: unknown
 
   for (const candidate of extractJsonCandidates(content)) {
@@ -364,7 +364,11 @@ function dropRejectedOption(
 
   if (
     sendOptions.jsonMode &&
-    (detail.includes("response_format") || detail.includes("json_object") || detail.includes("json mode"))
+    detail.includes("response_format") ||
+    detail.includes("json_object") ||
+    detail.includes("json_schema") ||
+    detail.includes("json schema") ||
+    detail.includes("json mode")
   ) {
     sendOptions.jsonMode = false
     return { dropped: true, wasBlindProbe: false }
@@ -391,6 +395,10 @@ export async function requestChatJson(options: {
   settings: Pick<AutoTagLlmSettings, "baseUrl" | "model">
   apiKey: string
   prompt: string
+  // Optional provider-agnostic additions used by the multi-provider layer. Omitting
+  // them keeps the exact single-message behaviour this engine always had.
+  systemPrompt?: string
+  jsonSchema?: { name: string; strict: boolean; schema: Record<string, unknown> }
   fetchImpl?: FetchLike
   sleep?: (ms: number) => Promise<void>
   capabilities?: ChatCapabilities
@@ -432,12 +440,29 @@ export async function requestChatJson(options: {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${options.apiKey}`
+          // Local servers take no credential; sending an empty Bearer is noise.
+          ...(options.apiKey ? { Authorization: `Bearer ${options.apiKey}` } : {})
         },
         body: JSON.stringify({
           model: options.settings.model,
-          messages: [{ role: "user", content: options.prompt }],
-          ...(sendOptions.jsonMode ? { response_format: { type: "json_object" } } : {}),
+          messages: [
+            ...(options.systemPrompt ? [{ role: "system", content: options.systemPrompt }] : []),
+            { role: "user", content: options.prompt }
+          ],
+          ...(sendOptions.jsonMode
+            ? {
+                response_format: options.jsonSchema
+                  ? {
+                      type: "json_schema",
+                      json_schema: {
+                        name: options.jsonSchema.name,
+                        strict: options.jsonSchema.strict,
+                        schema: options.jsonSchema.schema
+                      }
+                    }
+                  : { type: "json_object" }
+              }
+            : {}),
           ...(sendOptions.temperature ? { temperature: 0 } : {})
         })
       },
@@ -662,7 +687,7 @@ export function createOpenAiCompatibleProvider(options: {
         throw new Error(result.error ?? "request-failed")
       }
 
-      const suggestions = parseSuggestions(result.content, validTweetIds)
+      const suggestions = parseSuggestedTags(result.content, validTweetIds)
 
       if (!suggestions) {
         throw new Error("invalid-response")
@@ -689,7 +714,7 @@ export async function testLlmConnection(options: {
   const attempt = await fetchWithTimeout(
     fetchImpl,
     endpoint,
-    { method: "GET", headers: { Authorization: `Bearer ${options.apiKey}` } },
+    { method: "GET", headers: options.apiKey ? { Authorization: `Bearer ${options.apiKey}` } : {} },
     options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
   )
 

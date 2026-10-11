@@ -326,6 +326,12 @@ test("a failing proposal does not discard the rest of the approved plan", async 
   })
   await settle()
 
+  // Applying the plan and then reconciling the workspace is an async chain whose
+  // length depends on how loaded the machine is, so the assertions wait for the
+  // observable end state instead of assuming one settle() is enough. Under
+  // --test-concurrency the immediate version flaked.
+  await waitForCondition(() => (findByTestId(container, "tag-review-panel")?.textContent ?? "").includes("already uses"))
+
   // The merge and the first rename landed.
   const names = Array.from(container.querySelectorAll("[data-tag-card]")).map((card) => card.textContent ?? "")
   assert.match(names.join(" "), /design system/)

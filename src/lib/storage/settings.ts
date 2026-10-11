@@ -14,10 +14,12 @@ import {
 } from "../types.ts"
 import type { BookmarkSortOrder } from "../search/searchBookmarks.ts"
 import { canonicalTagKey } from "../tags/canonical.ts"
+import { DEFAULT_PROVIDER_ID, LLM_PROVIDERS } from "../llm/providers.ts"
+import type { JsonStrategy, ModelCapabilities } from "../llm/types.ts"
 import { isSyncErrorKind } from "../x/syncErrors.ts"
 
 export const SETTINGS_STORAGE_KEY = "settings"
-const SETTINGS_SCHEMA_VERSION = 6
+const SETTINGS_SCHEMA_VERSION = 7
 const SYNC_STRATEGY_VERSION = 1
 const DEFAULT_LOCALE: Locale = "en"
 const DEFAULT_THEME_PREFERENCE: ThemePreference = "system"
@@ -145,7 +147,7 @@ export function createDefaultAutoTagSettings(): AutoTagSettings {
     },
     llm: {
       enabled: false,
-      provider: "openai-compatible",
+      activeProviderId: DEFAULT_PROVIDER_ID,
       baseUrl: DEFAULT_LLM_BASE_URL,
       model: DEFAULT_LLM_MODEL,
       batchSize: DEFAULT_LLM_BATCH_SIZE,
@@ -156,6 +158,81 @@ export function createDefaultAutoTagSettings(): AutoTagSettings {
   }
 }
 
+// v6 stored a single provider ("openai-compatible") plus a base URL. The base URL
+// is the only reliable hint about which provider an existing install was using, so
+// the id is inferred from it. Nothing else about the config changes, so even a wrong
+// guess only affects which entry the picker shows as selected: a non-empty baseUrl
+// still overrides the provider default.
+function inferProviderId(baseUrl: string, explicit: unknown): string {
+  const candidate = typeof explicit === "string" ? explicit.trim() : ""
+  if (candidate && LLM_PROVIDERS.some((provider) => provider.id === candidate)) {
+    return candidate
+  }
+
+  const host = baseUrl.toLowerCase()
+  if (host.includes("anthropic")) {
+    return "anthropic"
+  }
+  if (host.includes("generativelanguage") || host.includes("makersuite")) {
+    return "google"
+  }
+  if (host.includes("openai.azure.com")) {
+    return "azure-openai"
+  }
+
+  return DEFAULT_PROVIDER_ID
+}
+
+const JSON_STRATEGIES: JsonStrategy[] = [
+  "json-schema-strict",
+  "json-schema",
+  "json-object",
+  "tool",
+  "prompt-only"
+]
+
+function normalizeCapabilityOverrides(value: unknown): Partial<ModelCapabilities> | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined
+  }
+
+  const record = value as Record<string, unknown>
+  const next: Partial<ModelCapabilities> = {}
+
+  if (typeof record.temperature === "boolean") {
+    next.temperature = record.temperature
+  }
+  if (typeof record.jsonStrategy === "string" && JSON_STRATEGIES.includes(record.jsonStrategy as JsonStrategy)) {
+    next.jsonStrategy = record.jsonStrategy as JsonStrategy
+  }
+  for (const field of ["maxOutputTokens", "contextWindow"] as const) {
+    const raw = record[field]
+    if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+      next[field] = Math.trunc(raw)
+    }
+  }
+
+  return Object.keys(next).length ? next : undefined
+}
+
+function normalizeLearnedCapabilities(
+  value: unknown
+): Record<string, Partial<ModelCapabilities>> | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined
+  }
+
+  const next: Record<string, Partial<ModelCapabilities>> = {}
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    const normalized = normalizeCapabilityOverrides(raw)
+    if (key.trim() && normalized) {
+      next[key.trim()] = normalized
+    }
+  }
+
+  return Object.keys(next).length ? next : undefined
+}
+
 function normalizeAutoTagSettings(value: unknown): AutoTagSettings {
   const defaults = createDefaultAutoTagSettings()
   const record = (value ?? {}) as Partial<AutoTagSettings>
@@ -163,6 +240,10 @@ function normalizeAutoTagSettings(value: unknown): AutoTagSettings {
   const llm = (record.llm ?? {}) as Partial<AutoTagSettings["llm"]>
   const baseUrl = String(llm.baseUrl ?? "").trim()
   const model = String(llm.model ?? "").trim()
+  const deploymentName = String(llm.deploymentName ?? "").trim()
+  const apiVersion = String(llm.apiVersion ?? "").trim()
+  const capabilityOverrides = normalizeCapabilityOverrides(llm.capabilityOverrides)
+  const learnedCapabilities = normalizeLearnedCapabilities(llm.learnedCapabilities)
 
   return {
     enabled: Boolean(record.enabled),
@@ -174,12 +255,16 @@ function normalizeAutoTagSettings(value: unknown): AutoTagSettings {
     },
     llm: {
       enabled: Boolean(llm.enabled),
-      provider: "openai-compatible",
+      activeProviderId: inferProviderId(baseUrl, llm.activeProviderId),
       baseUrl: baseUrl || defaults.llm.baseUrl,
       model: model || defaults.llm.model,
+      ...(deploymentName ? { deploymentName } : {}),
+      ...(apiVersion ? { apiVersion } : {}),
       batchSize: normalizeRange(llm.batchSize, defaults.llm.batchSize, 1, 50),
       maxBookmarksPerRun: normalizeRange(llm.maxBookmarksPerRun, defaults.llm.maxBookmarksPerRun, 1, 2000),
-      tagVocabularyMode: normalizeTagVocabularyMode(llm.tagVocabularyMode, defaults.llm.tagVocabularyMode)
+      tagVocabularyMode: normalizeTagVocabularyMode(llm.tagVocabularyMode, defaults.llm.tagVocabularyMode),
+      ...(capabilityOverrides ? { capabilityOverrides } : {}),
+      ...(learnedCapabilities ? { learnedCapabilities } : {})
     },
     blockedTagKeys: normalizeBlockedTagKeys(record.blockedTagKeys)
   }

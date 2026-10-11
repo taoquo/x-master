@@ -312,7 +312,13 @@ function validateSettings(value: unknown, path: string): WorkspaceExportPayload[
         ),
     lastSyncSummary: record.lastSyncSummary === undefined
       ? undefined
-      : validateSyncSummary(record.lastSyncSummary, `${path}.lastSyncSummary`)
+      : validateSyncSummary(record.lastSyncSummary, `${path}.lastSyncSummary`),
+    // Optional and free-form: an id from a newer version simply falls back to the
+    // default provider on restore, and the model is a plain string either way.
+    ...(typeof record.activeProviderId === "string" && record.activeProviderId.trim()
+      ? { activeProviderId: record.activeProviderId.trim() }
+      : {}),
+    ...(typeof record.model === "string" && record.model.trim() ? { model: record.model.trim() } : {})
   }
 }
 
@@ -508,6 +514,17 @@ export async function restoreWorkspaceBackup(payload: WorkspaceExportPayload): P
       autoTagRunState: undefined,
       autoTag: {
         ...current.autoTag,
+        // The picked provider and model travel with a backup; the endpoint and the
+        // credential deliberately do not, so a restore never repoints this install
+        // at another machine's gateway. An id this version does not know is reduced
+        // to the default by normalizeSettings rather than left unresolvable.
+        llm: {
+          ...current.autoTag.llm,
+          ...(validation.payload.settings.activeProviderId
+            ? { activeProviderId: validation.payload.settings.activeProviderId }
+            : {}),
+          ...(validation.payload.settings.model ? { model: validation.payload.settings.model } : {})
+        },
         blockedTagKeys: current.autoTag.blockedTagKeys.filter((key) => !restoredKeys.has(key))
       }
     }

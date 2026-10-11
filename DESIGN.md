@@ -412,3 +412,37 @@ Tailwind 里定义了：
 当前扩展最准确的设计定义不是“某个品牌官网风格”，而是：
 
 > 一套以浅色本地工作台为主、以蓝色状态和工具性布局为核心，同时夹带一套独立站内玻璃弹层风格的浏览器扩展 UI。
+
+## 附录 A：LLM Provider 抽象与密钥边界
+
+设置面板的「LLM 智能标签」组不再假设只有一种 OpenAI 兼容接口，而是读取一张 provider 表。
+
+### 分层（`src/lib/llm/`）
+
+| 文件 | 角色 |
+|---|---|
+| `providers.ts` | **纯数据** provider 目录（端点、origin、凭据类型、Key 创建页链接）与 baseUrl/origin 校验 |
+| `capabilities.ts` | 能力解析（用户覆盖 → 已学结论 → 模型名前缀 → provider 默认）与请求组装 |
+| `adapters/*` | 每个 wire protocol 一个适配器（openai-chat / anthropic-messages / google-generative-ai / azure-openai-chat） |
+| `transport.ts` | 唯一的 HTTP 出口：单次超时、重试、`Retry-After`、运行预算、错误归一 |
+| `errors.ts` | 统一错误分类与密钥脱敏 |
+| `auth/` | 凭据抽象：v1 只实现 `apiKeyAuth`，`OAuthAuth` 仅有接口 |
+| `orchestrator.ts` | 组装 prompt 与请求、驱动适配器、产出 `LlmSuggestion` |
+
+**UI 与 HTTP 代码必须分离**：设置页只引用 `providers.ts` / `capabilities.ts` / copy，适配器只能进 background。这条由 `scripts/checkBundle.mjs` 在构建产物上校验，而不是靠约定。
+
+### 密钥边界
+
+- 密钥只存 `chrome.storage.local` 的 `secrets` 键，**按 provider 分 profile**，全部写在同一个键下（避免并发写入丢更新）。
+- 所有写入走 `modifySecrets` 的串行化读-改-写链；UI 与弹窗并发保存不会互相覆盖。
+- **密钥不进入代码、不读环境变量、不进日志、不进备份、不随导出**；错误信息一律经 `sanitizeLlmError` 脱敏（Gemini 的 key 在查询串里）。
+- `chrome.storage.local` 在 worker 启动时被限制为 `TRUSTED_CONTEXTS`，content script 读不到。
+- 适配器与编排层**不直接读 secrets**，只消费 `resolveAuth` 返回的 `ResolvedAuth`。
+- 备份只带 `activeProviderId` 与 `model`；`baseUrl`、部署名与任何凭据都不导出。
+
+### 新增 UI 约定
+
+- provider 下拉切换时，需要自带端点的 provider 会清空 baseUrl（避免继承上一家的地址）。
+- 「已保存」是**按 provider** 判断的；`api-key-or-none`（本地模型）显示「无需密钥」而非「缺少密钥」。
+- 「测试连接」不发生成请求（零 token 成本）：只做一次模型列表探测，结构化输出策略与被忽略参数由本地能力数据算出并回显。
+- 错误按 `LlmErrorKind` 映射为具体文案，而不是把服务端原文丢给用户。

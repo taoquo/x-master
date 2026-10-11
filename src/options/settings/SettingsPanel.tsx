@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from "react"
 import type { AutoTagRunSummary, ExtensionSettings, KeywordTagRule, Locale, ThemePreference } from "../../lib/types.ts"
 import { SETTINGS_STORAGE_KEY, getSettings, updateSettings } from "../../lib/storage/settings.ts"
-import { getSecrets, saveSecrets } from "../../lib/storage/secrets.ts"
+import { clearProviderApiKey, isProviderConfigured, saveProviderApiKey } from "../../lib/llm/auth/index.ts"
+import { LLM_PROVIDERS, permissionOrigin, resolveBaseUrl, resolveProvider, validateBaseUrl } from "../../lib/llm/providers.ts"
+import type { JsonStrategy } from "../../lib/llm/types.ts"
 import { clearBlockedTagKeys } from "../../lib/tags/tagActions.ts"
 import { AUTOTAG_CANCEL_MESSAGE, AUTOTAG_RUN_MESSAGE, LLM_TEST_CONNECTION_MESSAGE } from "../../lib/runtime/messages.ts"
 import { subscribeAutoTagProgress, type AutoTagProgress } from "../../lib/runtime/autotagProgress.ts"
@@ -117,6 +119,15 @@ export function SettingsPanel({
   const [draftTagName, setDraftTagName] = useState("")
   const [hasStoredApiKey, setHasStoredApiKey] = useState(false)
   const [draftApiKey, setDraftApiKey] = useState("")
+  const [llmTestResult, setLlmTestResult] = useState<
+    | {
+        ok: boolean
+        model?: string
+        strategy?: JsonStrategy
+        droppedOptions?: string[]
+      }
+    | undefined
+  >(undefined)
   const [llmTestState, setLlmTestState] = useState<{ status: "idle" | "testing" | "ok" | "error"; error?: string }>({
     status: "idle"
   })
@@ -127,18 +138,18 @@ export function SettingsPanel({
     let cancelled = false
 
     void getSettings()
-      .then((loaded) => {
-        if (!cancelled) {
-          setSettings(loaded)
-          setAutoTagRunSummary(loaded.lastAutoTagRun ?? null)
+      .then(async (loaded) => {
+        if (cancelled) {
+          return
         }
-      })
-      .catch(() => {})
 
-    void getSecrets()
-      .then((secrets) => {
+        setSettings(loaded)
+        setAutoTagRunSummary(loaded.lastAutoTagRun ?? null)
+        // "Is a key saved?" is per provider, so it is asked once the active
+        // provider is known.
+        const configured = await isProviderConfigured(loaded.autoTag.llm.activeProviderId)
         if (!cancelled) {
-          setHasStoredApiKey(Boolean(secrets.llmApiKey))
+          setHasStoredApiKey(configured)
         }
       })
       .catch(() => {})
@@ -245,12 +256,28 @@ export function SettingsPanel({
       return true
     }
 
+    // Ask for the origin the request will actually go to, so a self-hosted gateway
+    // asks for its own origin and nothing else.
+    const origin = permissionOrigin(baseUrl)
+    if (!origin) {
+      return false
+    }
+
     try {
-      const origin = new URL(baseUrl).origin
-      return await chrome.permissions.request({ origins: [origin + "/*"] })
+      return await chrome.permissions.request({ origins: [origin] })
     } catch {
       return false
     }
+  }
+
+  // The endpoint actually used: the user's value when set, otherwise the provider's
+  // documented default.
+  function effectiveBaseUrl(): string {
+    if (!settings) {
+      return ""
+    }
+
+    return resolveBaseUrl(resolveProvider(settings.autoTag.llm.activeProviderId), settings.autoTag.llm.baseUrl)
   }
 
   async function handleLlmEnabledChange(checked: boolean) {
@@ -263,7 +290,14 @@ export function SettingsPanel({
       return
     }
 
-    const granted = await ensureHostPermission(settings.autoTag.llm.baseUrl)
+    const provider = resolveProvider(settings.autoTag.llm.activeProviderId)
+    const baseUrl = effectiveBaseUrl()
+    if (provider.needsBaseUrl && !validateBaseUrl(baseUrl).ok) {
+      setLlmTestState({ status: "error", error: copy.settingsLlmBaseUrlRequired })
+      return
+    }
+
+    const granted = await ensureHostPermission(baseUrl)
     if (!granted) {
       setLlmTestState({ status: "error", error: copy.settingsLlmPermissionDenied })
       return
@@ -276,16 +310,91 @@ export function SettingsPanel({
   // Writes the draft key to extension storage. The background worker reads the
   // key from storage, so an unsaved draft is invisible to it.
   async function persistDraftApiKey(apiKey: string) {
-    await saveSecrets({ llmApiKey: apiKey })
+    if (!settings) {
+      return
+    }
+
+    await saveProviderApiKey(settings.autoTag.llm.activeProviderId, apiKey)
     setHasStoredApiKey(true)
     setDraftApiKey("")
   }
 
   async function clearStoredApiKey() {
-    await saveSecrets({})
+    if (!settings) {
+      return
+    }
+
+    await clearProviderApiKey(settings.autoTag.llm.activeProviderId)
     setHasStoredApiKey(false)
     setDraftApiKey("")
     setLlmTestState({ status: "idle" })
+    setLlmTestResult(undefined)
+  }
+
+  // Switching provider changes which credential the panel is talking about, so the
+  // "already saved" state and the endpoint are both re-derived.
+  async function handleProviderChange(providerId: string) {
+    if (!settings) {
+      return
+    }
+
+    const provider = resolveProvider(providerId)
+    updateLlm({
+      activeProviderId: provider.id,
+      // A provider with its own endpoint must not inherit another provider's URL.
+      baseUrl: provider.needsBaseUrl ? "" : provider.defaultBaseUrl,
+      ...(provider.needsDeployment ? { deploymentName: settings.autoTag.llm.deploymentName ?? "" } : {}),
+      ...(provider.defaultApiVersion ? { apiVersion: provider.defaultApiVersion } : {})
+    })
+    setDraftApiKey("")
+    setLlmTestState({ status: "idle" })
+    setLlmTestResult(undefined)
+    setHasStoredApiKey(await isProviderConfigured(provider.id))
+  }
+
+  function llmErrorMessage(kind: string | undefined, message: string | undefined, retryAfterMs?: number): string {
+    if (message === "missing-api-key") {
+      return copy.settingsLlmTestMissingKey
+    }
+
+    if (kind === "rate-limit" && retryAfterMs) {
+      return copy.settingsLlmErrorRateLimitLong.replace("{seconds}", String(Math.round(retryAfterMs / 1000)))
+    }
+
+    switch (kind) {
+      case "unauthorized":
+        return copy.settingsLlmErrorUnauthorized
+      case "forbidden":
+        return copy.settingsLlmErrorForbidden
+      case "rate-limit":
+        return copy.settingsLlmErrorRateLimit
+      case "quota":
+        return copy.settingsLlmErrorQuota
+      case "unsupported-param":
+        return copy.settingsLlmErrorUnsupportedParam
+      case "context-length":
+        return copy.settingsLlmErrorContextLength
+      case "timeout":
+        return copy.settingsLlmErrorTimeout
+      case "network":
+        return copy.settingsLlmErrorNetwork
+      case "server":
+        return copy.settingsLlmErrorServer
+      case "content-filter":
+        return copy.settingsLlmErrorContentFilter
+      case "invalid-json":
+        return copy.settingsLlmErrorInvalidJson
+      default:
+        return message || copy.settingsLlmErrorUnknown
+    }
+  }
+
+  const STRATEGY_LABELS: Record<JsonStrategy, string> = {
+    "json-schema-strict": copy.settingsLlmStrategyStrictSchema,
+    "json-schema": copy.settingsLlmStrategySchema,
+    "json-object": copy.settingsLlmStrategyObject,
+    tool: copy.settingsLlmStrategyTool,
+    "prompt-only": copy.settingsLlmStrategyPromptOnly
   }
 
   async function testLlmConnection() {
@@ -301,7 +410,23 @@ export function SettingsPanel({
 
     // chrome.permissions.request only works inside a user gesture, so it has to
     // be the first await in this click handler.
-    const granted = await ensureHostPermission(settings.autoTag.llm.baseUrl)
+    const provider = resolveProvider(settings.autoTag.llm.activeProviderId)
+    const baseUrl = effectiveBaseUrl()
+    const validation = validateBaseUrl(baseUrl)
+    if (!validation.ok) {
+      setLlmTestState({
+        status: "error",
+        error: validation.error === "empty" ? copy.settingsLlmBaseUrlRequired : copy.settingsLlmBaseUrlInvalid
+      })
+      return
+    }
+
+    if (provider.needsDeployment && !(settings.autoTag.llm.deploymentName ?? "").trim()) {
+      setLlmTestState({ status: "error", error: copy.settingsLlmDeploymentRequired })
+      return
+    }
+
+    const granted = await ensureHostPermission(baseUrl)
     if (!granted) {
       setLlmTestState({ status: "error", error: copy.settingsLlmPermissionDenied })
       return
@@ -313,16 +438,22 @@ export function SettingsPanel({
 
     setLlmTestState({ status: "testing" })
     const result = (await chrome.runtime.sendMessage({ type: LLM_TEST_CONNECTION_MESSAGE })) as
-      | { ok: boolean; error?: string }
+      | {
+          ok: boolean
+          error?: string
+          message?: string
+          errorKind?: string
+          model?: string
+          strategy?: JsonStrategy
+          droppedOptions?: string[]
+        }
       | undefined
 
+    setLlmTestResult(result)
     if (result?.ok) {
       setLlmTestState({ status: "ok" })
     } else {
-      setLlmTestState({
-        status: "error",
-        error: result?.error === "missing-api-key" ? copy.settingsLlmTestMissingKey : result?.error
-      })
+      setLlmTestState({ status: "error", error: llmErrorMessage(result?.errorKind, result?.error ?? result?.message) })
     }
   }
 
@@ -492,6 +623,17 @@ export function SettingsPanel({
       previouslyFocused?.focus?.()
     }
   }, [onClose])
+
+  // The provider drives which fields the LLM group shows, so it is derived once
+  // per render from the (possibly not yet loaded) settings.
+  const activeProvider = resolveProvider(settings?.autoTag.llm.activeProviderId)
+  const PROVIDER_LABELS: Record<string, string> = {
+    openai: copy.settingsLlmProviderOpenai,
+    anthropic: copy.settingsLlmProviderAnthropic,
+    google: copy.settingsLlmProviderGoogle,
+    "azure-openai": copy.settingsLlmProviderAzure,
+    custom: copy.settingsLlmProviderCustom
+  }
 
   return (
     <section data-testid="settings-panel" role="presentation" className="options-detail-modal">
@@ -761,6 +903,22 @@ export function SettingsPanel({
                   />
 
                   <label className="options-settings-field">
+                    <span className="options-settings-field-label">{copy.settingsLlmProvider}</span>
+                    <select
+                      data-testid="settings-llm-provider"
+                      className="field-shell"
+                      value={settings.autoTag.llm.activeProviderId}
+                      onChange={(event) => void handleProviderChange(event.currentTarget.value)}>
+                      {LLM_PROVIDERS.map((provider) => (
+                        <option key={provider.id} value={provider.id}>
+                          {PROVIDER_LABELS[provider.id] ?? provider.id}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="options-meta-copy">{copy.settingsLlmProviderHint}</span>
+                  </label>
+
+                  <label className="options-settings-field">
                     <span className="options-settings-field-label">{copy.settingsLlmBaseUrl}</span>
                     <input
                       data-testid="settings-llm-base-url"
@@ -783,9 +941,53 @@ export function SettingsPanel({
                     />
                   </label>
 
+                  {activeProvider.needsDeployment ? (
+                    <label className="options-settings-field">
+                      <span className="options-settings-field-label">{copy.settingsLlmDeployment}</span>
+                      <input
+                        data-testid="settings-llm-deployment"
+                        className="field-shell"
+                        value={settings.autoTag.llm.deploymentName ?? ""}
+                        onInput={(event) => updateLlm({ deploymentName: event.currentTarget.value })}
+                        onChange={(event) => updateLlm({ deploymentName: event.currentTarget.value })}
+                      />
+                      <span className="options-meta-copy">{copy.settingsLlmDeploymentHint}</span>
+                    </label>
+                  ) : null}
+
+                  {activeProvider.needsApiVersion ? (
+                    <label className="options-settings-field">
+                      <span className="options-settings-field-label">{copy.settingsLlmApiVersion}</span>
+                      <input
+                        data-testid="settings-llm-api-version"
+                        className="field-shell"
+                        value={settings.autoTag.llm.apiVersion ?? activeProvider.defaultApiVersion ?? ""}
+                        onInput={(event) => updateLlm({ apiVersion: event.currentTarget.value })}
+                        onChange={(event) => updateLlm({ apiVersion: event.currentTarget.value })}
+                      />
+                    </label>
+                  ) : null}
+
                   <div className="options-settings-field options-settings-field-wide">
                     <span className="options-settings-field-label">{copy.settingsLlmApiKey}</span>
                     <span className="options-meta-copy">{copy.settingsLlmApiKeyHint}</span>
+                    <span className="options-settings-inline-field">
+                      {activeProvider.apiKeyUrl ? (
+                        <button
+                          type="button"
+                          data-testid="settings-llm-api-key-link"
+                          className="chip-button options-chip-muted"
+                          // chrome.tabs.create needs no `tabs` permission.
+                          onClick={() => chrome.tabs?.create?.({ url: activeProvider.apiKeyUrl })}>
+                          {copy.settingsLlmApiKeyGet}
+                        </button>
+                      ) : null}
+                      {activeProvider.credentialKind === "api-key-or-none" && !hasStoredApiKey ? (
+                        <span className="options-meta-copy" data-testid="settings-llm-api-key-not-needed">
+                          {copy.settingsLlmApiKeyNotNeeded}
+                        </span>
+                      ) : null}
+                    </span>
                     <div className="options-settings-inline-field">
                       <input
                         data-testid="settings-llm-api-key"
@@ -877,6 +1079,26 @@ export function SettingsPanel({
                         {llmTestState.status === "testing" ? copy.settingsLlmTesting : copy.settingsLlmTestConnection}
                       </button>
                     </div>
+                    {llmTestState.status === "ok" && llmTestResult?.ok ? (
+                      <div className="options-meta-copy" data-testid="settings-llm-test-result">
+                        <div>
+                          {copy.settingsLlmTestResultOk
+                            .replace("{model}", llmTestResult.model ?? settings.autoTag.llm.model)
+                            .replace(
+                              "{strategy}",
+                              llmTestResult.strategy ? STRATEGY_LABELS[llmTestResult.strategy] : ""
+                            )}
+                        </div>
+                        {llmTestResult.droppedOptions?.length ? (
+                          <div>
+                            {copy.settingsLlmTestDropped.replace(
+                              "{options}",
+                              llmTestResult.droppedOptions.join(", ")
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <InlineMessage
                       message={
                         llmTestState.status === "ok"

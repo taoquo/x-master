@@ -42,7 +42,7 @@ test("getSettings returns bookmark-manager defaults", async () => {
 
   const settings = await getSettings()
 
-  assert.equal(settings.schemaVersion, 6)
+  assert.equal(settings.schemaVersion, 7)
   assert.equal(settings.locale, "en")
   assert.equal(settings.themePreference, "system")
   assert.equal(settings.lastSyncSummary.status, "idle")
@@ -78,7 +78,7 @@ test("getSettings migrates legacy stored fields into the reduced settings shape"
 
   const settings = await getSettings()
 
-  assert.equal(settings.schemaVersion, 6)
+  assert.equal(settings.schemaVersion, 7)
   assert.equal(settings.locale, "en")
   assert.equal(settings.themePreference, "system")
   assert.equal(settings.lastSyncSummary.status, "success")
@@ -248,7 +248,7 @@ test("getSettings silently drops legacy classificationRules from stored settings
 
   const settings = await getSettings()
 
-  assert.equal(settings.schemaVersion, 6)
+  assert.equal(settings.schemaVersion, 7)
   assert.equal("classificationRules" in settings, false)
 
   await saveSettings(settings)
@@ -268,14 +268,15 @@ test("getSettings applies autoTag defaults and normalizes invalid values", async
 
   const settings = await getSettings()
 
-  assert.equal(settings.schemaVersion, 6)
+  assert.equal(settings.schemaVersion, 7)
   assert.equal(settings.autoTag.enabled, false)
   assert.equal(settings.autoTag.runAfterSync, true)
   assert.equal(settings.autoTag.heuristics.useHashtags, true)
   assert.equal(settings.autoTag.heuristics.useAuthors, true)
   assert.deepEqual(settings.autoTag.heuristics.keywordRules, [])
   assert.equal(settings.autoTag.llm.enabled, false)
-  assert.equal(settings.autoTag.llm.provider, "openai-compatible")
+  // v7 replaced the literal single-provider field with an id from the provider table.
+  assert.equal(settings.autoTag.llm.activeProviderId, "openai")
   assert.equal(settings.autoTag.llm.baseUrl, "https://api.openai.com/v1")
   assert.equal(settings.autoTag.llm.tagVocabularyMode, "guarded")
   assert.deepEqual(settings.autoTag.blockedTagKeys, [])
@@ -331,7 +332,7 @@ test("updateSettings merges a patch without resetting unrelated fields", async (
       blockedTagKeys: [],
       llm: {
         enabled: true,
-        provider: "openai-compatible",
+        activeProviderId: "openai",
         baseUrl: "https://api.appintheloop.com/v1",
         model: "claude-sonnet-5",
         batchSize: 10,
@@ -550,4 +551,141 @@ test("touchAutoTagRunState tells a superseded run it lost the state", async () =
   assert.equal(lost.ownsState, false)
   assert.equal(lost.state?.runId, winner?.runId)
   assert.equal(lost.state?.processed, 0)
+})
+
+test("v6 settings migrate to v7 by inferring the provider from the stored endpoint", async () => {
+  const storage = installChromeStorageMock()
+
+  // Legacy shape: no activeProviderId, one provider literal, an endpoint.
+  storage.setStoredValue({
+    schemaVersion: 6,
+    locale: "en",
+    themePreference: "system",
+    autoTag: {
+      enabled: true,
+      runAfterSync: true,
+      heuristics: { useHashtags: true, useAuthors: true, keywordRules: [] },
+      blockedTagKeys: [],
+      llm: {
+        enabled: true,
+        provider: "openai-compatible",
+        baseUrl: "https://api.anthropic.com",
+        model: "claude-x",
+        batchSize: 5,
+        maxBookmarksPerRun: 50,
+        tagVocabularyMode: "guarded"
+      }
+    }
+  })
+
+  const migrated = await getSettings()
+
+  assert.equal(migrated.schemaVersion, 7)
+  assert.equal(migrated.autoTag.llm.activeProviderId, "anthropic")
+  // Nothing else about the configuration moves: the endpoint still wins.
+  assert.equal(migrated.autoTag.llm.baseUrl, "https://api.anthropic.com")
+  assert.equal(migrated.autoTag.llm.model, "claude-x")
+  assert.equal(migrated.autoTag.enabled, true)
+})
+
+test("provider inference covers the Azure and Gemini endpoints and honours an explicit id", async () => {
+  const storage = installChromeStorageMock()
+
+  for (const [baseUrl, expected] of [
+    ["https://my-res.openai.azure.com", "azure-openai"],
+    ["https://generativelanguage.googleapis.com", "google"],
+    ["https://api.makersuite.google.com", "google"],
+    ["https://api.deepseek.com/v1", "openai"]
+  ] as const) {
+    storage.setStoredValue({
+      schemaVersion: 6,
+      autoTag: { llm: { baseUrl, model: "m", batchSize: 5, maxBookmarksPerRun: 50, tagVocabularyMode: "guarded" } }
+    })
+    assert.equal((await getSettings()).autoTag.llm.activeProviderId, expected, `for ${baseUrl}`)
+  }
+
+  // An explicit, known id always wins over the endpoint guess.
+  storage.setStoredValue({
+    schemaVersion: 7,
+    autoTag: {
+      llm: {
+        activeProviderId: "custom",
+        baseUrl: "https://api.anthropic.com",
+        model: "m",
+        batchSize: 5,
+        maxBookmarksPerRun: 50,
+        tagVocabularyMode: "guarded"
+      }
+    }
+  })
+  assert.equal((await getSettings()).autoTag.llm.activeProviderId, "custom")
+
+  // An id this version does not know is reduced to the default instead of surviving.
+  storage.setStoredValue({
+    schemaVersion: 7,
+    autoTag: {
+      llm: {
+        activeProviderId: "some-future-provider",
+        baseUrl: "https://x.example",
+        model: "m",
+        batchSize: 5,
+        maxBookmarksPerRun: 50,
+        tagVocabularyMode: "guarded"
+      }
+    }
+  })
+  assert.equal((await getSettings()).autoTag.llm.activeProviderId, "openai")
+})
+
+test("capability overrides survive a round trip and are validated", async () => {
+  const storage = installChromeStorageMock()
+
+  await updateSettings({
+    autoTag: {
+      enabled: true,
+      runAfterSync: true,
+      heuristics: { useHashtags: true, useAuthors: true, keywordRules: [] },
+      blockedTagKeys: [],
+      llm: {
+        enabled: true,
+        activeProviderId: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        model: "m",
+        batchSize: 5,
+        maxBookmarksPerRun: 50,
+        tagVocabularyMode: "guarded",
+        capabilityOverrides: { temperature: false, jsonStrategy: "json-object", contextWindow: 8_000 },
+        learnedCapabilities: { "openai::m": { temperature: true } }
+      }
+    }
+  })
+
+  const stored = (await getSettings()).autoTag.llm
+  assert.deepEqual(stored.capabilityOverrides, {
+    temperature: false,
+    jsonStrategy: "json-object",
+    contextWindow: 8_000
+  })
+  assert.deepEqual(stored.learnedCapabilities, { "openai::m": { temperature: true } })
+
+  // Garbage in the same fields is dropped rather than trusted.
+  storage.setStoredValue({
+    schemaVersion: 7,
+    autoTag: {
+      llm: {
+        activeProviderId: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        model: "m",
+        batchSize: 5,
+        maxBookmarksPerRun: 50,
+        tagVocabularyMode: "guarded",
+        capabilityOverrides: { jsonStrategy: "nonsense", temperature: "yes", contextWindow: -4 },
+        learnedCapabilities: { "": { temperature: true } }
+      }
+    }
+  })
+
+  const sanitized = (await getSettings()).autoTag.llm
+  assert.equal(sanitized.capabilityOverrides, undefined)
+  assert.equal(sanitized.learnedCapabilities, undefined)
 })

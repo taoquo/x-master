@@ -16,6 +16,9 @@ export interface WorkspaceExportSettings {
   themePreference: ExtensionSettings["themePreference"]
   savedViews?: ExtensionSettings["savedViews"]
   lastSyncSummary?: SyncSummary
+  // Provider id + model only: never the endpoint, never a credential.
+  activeProviderId?: string
+  model?: string
 }
 
 export type WorkspaceExportBookmarkRecord = BookmarkRecord
@@ -58,7 +61,12 @@ export function createWorkspaceExportPayload({
       locale: settings.locale,
       themePreference: settings.themePreference,
       savedViews: settings.savedViews,
-      lastSyncSummary: settings.lastSyncSummary
+      lastSyncSummary: settings.lastSyncSummary,
+      // Which model the user picked travels with the backup; the endpoint and every
+      // credential do not. A restored baseUrl would silently point this install at
+      // someone else's gateway, and a key must never leave the machine at all.
+      activeProviderId: settings.autoTag.llm.activeProviderId,
+      model: settings.autoTag.llm.model
     },
     summary: workspace.summary,
     latestSyncRun: workspace.latestSyncRun

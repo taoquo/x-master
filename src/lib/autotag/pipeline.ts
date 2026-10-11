@@ -1,6 +1,5 @@
 import { computeHeuristicSuggestions } from "./heuristics.ts"
 import {
-  createOpenAiCompatibleProvider,
   type AutoTagLlmProvider,
   type LlmVocabularyEntry
 } from "./llmProvider.ts"
@@ -14,6 +13,9 @@ import {
   putLlmAnalysisRecords
 } from "../storage/llmAnalysisStore.ts"
 import { getSecrets } from "../storage/secrets.ts"
+import { resolveAuth } from "../llm/auth/index.ts"
+import { createAutoTagLlmProvider } from "../llm/orchestrator.ts"
+import { resolveBaseUrl, resolveProvider } from "../llm/providers.ts"
 import {
   beginAutoTagRunState,
   finishAutoTagRun,
@@ -566,16 +568,29 @@ export async function runAutoTagPipeline(options?: {
   } else if (!llmSettings.enabled) {
     outcome = "llm-disabled"
   } else {
-    // A secrets read failure degrades to "no key" instead of throwing out of the
-    // published run state.
-    const { llmApiKey } = await getSecrets().catch(() => ({ llmApiKey: undefined }))
+    // A secrets read failure degrades to "no credential" instead of throwing out of
+    // the published run state.
+    const secrets = await getSecrets().catch(() => undefined)
+    const configuredProvider = resolveProvider(llmSettings.activeProviderId)
+    // The credential comes from the active provider's profile, with the legacy
+    // single-key field as a fallback for installs that predate the provider table.
+    const auth = await resolveAuth(llmSettings.activeProviderId, {
+      allowLegacy: true,
+      ...(secrets ? { secrets } : {})
+    }).catch(() => undefined)
+    // A keyless local endpoint is configured without a credential.
+    const needsApiKey = configuredProvider.credentialKind !== "api-key-or-none"
 
-    if (!llmApiKey) {
+    if (needsApiKey && !auth?.apiKey) {
       outcome = "missing-api-key"
     } else {
       const provider = options?.createLlmProvider
-        ? options.createLlmProvider({ apiKey: llmApiKey, baseUrl: llmSettings.baseUrl, model: llmSettings.model })
-        : createOpenAiCompatibleProvider({ settings: llmSettings, apiKey: llmApiKey })
+        ? options.createLlmProvider({
+            apiKey: auth?.apiKey ?? "",
+            baseUrl: resolveBaseUrl(configuredProvider, llmSettings.baseUrl),
+            model: llmSettings.model
+          })
+        : createAutoTagLlmProvider({ settings: llmSettings, credential: auth })
 
       const taggedBookmarkIds = new Set(bookmarkTags.map((bookmarkTag) => bookmarkTag.bookmarkId))
       // The ledger, not the suggestion rows, decides what has been analyzed. A

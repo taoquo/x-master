@@ -108,6 +108,15 @@ export function installChromeRuntimeHarness({
       }
     },
     getStoredSettings: () => stored.settings,
-    getStoredSecrets: () => stored.secrets as { llmApiKey?: string } | undefined
+    getStoredSecrets: () =>
+      stored.secrets as
+        | { llmApiKey?: string; llmProfiles?: Record<string, { apiKey?: string }> }
+        | undefined,
+    // Credentials are stored per provider now; the legacy single field is only
+    // read, never written.
+    getStoredProviderApiKey: (providerId: string) =>
+      (stored.secrets as { llmProfiles?: Record<string, { apiKey?: string }> } | undefined)?.llmProfiles?.[
+        providerId
+      ]?.apiKey
   }
 }

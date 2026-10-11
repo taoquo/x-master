@@ -384,7 +384,7 @@ test("api key save button stores the key and reflects the saved status", async (
 
   await click(dom, findByTestId(container, "settings-llm-api-key-save"))
 
-  assert.equal(harness.getStoredSecrets()?.llmApiKey, "sk-live-123")
+  assert.equal(harness.getStoredProviderApiKey("openai"), "sk-live-123")
   assert.equal(findByTestId(container, "settings-llm-api-key-status")?.textContent, "Saved")
   assert.equal((findByTestId(container, "settings-llm-api-key") as HTMLInputElement).value, "")
 })
@@ -410,7 +410,7 @@ test("api key clear button removes the stored key", async () => {
 
   await click(dom, findByTestId(container, "settings-llm-api-key-clear"))
 
-  assert.equal(harness.getStoredSecrets()?.llmApiKey, undefined)
+  assert.equal(harness.getStoredProviderApiKey("openai"), undefined)
   assert.equal(findByTestId(container, "settings-llm-api-key-status")?.textContent, "Not set")
   assert.equal(findByTestId(container, "settings-llm-api-key-clear"), null)
 })
@@ -435,7 +435,7 @@ test("test connection flushes an unsaved api key draft before pinging the provid
 
   await click(dom, findByTestId(container, "settings-llm-test-connection"))
 
-  assert.equal(harness.getStoredSecrets()?.llmApiKey, "sk-draft-456")
+  assert.equal(harness.getStoredProviderApiKey("openai"), "sk-draft-456")
   assert.equal(findByTestId(container, "settings-llm-api-key-status")?.textContent, "Saved")
 })
 

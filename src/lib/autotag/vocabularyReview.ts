@@ -313,19 +313,25 @@ export async function reviewTagVocabulary(options: {
   bookmarkTags: BookmarkTagRecord[]
   fetchImpl?: (input: string, init: RequestInit) => Promise<Response>
   sleep?: (ms: number) => Promise<void>
+  // Multi-provider seam: when the caller supplies one, the request goes through the
+  // active provider's adapter instead of the OpenAI-compatible engine.
+  chat?: (prompt: string) => Promise<{ ok: boolean; content: string; error?: string }>
 }): Promise<TagVocabularyReviewResult> {
   if (options.tags.length < 2) {
     return { ok: true, merges: [], renames: [] }
   }
 
   const vocabulary = buildVocabularyEntries(options.tags, options.bookmarkTags)
-  const result = await requestChatJson({
-    settings: options.settings,
-    apiKey: options.apiKey,
-    prompt: buildVocabularyReviewPrompt({ vocabulary }),
-    fetchImpl: options.fetchImpl,
-    sleep: options.sleep
-  })
+  const prompt = buildVocabularyReviewPrompt({ vocabulary })
+  const result = options.chat
+    ? await options.chat(prompt)
+    : await requestChatJson({
+        settings: options.settings,
+        apiKey: options.apiKey,
+        prompt,
+        fetchImpl: options.fetchImpl,
+        sleep: options.sleep
+      })
 
   if (!result.ok) {
     return { ok: false, error: result.error ?? "request-failed", merges: [], renames: [] }

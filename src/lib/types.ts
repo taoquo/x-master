@@ -1,4 +1,5 @@
 import type { SyncErrorKind } from "./x/syncErrors.ts"
+import type { ModelCapabilities } from "./llm/types.ts"
 import type { BookmarkSortOrder } from "./search/searchBookmarks.ts"
 
 export interface BookmarkRecord {
@@ -158,14 +159,39 @@ export interface KeywordTagRule {
 // open    : may invent tags freely
 export type TagVocabularyMode = "closed" | "guarded" | "open"
 
+// One provider's credential. Lives in chrome.storage.local only, never in a
+// backup. Everything except `kind` is optional so that adding an OAuth field later
+// needs no storage migration.
+export interface StoredLlmCredential {
+  kind?: "api-key" | "oauth"
+  apiKey?: string
+  accessToken?: string
+  refreshToken?: string
+  expiresAt?: number
+  accountLabel?: string
+}
+
 export interface AutoTagLlmSettings {
   enabled: boolean
-  provider: "openai-compatible"
+  // Which definition in src/lib/llm/providers.ts drives this configuration.
+  activeProviderId: string
   baseUrl: string
   model: string
+  // Azure routes by deployment name and pins an API version; both are provider
+  // *config*, not credentials.
+  deploymentName?: string
+  apiVersion?: string
   batchSize: number
   maxBookmarksPerRun: number
   tagVocabularyMode: TagVocabularyMode
+  // Explicit override of the built-in capability table: the escape hatch for a
+  // model the table does not know yet.
+  capabilityOverrides?: Partial<ModelCapabilities>
+  // What a previous run learned the hard way (a gateway that rejected a
+  // parameter), keyed `${providerId}::${model}`.
+  learnedCapabilities?: Record<string, Partial<ModelCapabilities>>
+  // Legacy single-provider field. Never written any more; still accepted on read.
+  provider?: "openai-compatible"
 }
 
 export interface AutoTagSettings {

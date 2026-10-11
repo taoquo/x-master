@@ -729,13 +729,19 @@ test("a backup never carries the stored API key", async () => {
   assert.equal(serialized.includes(secret), false, "the API key must not appear in a backup")
   assert.equal("secrets" in payload, false, "a backup payload has no secrets field")
   assert.equal(serialized.includes("llmApiKey"), false, "not even the key name is exported")
+  // An explicit allow-list, asserted field by field: the settings block used to be
+  // spread from the live settings object, which is how a future field would leak.
+  // The endpoint and every credential stay out; the provider id and model travel.
   assert.deepEqual(Object.keys(payload.settings).sort(), [
+    "activeProviderId",
     "lastSyncSummary",
     "locale",
+    "model",
     "savedViews",
     "schemaVersion",
     "themePreference"
   ])
+  assert.equal(serialized.includes("baseUrl"), false, "the endpoint must not travel in a backup")
 })
 
 test("a hand-crafted backup cannot inject or overwrite the API key", async () => {
