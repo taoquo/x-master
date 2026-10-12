@@ -76,7 +76,6 @@ test("OptionsApp defaults to expanded tags and collapsed authors, then toggles b
     await act(async () => {
       root.unmount()
     })
-    dom.window.close()
   }
 })
 
@@ -131,7 +130,6 @@ test("OptionsApp styles the authors search input and keeps show more without col
     await act(async () => {
       root.unmount()
     })
-    dom.window.close()
   }
 })
 
@@ -185,7 +183,6 @@ test("OptionsApp keeps the tag create action beside the title and aligns the aut
     await act(async () => {
       root.unmount()
     })
-    dom.window.close()
   }
 })
 
@@ -255,6 +252,5 @@ test("OptionsApp restores large result sets in batches after clearing an author 
     await act(async () => {
       root.unmount()
     })
-    dom.window.close()
   }
 })

@@ -107,7 +107,6 @@ test("OptionsApp filters results by selected sidebar author", async () => {
     await act(async () => {
       root.unmount()
     })
-    dom.window.close()
   }
 })
 
@@ -204,6 +203,5 @@ test("OptionsApp intersects selected author and tag scopes and All bookmarks cle
     await act(async () => {
       root.unmount()
     })
-    dom.window.close()
   }
 })

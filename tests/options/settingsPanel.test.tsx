@@ -7,7 +7,7 @@ import { OptionsApp } from "../../src/options/OptionsApp.tsx"
 import { resetBookmarksDb } from "../../src/lib/storage/db.ts"
 import { upsertBookmarks } from "../../src/lib/storage/bookmarksStore.ts"
 import { getSettings, saveSettings } from "../../src/lib/storage/settings.ts"
-import { cleanupRenders, render, settle } from "../helpers/render.tsx"
+import { cleanupRenders, render, settle, waitForElement } from "../helpers/render.tsx"
 import { installChromeRuntimeHarness } from "../helpers/runtime.ts"
 
 function findByTestId(container: HTMLDivElement, testId: string) {
@@ -163,7 +163,9 @@ test("the sidebar status badge is translated rather than the raw status enum", a
   const { container } = render(<OptionsApp />)
   await settle()
 
-  const badge = findByTestId(container, "sidebar-status-section")?.querySelector(".workspace-badge")
+  const badge = await waitForElement(() =>
+    findByTestId(container, "sidebar-status-section")?.querySelector(".workspace-badge")
+  )
   assert.ok(badge, "the sidebar hero should render a status badge")
   // StatusBadge falls back to formatStatusLabel, which upper-cases the raw enum
   // ("PARTIAL_SUCCESS"). Only the popup used to pass a translated label.

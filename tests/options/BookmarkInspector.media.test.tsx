@@ -76,7 +76,6 @@ test("OptionsApp keeps the same lightbox image element while switching between i
     await act(async () => {
       root.unmount()
     })
-    dom.window.close()
   }
 })
 
@@ -140,7 +139,6 @@ test("OptionsApp preloads adjacent image media while preview is open", async () 
       await act(async () => {
         root.unmount()
       })
-      dom.window.close()
     }
   } finally {
     globalThis.Image = OriginalImage
@@ -193,6 +191,5 @@ test("OptionsApp keeps preview controls and media surface mounted inside the lig
     await act(async () => {
       root.unmount()
     })
-    dom.window.close()
   }
 })
